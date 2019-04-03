@@ -82,7 +82,7 @@ MLIR has been tested on Linux and MacOS, with a recent clang or with gcc 7.
 
 ```
 git clone https://github.com/llvm/llvm-project.git
-cd llvm-projects/llvm/projects/
+cd llvm-project/llvm/projects/
 git clone https://github.com/tensorflow/mlir
 cd ../../
 mkdir build

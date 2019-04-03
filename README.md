@@ -46,7 +46,7 @@ requirements in a unified infrastructure. For example, this includes:
     architectures.
 *   Ability to represent target-specific operations, e.g. the MXU on TPUs.
 
-MLIR is a common IR which also supports hardware specific operations. Thus,
+MLIR is a common IR that also supports hardware specific operations. Thus,
 any investment into the infrastructure surrounding MLIR (e.g. the compiler
 passes that work on it) should yield good returns; many targets can use that
 infrastructure and will benefit from it.
@@ -55,16 +55,16 @@ MLIR is a powerful representation, but it also has non-goals. We do not try to
 support low level machine code generation algorithms (like register allocation
 and instruction scheduling). They are a better fit for lower level optimizers
 (such as LLVM). Also, we do not intend MLIR to be a source language that
-end-users would themselves write kernels in (analogous to CUDA C++). While we'd
-love to see a kernel language happen someday, that will be an independent
+end-users would themselves write kernels in (analogous to CUDA C++). While we
+would love to see a kernel language happen someday, that will be an independent
 project that compiles down to MLIR.
 
 ## Compiler Infrastructure {#compiler-infrastructure}
 
-We benefitted from the experience gained building HLO, LLVM and SIL when
-building MLIR. We will directly adopt existing best practices, e.g. writing and
-maintaining an IR spec, building an IR verifier, providing the ability to dump
-and parse MLIR files to text, writing extensive unit tests with the
+We benefitted from experience gained from building other IRs (HLO, LLVM and SIL)
+when building MLIR. We will directly adopt existing best practices, e.g. writing
+and maintaining an IR spec, building an IR verifier, providing the ability to
+dump and parse MLIR files to text, writing extensive unit tests with the
 [FileCheck](https://llvm.org/docs/CommandGuide/FileCheck.html) tool, and
 building the infrastructure as a set of modular libraries that can be combined
 in new ways. We plan to use the infrastructure developed by the XLA team for
@@ -74,11 +74,11 @@ Other lessons have been incorporated and integrated into the design in subtle
 ways. For example, LLVM has non-obvious design mistakes that prevent a
 multithreaded compiler from working on multiple functions in an LLVM module at
 the same time. MLIR solves these problems by having per-function constant pools
-and by making references explicit with function_ref.
+and by making references explicit with `function_ref`.
 
 # Getting started with MLIR
 
-MLIR has been tested on Linux and MacOS, with a recent clang or with gcc 7.
+MLIR has been tested on Linux and macOS, with recent versions of clang and with gcc 7.
 
 ```
 git clone https://github.com/llvm/llvm-project.git
@@ -96,7 +96,8 @@ building a compiler for a Toy language.
 
 # MLIR talks {#talks}
 
-*   "[MLIR Primer: A Compiler Infrastructure for the End of Moore’s Law](https://drive.google.com/file/d/1hUeAJXcAXwz82RXA5VtO5ZoH8cVQhrOK/view?usp=sharing)",
-    Chris Lattner & Jacques Pienaar, Google at
+* "[MLIR Primer: A Compiler Infrastructure for the End of Moore’s
+    Law](https://drive.google.com/file/d/1hUeAJXcAXwz82RXA5VtO5ZoH8cVQhrOK/view?usp=sharing)"
+  * Chris Lattner & Jacques Pienaar, Google at
     [Compilers for Machine Learning](https://www.c4ml.org/) workshop at
-    [CGO 2019](http://cgo.org/cgo2019/).
+    [CGO 2019](http://cgo.org/cgo2019/)

@@ -79,7 +79,7 @@ and by making references explicit with `function_ref`.
 
 # Getting started with MLIR
 
-MLIR has been tested on Linux and macOS, with recent versions of clang and with gcc 7.
+MLIR has been tested on Linux and macOS, with recent versions of clang, ninja and with gcc 7.
 
 ```
 git clone https://github.com/llvm/llvm-project.git

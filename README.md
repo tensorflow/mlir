@@ -88,7 +88,7 @@ git clone https://github.com/tensorflow/mlir
 cd ../..
 mkdir build
 cd build
-cmake -G Ninja ../llvm -DLLVM_BUILD_EXAMPLES=ON
+cmake -G Ninja ../llvm -DLLVM_BUILD_EXAMPLES=ON -DCMAKE_CXX_COMPILER=$(which g++) -DCMAKE_C_COMPILER=$(which gcc)
 ninja check-mlir
 ```
 

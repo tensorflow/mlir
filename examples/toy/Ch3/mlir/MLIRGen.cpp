@@ -336,6 +336,17 @@ private:
       return builder->create<TransposeOp>(location, arg).getResult();
     }
 
+    if (callee == "determinant") {
+      if (call.getArgs().size() != 1) {
+        context.emitError(
+            location, Twine("MLIR codegen encountered an error: toy.determinant "
+                            "does not accept multiple arguments"));
+        return nullptr;
+      }
+      mlir::Value *arg = mlirGen(*call.getArgs()[0]);
+      return builder->create<DeterminantOp>(location, arg).getResult();
+    }
+
     // Codegen the operands first
     SmallVector<mlir::Value *, 4> operands;
     for (auto &expr : call.getArgs()) {

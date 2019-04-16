@@ -148,6 +148,28 @@ public:
   using Op::Op;
 };
 
+/// Determinant Operation
+class DeterminantOp : public mlir::Op<DeterminantOp, mlir::OpTrait::OneOperand,
+                                   mlir::OpTrait::OneResult,
+                                   mlir::OpTrait::HasNoSideEffect> {
+public:
+  /// This is the name used by MLIR to match an operation to this class during
+  /// parsing.
+  static llvm::StringRef getOperationName() { return "toy.determinant"; }
+
+  /// The operation can have extra verification beyond the traits they define.
+  mlir::LogicalResult verify();
+
+  /// Interface to mlir::Builder::create<GetOp>(...)
+  /// This method populates the `state` that MLIR uses to create operations.
+  /// The `toy.constant` operation does not have arguments but attaches a
+  /// constant array as an attribute and returns it as an SSA value.
+  static void build(mlir::Builder *builder, mlir::OperationState *state,
+                    mlir::Value * argument);
+  /// Inherit constructor.
+  using Op::Op;
+};
+
 /// Generic calls represent calls to a user defined function that needs to
 /// be specialized for the shape of its arguments. The callee name is attached
 /// as a literal string as an attribute. The arguments list must match the

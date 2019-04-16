@@ -156,9 +156,9 @@ hex_digit ::= [0-9a-fA-F]
 letter    ::= [a-zA-Z]
 id-punct  ::= [$._-]
 
-integer-literal ::= decimal-literal | hexadecimal-literal
 decimal-literal ::= digit+
 hexadecimal-literal ::= `0x` hex_digit+
+integer-literal ::= decimal-literal | hexadecimal-literal
 float-literal   ::= TODO
 string-literal  ::= `"` [^"\n\f\v\r]* `"`   TODO define escaping rules
 ```

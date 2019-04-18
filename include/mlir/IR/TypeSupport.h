@@ -147,6 +147,26 @@ private:
 // TypeUniquer
 //===----------------------------------------------------------------------===//
 namespace detail {
+
+  /// Utilities for detecting if specific traits hold for a given type 'T'.
+template <typename...>
+using void_t = void;
+template <class, template <class...> class Op, class... Args>
+struct detector {
+  using value_t = std::false_type;
+};
+template <template <class...> class Op, class... Args>
+struct detector<void_t<Op<Args...>>, Op, Args...> {
+  using value_t = std::true_type;
+};
+template <template <class...> class Op, class... Args>
+using is_detected = typename detector<void, Op, Args...>::value_t;
+
+  /// Trait to check if ImplTy provides a 'getKey' method with types 'Args'.
+template <typename ImplTy, typename... Args>
+using has_impltype_getkey_t = decltype(ImplTy::getKey(std::declval<Args>()...));
+
+
 // A utility class to get, or create, unique instances of types within an
 // MLIRContext. This class manages all creation and uniquing of types.
 class TypeUniquer {
@@ -225,27 +245,11 @@ private:
   // Util
   //===--------------------------------------------------------------------===//
 
-  /// Utilities for detecting if specific traits hold for a given type 'T'.
-  template <typename...> using void_t = void;
-  template <class, template <class...> class Op, class... Args>
-  struct detector {
-    using value_t = std::false_type;
-  };
-  template <template <class...> class Op, class... Args>
-  struct detector<void_t<Op<Args...>>, Op, Args...> {
-    using value_t = std::true_type;
-  };
-  template <template <class...> class Op, class... Args>
-  using is_detected = typename detector<void, Op, Args...>::value_t;
 
   //===--------------------------------------------------------------------===//
   // Key Construction
   //===--------------------------------------------------------------------===//
 
-  /// Trait to check if ImplTy provides a 'getKey' method with types 'Args'.
-  template <typename ImplTy, typename... Args>
-  using has_impltype_getkey_t =
-      decltype(ImplTy::getKey(std::declval<Args>()...));
 
   /// Used to construct an instance of 'ImplType::KeyTy' if there is an
   /// 'ImplTy::getKey' function for the provided arguments.

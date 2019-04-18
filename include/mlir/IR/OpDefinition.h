@@ -765,11 +765,10 @@ public:
   /// This is a public constructor.  Any op can be initialized to null.
   explicit Op() : OpState(nullptr) {}
 
-protected:
-  /// This is a private constructor only accessible through the
-  /// Operation::cast family of methods.
+  /// This constructor should be protected, and only accessible through the
+  /// Operation::cast family of methods. Because MSVC does not handle this situation
+  /// correctly, it is public instead.
   explicit Op(Operation *state) : OpState(state) {}
-  friend class Operation;
 
 private:
   template <typename... Types> struct BaseVerifier;

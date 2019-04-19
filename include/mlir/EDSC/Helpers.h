@@ -30,7 +30,7 @@ namespace edsc {
 
 // A TemplatedIndexedValue brings an index notation over the template Load and
 // Store parameters.
-template <typename Load, typename Store> class TemplatedIndexedValue;
+template <typename Load, typename Store> struct TemplatedIndexedValue;
 
 // By default, edsc::IndexedValue provides an index notation around the affine
 // load and stores.

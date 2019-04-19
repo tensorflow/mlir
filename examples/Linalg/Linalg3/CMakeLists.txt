@@ -58,6 +58,8 @@ target_link_libraries(linalg-execution-3
     Linalg2
     Linalg3
     Linalg3DialectConstruction
+    MLIRTargetLLVMIR
+    MLIRSupport
     )
 
 whole_archive_link(linalg-execution-3

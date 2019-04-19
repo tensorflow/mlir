@@ -9,6 +9,8 @@ set(LIBS
   MLIRSupport
   LLVMCore
   LLVMSupport
+  MLIRTargetLLVMIR
+  MLIRSupport
 )
 add_executable(mlir-cpu-runner
   mlir-cpu-runner.cpp

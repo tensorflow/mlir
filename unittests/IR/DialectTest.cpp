@@ -28,7 +28,11 @@ struct TestDialect : public Dialect {
 
 TEST(DialectDeathTest, MultipleDialectsWithSameNamespace) {
   MLIRContext context;
-
+#if LLVM_MSC_PREREQ(1200) && NDEBUG
+  // TODO: Use GTEST_SKIP when version of Gtest is recent enough
+  // This test assumes that an assert will result in program death, which is not true in NDEBUG mode
+  return;
+#endif
   // Registering a dialect with the same namespace twice should result in a
   // failure.
   new TestDialect(&context);

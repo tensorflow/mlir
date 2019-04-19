@@ -149,7 +149,7 @@ static NestedPattern patternTestSlicingOps() {
   using functional::map;
   using matcher::Op;
   // Match all operations with the kTestSlicingOpName name.
-  auto filter = [](Operation &op) {
+  auto filter = [&kTestSlicingOpName](Operation &op) {
     return op.getName().getStringRef() == kTestSlicingOpName;
   };
   return Op(filter);

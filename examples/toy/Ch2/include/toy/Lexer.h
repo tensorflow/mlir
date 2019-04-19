@@ -58,6 +58,15 @@ enum Token : int {
   tok_number = -6,
 };
 
+inline std::string &canonizePath(std::string &fileName) {
+  for (auto &c : fileName) {
+    if (c == '\\') {
+      c = '/';
+    }
+  }
+  return fileName;
+}
+
 /// The Lexer is an abstract base class providing all the facilities that the
 /// Parser expects. It goes through the stream one token at a time and keeps
 /// track of the location in the file for debugging purpose.
@@ -70,7 +79,7 @@ public:
   /// debugging purpose (attaching a location to a Token).
   Lexer(std::string filename)
       : lastLocation(
-            {std::make_shared<std::string>(std::move(filename)), 0, 0}) {}
+            {std::make_shared<std::string>(std::move(canonizePath(filename))), 0, 0}) {}
   virtual ~Lexer() = default;
 
   /// Look at the current token in the stream.

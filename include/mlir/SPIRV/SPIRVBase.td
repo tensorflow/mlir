@@ -65,6 +65,7 @@ def SPV_Dialect : Dialect {
 def SPV_IsPtrType : CPred<"$_self.isa<::mlir::spirv::PointerType>()">;
 def SPV_IsArrayType : CPred<"$_self.isa<::mlir::spirv::ArrayType>()">;
 def SPV_IsRTArrayType : CPred<"$_self.isa<::mlir::spirv::RuntimeArrayType>()">;
+def SPV_IsStructType : CPred<"$_self.isa<::mlir::spirv::StructType>()">;
 
 // See https://www.khronos.org/registry/spir-v/specs/unified1/SPIRV.html#_types
 // for the definition of the following types and type categories.
@@ -79,14 +80,15 @@ def SPV_Vector : VectorOf<[SPV_Bool, SPV_Integer, SPV_Float]>;
 def SPV_AnyPtr : Type<SPV_IsPtrType, "any SPIR-V pointer type">;
 def SPV_AnyArray : Type<SPV_IsArrayType, "any SPIR-V array type">;
 def SPV_AnyRTArray : Type<SPV_IsRTArrayType, "any SPIR-V runtime array type">;
+def SPV_AnyStruct : Type<SPV_IsStructType, "any SPIR-V struct type">;
 
 def SPV_Numerical : AnyTypeOf<[SPV_Integer, SPV_Float]>;
 def SPV_Scalar : AnyTypeOf<[SPV_Numerical, SPV_Bool]>;
-def SPV_Aggregrate : AnyTypeOf<[SPV_AnyArray]>;
-def SPV_Composite: AnyTypeOf<[SPV_Vector, SPV_AnyArray]>;
+def SPV_Aggregrate : AnyTypeOf<[SPV_AnyArray, SPV_AnyStruct]>;
+def SPV_Composite: AnyTypeOf<[SPV_Vector, SPV_AnyArray, SPV_AnyStruct]>;
 def SPV_Type : AnyTypeOf<[
     SPV_Void, SPV_Bool, SPV_Integer, SPV_Float, SPV_Vector,
-    SPV_AnyPtr, SPV_AnyArray, SPV_AnyRTArray
+    SPV_AnyPtr, SPV_AnyArray, SPV_AnyRTArray, SPV_AnyStruct
   ]>;
 
 class SPV_ScalarOrVectorOf<Type type> :

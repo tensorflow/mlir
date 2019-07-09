@@ -19,6 +19,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "mlir/IR/StandardTypes.h"
 #include "mlir/SPIRV/SPIRVTypes.h"
 #include "llvm/ADT/StringSwitch.h"
 
@@ -27,6 +28,36 @@ using namespace mlir::spirv;
 
 // Pull in all enum utility function definitions
 #include "mlir/SPIRV/SPIRVEnums.cpp.inc"
+
+//===----------------------------------------------------------------------===//
+// CompositeType
+//===----------------------------------------------------------------------===//
+
+Type CompositeType::getMemberType(uint64_t index) const {
+  switch (getKind()) {
+  case spirv::TypeKind::Struct:
+    return cast<StructType>().getMemberType(index);
+  case spirv::TypeKind::Array:
+    return cast<ArrayType>().getElementType();
+  case StandardTypes::Vector:
+    return cast<VectorType>().getElementType();
+  default:
+    llvm_unreachable("invalid composite type");
+  }
+}
+
+uint64_t CompositeType::getNumMembers() const {
+  switch (getKind()) {
+  case spirv::TypeKind::Struct:
+    return cast<StructType>().getNumMembers();
+  case spirv::TypeKind::Array:
+    return cast<ArrayType>().getElementCount();
+  case StandardTypes::Vector:
+    return cast<VectorType>().getNumElements();
+  default:
+    llvm_unreachable("invalid composite type");
+  }
+}
 
 //===----------------------------------------------------------------------===//
 // ArrayType

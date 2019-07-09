@@ -22,6 +22,7 @@
 #ifndef MLIR_SPIRV_SPIRVTYPES_H_
 #define MLIR_SPIRV_SPIRVTYPES_H_
 
+#include "mlir/IR/StandardTypes.h"
 #include "mlir/IR/TypeSupport.h"
 #include "mlir/IR/Types.h"
 
@@ -52,9 +53,26 @@ enum Kind {
 };
 }
 
+// Provides a common base class between VectorType, SPIR-V ArrayType, SPIR-V
+// StructType.
+class CompositeType : public Type {
+public:
+  using Type::Type;
+
+  static bool classof(Type type) {
+    return (type.getKind() == TypeKind::Array ||
+            type.getKind() == TypeKind::Struct ||
+            type.getKind() == StandardTypes::Vector);
+  }
+
+  uint64_t getNumMembers() const;
+
+  Type getMemberType(uint64_t) const;
+};
+
 // SPIR-V array type
-class ArrayType
-    : public Type::TypeBase<ArrayType, Type, detail::ArrayTypeStorage> {
+class ArrayType : public Type::TypeBase<ArrayType, CompositeType,
+                                        detail::ArrayTypeStorage> {
 public:
   using Base::Base;
 
@@ -147,9 +165,8 @@ public:
 };
 
 // SPIR-V struct type
-class StructType
-    : public Type::TypeBase<StructType, Type, detail::StructTypeStorage> {
-
+class StructType : public Type::TypeBase<StructType, CompositeType,
+                                         detail::StructTypeStorage> {
 public:
   using Base::Base;
 

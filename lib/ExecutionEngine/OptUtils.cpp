@@ -23,6 +23,7 @@
 #include "mlir/ExecutionEngine/OptUtils.h"
 
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/LegacyPassNameParser.h"
 #include "llvm/IR/Module.h"
@@ -32,6 +33,7 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/StringSaver.h"
+#include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include <climits>
@@ -69,7 +71,8 @@ void mlir::initializeLLVMPasses() {
 // This behaves similarly to LLVM opt.
 static void populatePassManagers(llvm::legacy::PassManager &modulePM,
                                  llvm::legacy::FunctionPassManager &funcPM,
-                                 unsigned optLevel, unsigned sizeLevel) {
+                                 unsigned optLevel, unsigned sizeLevel,
+                                 llvm::TargetMachine *targetMachine = nullptr) {
   llvm::PassManagerBuilder builder;
   builder.OptLevel = optLevel;
   builder.SizeLevel = sizeLevel;
@@ -79,6 +82,15 @@ static void populatePassManagers(llvm::legacy::PassManager &modulePM,
   builder.SLPVectorize = optLevel > 1 && sizeLevel < 2;
   builder.DisableUnrollLoops = (optLevel == 0);
 
+  if (targetMachine) {
+    // Add pass to initialize TTI for this specific target. Otherwise, TTI will
+    // be initialized to NoTTIImpl by defaul.
+    modulePM.add(createTargetTransformInfoWrapperPass(
+        targetMachine->getTargetIRAnalysis()));
+    funcPM.add(createTargetTransformInfoWrapperPass(
+        targetMachine->getTargetIRAnalysis()));
+  }
+
   builder.populateModulePassManager(modulePM);
   builder.populateFunctionPassManager(funcPM);
 }
@@ -86,12 +98,12 @@ static void populatePassManagers(llvm::legacy::PassManager &modulePM,
 // Create and return a lambda that uses LLVM pass manager builder to set up
 // optimizations based on the given level.
 std::function<llvm::Error(llvm::Module *)>
-mlir::makeOptimizingTransformer(unsigned optLevel, unsigned sizeLevel) {
-  return [optLevel, sizeLevel](llvm::Module *m) -> llvm::Error {
-
+mlir::makeOptimizingTransformer(unsigned optLevel, unsigned sizeLevel,
+                                llvm::TargetMachine *targetMachine) {
+  return [optLevel, sizeLevel, targetMachine](llvm::Module *m) -> llvm::Error {
     llvm::legacy::PassManager modulePM;
     llvm::legacy::FunctionPassManager funcPM(m);
-    populatePassManagers(modulePM, funcPM, optLevel, sizeLevel);
+    populatePassManagers(modulePM, funcPM, optLevel, sizeLevel, targetMachine);
     runPasses(modulePM, funcPM, *m);
 
     return llvm::Error::success();

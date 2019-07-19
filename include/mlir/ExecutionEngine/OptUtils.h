@@ -47,7 +47,7 @@ void initializeLLVMPasses();
 /// optimizer.
 std::function<llvm::Error(llvm::Module *)>
 makeOptimizingTransformer(unsigned optLevel, unsigned sizeLevel,
-                          llvm::TargetMachine *targetMachine = nullptr);
+                          llvm::TargetMachine *targetMachine);
 
 /// Create a module transformer function for MLIR ExecutionEngine that runs
 /// LLVM IR passes explicitly specified, plus an optional optimization level,

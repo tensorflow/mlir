@@ -24,6 +24,7 @@ set(LIBS
   MLIRFxpMathOps
   MLIRGPU
   MLIRGPUtoNVVMTransforms
+  MLIRGPUtoROCDLTransforms
   MLIRLinalg
   MLIRLLVMIR
   MLIRNVVMIR
@@ -32,6 +33,7 @@ set(LIBS
   MLIRPass
   MLIRQuantizerTransforms
   MLIRQuantOps
+  MLIRROCDLIR
   MLIRSPIRV
   MLIRSPIRVConversion
   MLIRStandardOps

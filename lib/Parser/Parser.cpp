@@ -1108,18 +1108,23 @@ Attribute Parser::parseExtendedAttr(Type type) {
       *this, Token::hash_identifier, state.attributeAliasDefinitions,
       [&](StringRef dialectName, StringRef symbolData,
           Location loc) -> Attribute {
+        // Parse an optional trailing colon type.
+        Type attrType = type;
+        if (consumeIf(Token::colon) && !(attrType = parseType()))
+          return Attribute();
+
         // If we found a registered dialect, then ask it to parse the attribute.
         if (auto *dialect = state.context->getRegisteredDialect(dialectName))
-          return dialect->parseAttribute(symbolData, loc);
+          return dialect->parseAttribute(symbolData, attrType, loc);
 
         // Otherwise, form a new opaque attribute.
         return OpaqueAttr::getChecked(
             Identifier::get(dialectName, state.context), symbolData,
-            state.context, loc);
+            attrType ? attrType : NoneType::get(state.context), loc);
       });
 
   // Ensure that the attribute has the same type as requested.
-  if (type && attr.getType() != type) {
+  if (attr && type && attr.getType() != type) {
     emitError("attribute type different than expected: expected ")
         << type << ", but got " << attr.getType();
     return nullptr;
@@ -2324,7 +2329,7 @@ ParseResult AffineParser::parseAffineMapOrIntegerSetInline(AffineMap &map,
 
 /// Parse an AffineMap where the dim and symbol identifiers are SSA ids.
 ParseResult AffineParser::parseAffineMapOfSSAIds(AffineMap &map) {
-  if (!consumeIf(Token::l_square))
+  if (parseToken(Token::l_square, "expected '['"))
     return failure();
 
   SmallVector<AffineExpr, 4> exprs;
@@ -3339,6 +3344,16 @@ public:
   ParseResult parseOperandList(SmallVectorImpl<OperandType> &result,
                                int requiredOperandCount = -1,
                                Delimiter delimiter = Delimiter::None) override {
+    return parseOperandOrRegionArgList(result, /*isOperandList=*/true,
+                                       requiredOperandCount, delimiter);
+  }
+
+  /// Parse zero or more SSA comma-separated operand or region arguments with
+  ///  optional surrounding delimiter and required operand count.
+  ParseResult
+  parseOperandOrRegionArgList(SmallVectorImpl<OperandType> &result,
+                              bool isOperandList, int requiredOperandCount = -1,
+                              Delimiter delimiter = Delimiter::None) {
     auto startLoc = parser.getToken().getLoc();
 
     // Handle delimiters.
@@ -3377,10 +3392,11 @@ public:
     // Check for zero operands.
     if (parser.getToken().is(Token::percent_identifier)) {
       do {
-        OperandType operand;
-        if (parseOperand(operand))
+        OperandType operandOrArg;
+        if (isOperandList ? parseOperand(operandOrArg)
+                          : parseRegionArgument(operandOrArg))
           return failure();
-        result.push_back(operand);
+        result.push_back(operandOrArg);
       } while (parser.consumeIf(Token::comma));
     }
 
@@ -3532,6 +3548,14 @@ public:
     if (parser.getToken().isNot(Token::percent_identifier))
       return success();
     return parseRegionArgument(argument);
+  }
+
+  ParseResult
+  parseRegionArgumentList(SmallVectorImpl<OperandType> &result,
+                          int requiredOperandCount = -1,
+                          Delimiter delimiter = Delimiter::None) override {
+    return parseOperandOrRegionArgList(result, /*isOperandList=*/false,
+                                       requiredOperandCount, delimiter);
   }
 
   //===--------------------------------------------------------------------===//

@@ -17,7 +17,7 @@
 
 #include "TestDialect.h"
 #include "mlir/IR/PatternMatch.h"
-#include "mlir/Support/TypeUtilities.h"
+#include "mlir/IR/TypeUtilities.h"
 
 using namespace mlir;
 
@@ -32,6 +32,25 @@ TestDialect::TestDialect(MLIRContext *context)
 #include "TestOps.cpp.inc"
       >();
   allowUnknownOperations();
+}
+
+//===----------------------------------------------------------------------===//
+// Test PolyForOp - parse list of region arguments.
+//===----------------------------------------------------------------------===//
+ParseResult parsePolyForOp(OpAsmParser *parser, OperationState *result) {
+  SmallVector<OpAsmParser::OperandType, 4> ivsInfo;
+  // Parse list of region arguments without a delimiter.
+  if (parser->parseRegionArgumentList(ivsInfo))
+    return failure();
+
+  // Parse the body region.
+  Region *body = result->addRegion();
+  auto &builder = parser->getBuilder();
+  SmallVector<Type, 4> argTypes(ivsInfo.size(), builder.getIndexType());
+  if (parser->parseRegion(*body, ivsInfo, argTypes))
+    return failure();
+
+  return success();
 }
 
 // Static initialization for Test dialect registration.

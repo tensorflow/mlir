@@ -1,4 +1,4 @@
-//===- TypeUtilities.h - Helper function for type queries -----------------===//
+//===- TypeUtilities.cpp - Helper function for type queries ---------------===//
 //
 // Copyright 2019 The MLIR Authors.
 //
@@ -19,7 +19,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "mlir/Support/TypeUtilities.h"
+#include "mlir/IR/TypeUtilities.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/IR/Types.h"
@@ -43,6 +43,12 @@ Type mlir::getElementTypeOrSelf(Value &val) {
 
 Type mlir::getElementTypeOrSelf(Attribute attr) {
   return getElementTypeOrSelf(attr.getType());
+}
+
+SmallVector<Type, 10> mlir::getFlattenedTypes(TupleType t) {
+  SmallVector<Type, 10> fTypes;
+  t.getFlattenedTypes(fTypes);
+  return fTypes;
 }
 
 OperandElementTypeIterator::OperandElementTypeIterator(OperandIterator it)

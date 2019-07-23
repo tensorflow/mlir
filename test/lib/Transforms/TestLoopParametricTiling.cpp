@@ -1,4 +1,4 @@
-//===- LoopParametricTiling.cpp --- Parametric loop tiling pass -----------===//
+//===- TestLoopParametricTiling.cpp --- Parametric loop tiling pass -------===//
 //
 // Copyright 2019 The MLIR Authors.
 //
@@ -20,16 +20,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "mlir/Dialect/LoopOps/LoopOps.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/LoopUtils.h"
 #include "mlir/Transforms/Passes.h"
 
-#include "mlir/IR/Builders.h"
-
 using namespace mlir;
 
 static llvm::cl::list<int> clOuterLoopSizes(
-    "outer-loop-sizes", llvm::cl::MiscFlags::CommaSeparated,
+    "test-outer-loop-sizes", llvm::cl::MiscFlags::CommaSeparated,
     llvm::cl::desc(
         "fixed number of iterations that the outer loops should have"));
 
@@ -44,7 +43,6 @@ public:
 
   void runOnFunction() override {
     FuncOp func = getFunction();
-
     func.walk<loop::ForOp>([this](loop::ForOp op) {
       // Ignore nested loops.
       if (op.getContainingRegion()->getParentOfType<loop::ForOp>())
@@ -63,9 +61,9 @@ mlir::createSimpleParametricTilingPass(ArrayRef<int64_t> outerLoopSizes) {
 }
 
 static PassRegistration<SimpleParametricLoopTilingPass>
-    reg("extract-fixed-outer-loops",
-        "apply parametric tiling to the outer loops so that the ranges of "
-        "outer loops become static",
+    reg("test-extract-fixed-outer-loops",
+        "test application of parametric tiling to the outer loops so that the "
+        "ranges of outer loops become static",
         [] {
           auto *pass = new SimpleParametricLoopTilingPass({});
           pass->sizes.assign(clOuterLoopSizes.begin(), clOuterLoopSizes.end());

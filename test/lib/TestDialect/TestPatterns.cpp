@@ -62,8 +62,9 @@ struct TestRegionRewriteBlockMovement : public ConversionPattern {
   TestRegionRewriteBlockMovement(MLIRContext *ctx)
       : ConversionPattern("test.region", 1, ctx) {}
 
-  PatternMatchResult matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
-                                     PatternRewriter &rewriter) const final {
+  PatternMatchResult
+  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+                  ConversionPatternRewriter &rewriter) const final {
     // Inline this region into the parent region.
     auto &parentRegion = *op->getContainingRegion();
     rewriter.inlineRegionBefore(op->getRegion(0), parentRegion,
@@ -74,11 +75,36 @@ struct TestRegionRewriteBlockMovement : public ConversionPattern {
     return matchSuccess();
   }
 };
+/// This pattern is a simple pattern that generates a region containing an
+/// illegal operation.
+struct TestRegionRewriteUndo : public RewritePattern {
+  TestRegionRewriteUndo(MLIRContext *ctx)
+      : RewritePattern("test.region_builder", 1, ctx) {}
+
+  PatternMatchResult matchAndRewrite(Operation *op,
+                                     PatternRewriter &rewriter) const final {
+    // Create the region operation with an entry block containing arguments.
+    OperationState newRegion(op->getLoc(), "test.region");
+    newRegion.addRegion();
+    auto *regionOp = rewriter.createOperation(newRegion);
+    auto *entryBlock = rewriter.createBlock(&regionOp->getRegion(0));
+    entryBlock->addArgument(rewriter.getIntegerType(64));
+
+    // Add an explicitly illegal operation to ensure the conversion fails.
+    rewriter.create<ILLegalOpF>(op->getLoc(), rewriter.getIntegerType(32));
+    rewriter.create<TestValidOp>(op->getLoc(), ArrayRef<Value *>());
+
+    // Drop this operation.
+    rewriter.replaceOp(op, llvm::None);
+    return matchSuccess();
+  }
+};
 /// This pattern simply erases the given operation.
 struct TestDropOp : public ConversionPattern {
   TestDropOp(MLIRContext *ctx) : ConversionPattern("test.drop_op", 1, ctx) {}
-  PatternMatchResult matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
-                                     PatternRewriter &rewriter) const final {
+  PatternMatchResult
+  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+                  ConversionPatternRewriter &rewriter) const final {
     rewriter.replaceOp(op, llvm::None);
     return matchSuccess();
   }
@@ -87,8 +113,9 @@ struct TestDropOp : public ConversionPattern {
 struct TestPassthroughInvalidOp : public ConversionPattern {
   TestPassthroughInvalidOp(MLIRContext *ctx)
       : ConversionPattern("test.invalid", 1, ctx) {}
-  PatternMatchResult matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
-                                     PatternRewriter &rewriter) const final {
+  PatternMatchResult
+  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+                  ConversionPatternRewriter &rewriter) const final {
     rewriter.replaceOpWithNewOp<TestValidOp>(op, llvm::None, operands,
                                              llvm::None);
     return matchSuccess();
@@ -98,8 +125,9 @@ struct TestPassthroughInvalidOp : public ConversionPattern {
 struct TestSplitReturnType : public ConversionPattern {
   TestSplitReturnType(MLIRContext *ctx)
       : ConversionPattern("test.return", 1, ctx) {}
-  PatternMatchResult matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
-                                     PatternRewriter &rewriter) const final {
+  PatternMatchResult
+  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+                  ConversionPatternRewriter &rewriter) const final {
     // Check for a return of F32.
     if (op->getNumOperands() != 1 || !op->getOperand(0)->getType().isF32())
       return matchFailure();
@@ -154,32 +182,31 @@ struct TestTypeConverter : public TypeConverter {
   }
 };
 
-struct TestConversionTarget : public ConversionTarget {
-  TestConversionTarget(MLIRContext &ctx) : ConversionTarget(ctx) {
-    addLegalOp<LegalOpA, TestValidOp>();
-    addDynamicallyLegalOp<TestReturnOp>();
-  }
-  bool isDynamicallyLegal(Operation *op) const final {
-    // Don't allow F32 operands.
-    return llvm::none_of(op->getOperandTypes(),
-                         [](Type type) { return type.isF32(); });
-  }
-};
-
 struct TestLegalizePatternDriver
     : public ModulePass<TestLegalizePatternDriver> {
   void runOnModule() override {
+    TestTypeConverter converter;
     mlir::OwningRewritePatternList patterns;
     populateWithGenerated(&getContext(), &patterns);
-    RewriteListBuilder<TestRegionRewriteBlockMovement, TestDropOp,
-                       TestPassthroughInvalidOp,
+    RewriteListBuilder<TestRegionRewriteBlockMovement, TestRegionRewriteUndo,
+                       TestDropOp, TestPassthroughInvalidOp,
                        TestSplitReturnType>::build(patterns, &getContext());
+    mlir::populateFuncOpTypeConversionPattern(patterns, &getContext(),
+                                              converter);
 
-    TestTypeConverter converter;
-    TestConversionTarget target(getContext());
-    if (failed(applyPartialConversion(getModule(), target, converter,
-                                      std::move(patterns))))
-      signalPassFailure();
+    // Define the conversion target used for the test.
+    ConversionTarget target(getContext());
+    target.addLegalOp<LegalOpA, TestCastOp, TestValidOp>();
+    target.addIllegalOp<ILLegalOpF, TestRegionBuilderOp>();
+    target.addDynamicallyLegalOp<TestReturnOp>([](TestReturnOp op) {
+      // Don't allow F32 operands.
+      return llvm::none_of(op.getOperandTypes(),
+                           [](Type type) { return type.isF32(); });
+    });
+    target.addDynamicallyLegalOp<FuncOp>(
+        [&](FuncOp op) { return converter.isSignatureLegal(op.getType()); });
+    (void)applyPartialConversion(getModule(), target, std::move(patterns),
+                                 &converter);
   }
 };
 } // end anonymous namespace

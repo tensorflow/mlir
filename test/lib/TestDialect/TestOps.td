@@ -196,6 +196,11 @@ def IfFirstOperandIsNoneThenSoIsSecond :
   let arguments = (ins AnyType:$x, AnyType:$y);
 }
 
+def BroadcastableOp : TEST_Op<"broadcastable", [Broadcastable]> {
+  let arguments = (ins AnyTensor:$x, AnyTensor:$y);
+  let results = (outs AnyTensor:$res);
+}
+
 //===----------------------------------------------------------------------===//
 // Test Patterns
 //===----------------------------------------------------------------------===//
@@ -416,6 +421,7 @@ def ILLegalOpB : TEST_Op<"illegal_op_b">, Results<(outs I32:$res)>;
 def ILLegalOpC : TEST_Op<"illegal_op_c">, Results<(outs I32:$res)>;
 def ILLegalOpD : TEST_Op<"illegal_op_d">, Results<(outs I32:$res)>;
 def ILLegalOpE : TEST_Op<"illegal_op_e">, Results<(outs I32:$res)>;
+def ILLegalOpF : TEST_Op<"illegal_op_f">, Results<(outs I32:$res)>;
 def LegalOpA : TEST_Op<"legal_op_a">,
   Arguments<(ins Test_LegalizerEnum:$status)>, Results<(outs I32:$res)>;
 
@@ -443,6 +449,7 @@ def : Pat<(TestRewriteOp $input), (replaceWithValue $input)>;
 // Test Type Legalization
 //===----------------------------------------------------------------------===//
 
+def TestRegionBuilderOp : TEST_Op<"region_builder">;
 def TestReturnOp : TEST_Op<"return", [Terminator]>,
   Arguments<(ins Variadic<AnyType>:$inputs)>;
 def TestCastOp : TEST_Op<"cast">,
@@ -451,5 +458,20 @@ def TestInvalidOp : TEST_Op<"invalid", [Terminator]>,
   Arguments<(ins Variadic<AnyType>:$inputs)>;
 def TestValidOp : TEST_Op<"valid", [Terminator]>,
   Arguments<(ins Variadic<AnyType>:$inputs)>;
+
+//===----------------------------------------------------------------------===//
+// Test region argument list parsing.
+//===----------------------------------------------------------------------===//
+
+def PolyForOp : TEST_Op<"polyfor">
+{
+  let summary =  "polyfor operation";
+  let description = [{
+    Test op with multiple region arguments, each argument of index type.
+  }];
+
+  let regions = (region SizedRegion<1>:$region);
+  let parser = [{ return ::parse$cppClass(parser, result); }];
+}
 
 #endif // TEST_OPS

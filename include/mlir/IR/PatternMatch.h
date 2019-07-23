@@ -302,6 +302,10 @@ public:
     return OpTy();
   }
 
+  /// This is implemented to create the specified operations and serves as a
+  /// notification hook for rewriters that want to know about new operations.
+  virtual Operation *createOperation(const OperationState &state) = 0;
+
   /// Move the blocks that belong to "region" before the given position in
   /// another region "parent".  The two regions must be different.  The caller
   /// is responsible for creating or updating the operation transferring flow
@@ -317,7 +321,10 @@ public:
   /// (perhaps transitively) dead.  If any of those values are dead, this will
   /// remove them as well.
   virtual void replaceOp(Operation *op, ArrayRef<Value *> newValues,
-                         ArrayRef<Value *> valuesToRemoveIfDead = {});
+                         ArrayRef<Value *> valuesToRemoveIfDead);
+  void replaceOp(Operation *op, ArrayRef<Value *> newValues) {
+    replaceOp(op, newValues, llvm::None);
+  }
 
   /// Replaces the result op with a new op that is created without verification.
   /// The result values of the two ops must be the same types.
@@ -361,10 +368,6 @@ protected:
 
   // These are the callback methods that subclasses can choose to implement if
   // they would like to be notified about certain types of mutations.
-
-  /// This is implemented to create the specified operations and serves as a
-  /// notification hook for rewriters that want to know about new operations.
-  virtual Operation *createOperation(const OperationState &state) = 0;
 
   /// Notify the pattern rewriter that the specified operation has been mutated
   /// in place.  This is called after the mutation is done.

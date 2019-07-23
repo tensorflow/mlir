@@ -593,7 +593,7 @@ func @funcsimplemap(%arg0: index, %arg1: index) -> () {
 // CHECK-LABEL: func @splattensorattr
 func @splattensorattr() -> () {
 ^bb0:
-  // CHECK: "splatBoolTensor"() {bar = dense<0> : tensor<i1>} : () -> ()
+  // CHECK: "splatBoolTensor"() {bar = dense<false> : tensor<i1>} : () -> ()
   "splatBoolTensor"(){bar = dense<false> : tensor<i1>} : () -> ()
 
   // CHECK: "splatIntTensor"() {bar = dense<5> : tensor<2x1x4xi32>} : () -> ()
@@ -939,3 +939,9 @@ func @scoped_names() {
 
 // CHECK-LABEL: func @loc_attr(i1 {foo.loc_attr = loc(callsite("foo" at "mysource.cc":10:8))})
 func @loc_attr(i1 {foo.loc_attr = loc(callsite("foo" at "mysource.cc":10:8))})
+
+// CHECK-LABEL: func @dialect_attribute_with_type
+func @dialect_attribute_with_type() {
+  // CHECK-NEXT: foo = #foo.attr : i32
+  "foo.unknown_op"() {foo = #foo.attr : i32} : () -> ()
+}

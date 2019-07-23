@@ -1,4 +1,4 @@
-//===-- SPIRVOps.td - MLIR SPIR-V Op Definitions Spec ------*- tablegen -*-===//
+//===- SPIRVBase.td - MLIR SPIR-V Op Definitions Base file -*- tablegen -*-===//
 //
 // Copyright 2019 The MLIR Authors.
 //
@@ -72,11 +72,24 @@ class SPV_OpCode<string name, int val> {
 
 // Begin opcode section. Generated from SPIR-V spec; DO NOT MODIFY!
 
+def SPV_OC_OpNop               : I32EnumAttrCase<"OpNop", 0>;
+def SPV_OC_OpName              : I32EnumAttrCase<"OpName", 5>;
 def SPV_OC_OpMemoryModel       : I32EnumAttrCase<"OpMemoryModel", 14>;
 def SPV_OC_OpEntryPoint        : I32EnumAttrCase<"OpEntryPoint", 15>;
 def SPV_OC_OpExecutionMode     : I32EnumAttrCase<"OpExecutionMode", 16>;
 def SPV_OC_OpTypeVoid          : I32EnumAttrCase<"OpTypeVoid", 19>;
+def SPV_OC_OpTypeBool          : I32EnumAttrCase<"OpTypeBool", 20>;
+def SPV_OC_OpTypeInt           : I32EnumAttrCase<"OpTypeInt", 21>;
+def SPV_OC_OpTypeFloat         : I32EnumAttrCase<"OpTypeFloat", 22>;
+def SPV_OC_OpTypeVector        : I32EnumAttrCase<"OpTypeVector", 23>;
+def SPV_OC_OpTypeArray         : I32EnumAttrCase<"OpTypeArray", 28>;
+def SPV_OC_OpTypePointer       : I32EnumAttrCase<"OpTypePointer", 32>;
 def SPV_OC_OpTypeFunction      : I32EnumAttrCase<"OpTypeFunction", 33>;
+def SPV_OC_OpConstantTrue      : I32EnumAttrCase<"OpConstantTrue", 41>;
+def SPV_OC_OpConstantFalse     : I32EnumAttrCase<"OpConstantFalse", 42>;
+def SPV_OC_OpConstant          : I32EnumAttrCase<"OpConstant", 43>;
+def SPV_OC_OpConstantComposite : I32EnumAttrCase<"OpConstantComposite", 44>;
+def SPV_OC_OpConstantNull      : I32EnumAttrCase<"OpConstantNull", 46>;
 def SPV_OC_OpFunction          : I32EnumAttrCase<"OpFunction", 54>;
 def SPV_OC_OpFunctionParameter : I32EnumAttrCase<"OpFunctionParameter", 55>;
 def SPV_OC_OpFunctionEnd       : I32EnumAttrCase<"OpFunctionEnd", 56>;
@@ -90,11 +103,14 @@ def SPV_OC_OpReturn            : I32EnumAttrCase<"OpReturn", 253>;
 
 def SPV_OpcodeAttr :
     I32EnumAttr<"Opcode", "valid SPIR-V instructions", [
-      SPV_OC_OpMemoryModel, SPV_OC_OpEntryPoint, SPV_OC_OpExecutionMode,
-      SPV_OC_OpTypeVoid, SPV_OC_OpTypeFunction, SPV_OC_OpFunction,
-      SPV_OC_OpFunctionParameter, SPV_OC_OpFunctionEnd, SPV_OC_OpVariable,
-      SPV_OC_OpLoad, SPV_OC_OpStore, SPV_OC_OpDecorate, SPV_OC_OpCompositeExtract,
-      SPV_OC_OpFMul, SPV_OC_OpReturn
+      SPV_OC_OpNop, SPV_OC_OpName, SPV_OC_OpMemoryModel, SPV_OC_OpEntryPoint,
+      SPV_OC_OpExecutionMode, SPV_OC_OpTypeVoid, SPV_OC_OpTypeBool, SPV_OC_OpTypeInt,
+      SPV_OC_OpTypeFloat, SPV_OC_OpTypeVector, SPV_OC_OpTypeArray,
+      SPV_OC_OpTypePointer, SPV_OC_OpTypeFunction, SPV_OC_OpConstantTrue,
+      SPV_OC_OpConstantFalse, SPV_OC_OpConstant, SPV_OC_OpConstantComposite,
+      SPV_OC_OpConstantNull, SPV_OC_OpFunction, SPV_OC_OpFunctionParameter,
+      SPV_OC_OpFunctionEnd, SPV_OC_OpVariable, SPV_OC_OpLoad, SPV_OC_OpStore,
+      SPV_OC_OpDecorate, SPV_OC_OpCompositeExtract, SPV_OC_OpFMul, SPV_OC_OpReturn
       ]> {
     let returnType = "::mlir::spirv::Opcode";
     let convertFromStorage = "static_cast<::mlir::spirv::Opcode>($_self.getInt())";
@@ -514,8 +530,6 @@ def ModuleOnly :
 class SPV_Op<string mnemonic, list<OpTrait> traits = []> :
     Op<SPV_Dialect, mnemonic, traits> {
 
-  string spirvOpName = "Op" # mnemonic;
-
   // For each SPIR-V op, the following static functions need to be defined
   // in SPVOps.cpp:
   //
@@ -527,13 +541,38 @@ class SPV_Op<string mnemonic, list<OpTrait> traits = []> :
   let printer = [{ return ::print(*this, p); }];
   let verifier = [{ return ::verify(*this); }];
 
-  // By default the opcode to use for (de)serialization is obtained
-  // automatically from the SPIR-V spec. It assume the SPIR-V op being defined
-  // is ('Op' # mnemonic). The opcode value can be obtained by calling
-  // getOpcode<OpClass>().  If invoking this method is invalid or custom
-  // processing is needed for the op, set hasOpcode = 0 and specialize the
-  // getOpcode method.
-  int hasOpcode = 1;
+  // Specifies whether this op has a direct corresponding SPIR-V binary
+  // instruction opcode. The (de)serializer use this field to determine whether
+  // to auto-generate an entry in the (de)serialization dispatch table for this
+  // op. If set, this field also futher enables `autogenSerialization` (see
+  // below for details).
+  bit hasOpcode = 1;
+
+  // Name of the corresponding SPIR-V op. Only valid to use when hasOpcode is 1.
+  string spirvOpName = "Op" # mnemonic;
+
+  // Controls whether to auto-generate this op's (de)serialization method.
+  // If set, it results in generation of the following methods:
+  //
+  // ```c++
+  // template<typename OpTy> Serializer::processOp(OpTy op);
+  // template<typename OpTy> Deserializer::processOp(ArrayRef<uint32_t>);
+  // ```
+  //
+  // If this field is not set, then manual implementation of a specialization of
+  // these methods is required.
+  //
+  // Note:
+  //
+  // 1) If hasOpcode is set but autogenSerialization is not set, the
+  //    (de)serializer dispatch method still calls the above method for
+  //    (de)serializing this op.
+  //
+  // 2) If hasOpcode is not set, then this field is not interpreted; this op's
+  //    (de)serialization method will not be auto-generated regardless. Neither
+  //    does the handling in the (de)serialization dispatch table. Both
+  //    (de)serializing this op and its dispatch should be handled manually.
+  bit autogenSerialization = 1;
 }
 
 #endif // SPIRV_BASE

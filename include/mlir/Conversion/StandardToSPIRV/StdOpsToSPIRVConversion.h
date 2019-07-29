@@ -1,4 +1,4 @@
-//===- DialectRegistration.cpp - MLIR GPU dialect registration ------------===//
+//===- StdOpsToSPIRVConversion.h - Convert StandardOps to SPIR-V *- C++ -*-===//
 //
 // Copyright 2019 The MLIR Authors.
 //
@@ -14,8 +14,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 // =============================================================================
+//
+// This file defines utility function to import patterns to convert StandardOps
+// to SPIR-V ops
+//
+//===----------------------------------------------------------------------===//
 
-#include "mlir/GPU/GPUDialect.h"
+#ifndef STANDARD_OPS_TO_SPIRV_H_
+#define STANDARD_OPS_TO_SPIRV_H_
 
-// Static initialization for GPU dialect registration.
-static mlir::DialectRegistration<mlir::gpu::GPUDialect> kernelDialect;
+#include "mlir/IR/PatternMatch.h"
+
+namespace mlir {
+/// Method to append to a pattern list additional patterns for translating
+/// StandardOps to SPIR-V ops.
+void populateStdOpsToSPIRVPatterns(MLIRContext *context,
+                                   OwningRewritePatternList &patterns);
+} // namespace mlir
+
+#endif // STANDARD_OPS_TO_SPIRV_H_

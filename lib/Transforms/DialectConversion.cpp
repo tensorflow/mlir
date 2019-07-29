@@ -320,7 +320,7 @@ struct ConversionPatternRewriterImpl {
   /// contains the information necessary to undo this action.
   struct BlockAction {
     static BlockAction getSplit(Block *block, Block *originalBlock) {
-      BlockAction action{BlockActionKind::Split, block};
+      BlockAction action{BlockActionKind::Split, block, {}};
       action.originalBlock = originalBlock;
       return action;
     }
@@ -328,7 +328,7 @@ struct ConversionPatternRewriterImpl {
       return {BlockActionKind::Move, block, {originalPos}};
     }
     static BlockAction getTypeConversion(Block *block) {
-      return BlockAction{BlockActionKind::TypeConversion, block};
+      return BlockAction{BlockActionKind::TypeConversion, block, {}};
     }
 
     // The action kind.
@@ -952,6 +952,10 @@ enum OpConversionMode {
   // In this mode, all operations must be legal for the given target for the
   // conversion to succeeed.
   Full,
+
+  // In this mode, operations are analyzed for legality. No actual rewrites are
+  // applied to the operations on success.
+  Analysis,
 };
 
 // This class converts operations using the given pattern matcher. If a
@@ -960,8 +964,10 @@ enum OpConversionMode {
 struct OperationConverter {
   explicit OperationConverter(ConversionTarget &target,
                               OwningRewritePatternList &patterns,
-                              OpConversionMode mode)
-      : opLegalizer(target, patterns), mode(mode) {}
+                              OpConversionMode mode,
+                              DenseSet<Operation *> *legalizableOps = nullptr)
+      : opLegalizer(target, patterns), mode(mode),
+        legalizableOps(legalizableOps) {}
 
   /// Converts the given operations to the conversion target.
   LogicalResult convertOperations(ArrayRef<Operation *> ops,
@@ -985,6 +991,10 @@ private:
 
   /// The conversion mode to use when legalizing operations.
   OpConversionMode mode;
+
+  /// A set of pre-existing operations that were found to be legalizable to the
+  /// target. This field is only used when mode == OpConversionMode::Analysis.
+  DenseSet<Operation *> *legalizableOps;
 };
 } // end anonymous namespace
 
@@ -1055,6 +1065,10 @@ LogicalResult OperationConverter::convert(ConversionPatternRewriter &rewriter,
       return op->emitError()
              << "failed to legalize operation '" << op->getName()
              << "' that was explicitly marked illegal";
+  } else if (mode == OpConversionMode::Analysis) {
+    /// Analysis conversions don't fail if any operations fail to legalize, they
+    /// are only interested in the operations that were successfully legalized.
+    legalizableOps->insert(op);
   }
   return success();
 }
@@ -1088,8 +1102,12 @@ OperationConverter::convertOperations(ArrayRef<Operation *> ops,
         return rewriter.getImpl().discardRewrites(), failure();
   }
 
-  // Otherwise the body conversion succeeded, so apply all rewrites.
-  rewriter.getImpl().applyRewrites();
+  // Otherwise, the body conversion succeeded. Apply rewrites if this is not an
+  // analysis conversion.
+  if (mode == OpConversionMode::Analysis)
+    rewriter.getImpl().discardRewrites();
+  else
+    rewriter.getImpl().applyRewrites();
   return success();
 }
 
@@ -1347,4 +1365,28 @@ LogicalResult mlir::applyFullConversion(Operation *op, ConversionTarget &target,
                                         TypeConverter *converter) {
   return applyFullConversion(llvm::makeArrayRef(op), target,
                              std::move(patterns), converter);
+}
+
+/// Apply an analysis conversion on the given operations, and all nested
+/// operations. This method analyzes which operations would be successfully
+/// converted to the target if a conversion was applied. All operations that
+/// were found to be legalizable to the given 'target' are placed within the
+/// provided 'convertedOps' set; note that no actual rewrites are applied to the
+/// operations on success and only pre-existing operations are added to the set.
+LogicalResult mlir::applyAnalysisConversion(ArrayRef<Operation *> ops,
+                                            ConversionTarget &target,
+                                            OwningRewritePatternList &&patterns,
+                                            DenseSet<Operation *> &convertedOps,
+                                            TypeConverter *converter) {
+  OperationConverter opConverter(target, patterns, OpConversionMode::Analysis,
+                                 &convertedOps);
+  return opConverter.convertOperations(ops, converter);
+}
+LogicalResult mlir::applyAnalysisConversion(Operation *op,
+                                            ConversionTarget &target,
+                                            OwningRewritePatternList &&patterns,
+                                            DenseSet<Operation *> &convertedOps,
+                                            TypeConverter *converter) {
+  return applyAnalysisConversion(llvm::makeArrayRef(op), target,
+                                 std::move(patterns), convertedOps, converter);
 }

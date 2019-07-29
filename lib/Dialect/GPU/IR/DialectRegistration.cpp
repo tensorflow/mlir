@@ -1,4 +1,4 @@
-//===- Passes.h - Pass Entrypoints ------------------------------*- C++ -*-===//
+//===- DialectRegistration.cpp - MLIR GPU dialect registration ------------===//
 //
 // Copyright 2019 The MLIR Authors.
 //
@@ -14,20 +14,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 // =============================================================================
-//
-// This header file defines prototypes that expose pass constructors.
-//
-//===----------------------------------------------------------------------===//
 
-#ifndef MLIR_GPU_PASSES_H_
-#define MLIR_GPU_PASSES_H_
+#include "mlir/Dialect/GPU/GPUDialect.h"
 
-namespace mlir {
-
-class ModulePassBase;
-
-ModulePassBase *createGpuKernelOutliningPass();
-
-} // namespace mlir
-
-#endif // MLIR_GPU_PASSES_H_
+// Static initialization for GPU dialect registration.
+static mlir::DialectRegistration<mlir::gpu::GPUDialect> kernelDialect;

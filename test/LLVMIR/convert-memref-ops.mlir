@@ -31,6 +31,25 @@ func @zero_d_dealloc(%arg0: memref<f32>) {
   return
 }
 
+// CHECK-LABEL: func @alloc_with_callback() -> !llvm<"float*"> {
+func @alloc_with_callback() -> memref<f32> {
+// CHECK-NEXT:  %0 = llvm.constant(1 : index) : !llvm.i64
+// CHECK-NEXT:  %1 = llvm.constant(4 : index) : !llvm.i64
+// CHECK-NEXT:  %2 = llvm.mul %0, %1 : !llvm.i64
+// CHECK-NEXT:  %3 = llvm.call @myMalloc(%2) : (!llvm.i64) -> !llvm<"i8*">
+// CHECK-NEXT:  %4 = llvm.bitcast %3 : !llvm<"i8*"> to !llvm<"float*">
+  %0 = alloc() {callbackName="myMalloc"} : memref<f32>
+  return %0 : memref<f32>
+}
+
+// CHECK-LABEL: func @dealloc_with_callback(%arg0: !llvm<"float*">)
+func @dealloc_with_callback(%arg0: memref<f32>) {
+  // CHECK-NEXT:  %0 = llvm.bitcast %arg0 : !llvm<"float*"> to !llvm<"i8*">
+  // CHECK-NEXT:  llvm.call @myFree(%0) : (!llvm<"i8*">) -> ()
+  dealloc %arg0 {callbackName="myFree"} : memref<f32>
+  return
+}
+
 // CHECK-LABEL: func @mixed_alloc(%arg0: !llvm.i64, %arg1: !llvm.i64) -> !llvm<"{ float*, i64, i64 }"> {
 func @mixed_alloc(%arg0: index, %arg1: index) -> memref<?x42x?xf32> {
 // CHECK-NEXT:  %0 = llvm.constant(42 : index) : !llvm.i64

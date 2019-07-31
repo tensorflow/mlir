@@ -813,12 +813,9 @@ template <typename TerminatorOpType> struct SingleBlockImplicitTerminator {
           return op->emitOpError("expects region #")
                  << i << " to have 0 or 1 blocks";
 
-        // The block must terminate with TerminatorOpType.  If the block is
-        // empty, silently fail, the general block well-formedness verifier
-        // should complain instead.
         Block &block = region.front();
         if (block.empty())
-          return failure();
+          return op->emitOpError() << "expects a non-empty block";
         Operation &terminator = block.back();
         if (isa<TerminatorOpType>(terminator))
           continue;
@@ -841,6 +838,20 @@ template <typename TerminatorOpType> struct SingleBlockImplicitTerminator {
                                  Location loc) {
       ::mlir::impl::template ensureRegionTerminator<TerminatorOpType>(
           region, builder, loc);
+    }
+  };
+};
+
+/// This class provides a verifier for ops that are expecting a specific parent.
+template <typename ParentOpType> struct HasParent {
+  template <typename ConcreteType>
+  class Impl : public TraitBase<ConcreteType, Impl> {
+  public:
+    static LogicalResult verifyTrait(Operation *op) {
+      if (isa<ParentOpType>(op->getParentOp()))
+        return success();
+      return op->emitOpError() << "expects parent op '"
+                               << ParentOpType::getOperationName() << "'";
     }
   };
 };

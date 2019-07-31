@@ -20,9 +20,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "mlir/Support/StringExtras.h"
 #include "mlir/TableGen/Attribute.h"
 #include "mlir/TableGen/GenInfo.h"
 #include "mlir/TableGen/Operator.h"
+#include "llvm/ADT/Sequence.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
@@ -39,6 +41,8 @@ using llvm::raw_string_ostream;
 using llvm::Record;
 using llvm::RecordKeeper;
 using llvm::SMLoc;
+using llvm::StringRef;
+using llvm::Twine;
 using mlir::tblgen::Attribute;
 using mlir::tblgen::EnumAttr;
 using mlir::tblgen::NamedAttribute;
@@ -90,7 +94,8 @@ static void emitAttributeSerialization(const Attribute &attr,
   os << "    }\n";
 }
 
-static void emitSerializationFunction(const Record *record, const Operator &op,
+static void emitSerializationFunction(const Record *attrClass,
+                                      const Record *record, const Operator &op,
                                       raw_ostream &os) {
   // If the record has 'autogenSerialization' set to 0, nothing to do
   if (!record->getValueAsBit("autogenSerialization")) {
@@ -101,21 +106,20 @@ static void emitSerializationFunction(const Record *record, const Operator &op,
                 op.getQualCppClassName())
      << " {\n";
   os << "  SmallVector<uint32_t, 4> operands;\n";
+  os << "  SmallVector<StringRef, 2> elidedAttrs;\n";
 
   // Serialize result information
   if (op.getNumResults() == 1) {
-    os << "  {\n";
-    os << "    uint32_t typeID = 0;\n";
-    os << "    if (failed(processType(op.getLoc(), "
-          "op.getResult()->getType(), typeID))) {\n";
-    os << "      return failure();\n";
-    os << "    }\n";
-    os << "    operands.push_back(typeID);\n";
-    /// Create an SSA result <id> for the op
-    os << "    auto resultID = getNextID();\n";
-    os << "    valueIDMap[op.getResult()] = resultID;\n";
-    os << "    operands.push_back(resultID);\n";
+    os << "  uint32_t resultTypeID = 0;\n";
+    os << "  if (failed(processType(op.getLoc(), op.getType(), resultTypeID))) "
+          "{\n";
+    os << "    return failure();\n";
     os << "  }\n";
+    os << "  operands.push_back(resultTypeID);\n";
+    // Create an SSA result <id> for the op
+    os << "  auto resultID = getNextID();\n";
+    os << "  valueIDMap[op.getResult()] = resultID;\n";
+    os << "  operands.push_back(resultID);\n";
   } else if (op.getNumResults() != 0) {
     PrintFatalError(record->getLoc(), "SPIR-V ops can only zero or one result");
   }
@@ -126,15 +130,13 @@ static void emitSerializationFunction(const Record *record, const Operator &op,
     auto argument = op.getArg(i);
     os << "  {\n";
     if (argument.is<NamedTypeConstraint *>()) {
-      os << "    if (" << operandNum
-         << " < op.getOperation()->getNumOperands()) {\n";
-      os << "      auto arg = findValueID(op.getOperation()->getOperand("
-         << operandNum << "));\n";
-      os << "      if (!arg) {\n";
+      os << "    for (auto arg : op.getODSOperands(" << operandNum << ")) {\n";
+      os << "      auto argID = findValueID(arg);\n";
+      os << "      if (!argID) {\n";
       os << "        emitError(op.getLoc(), \"operand " << operandNum
          << " has a use before def\");\n";
       os << "      }\n";
-      os << "      operands.push_back(arg);\n";
+      os << "      operands.push_back(argID);\n";
       os << "    }\n";
       operandNum++;
     } else {
@@ -142,6 +144,7 @@ static void emitSerializationFunction(const Record *record, const Operator &op,
       emitAttributeSerialization(
           (attr->attr.isOptional() ? attr->attr.getBaseAttr() : attr->attr),
           record->getLoc(), "op", "operands", attr->name, os);
+      os << "    elidedAttrs.push_back(\"" << attr->name << "\");\n";
     }
     os << "  }\n";
   }
@@ -149,6 +152,20 @@ static void emitSerializationFunction(const Record *record, const Operator &op,
   os << formatv("  encodeInstructionInto("
                 "functions, spirv::getOpcode<{0}>(), operands);\n",
                 op.getQualCppClassName());
+
+  if (op.getNumResults() == 1) {
+    // All non-argument attributes translated into OpDecorate instruction
+    os << "  for (auto attr : op.getAttrs()) {\n";
+    os << "    if (llvm::any_of(elidedAttrs, [&](StringRef elided) { return "
+          "attr.first.is(elided); })) {\n";
+    os << "      continue;\n";
+    os << "    }\n";
+    os << "    if (failed(processDecoration(op.getLoc(), resultID, attr))) {\n";
+    os << "      return failure();";
+    os << "    }\n";
+    os << "  }\n";
+  }
+
   os << "  return success();\n";
   os << "}\n\n";
 }
@@ -198,7 +215,8 @@ static void emitAttributeDeserialization(
   }
 }
 
-static void emitDeserializationFunction(const Record *record,
+static void emitDeserializationFunction(const Record *attrClass,
+                                        const Record *record,
                                         const Operator &op, raw_ostream &os) {
   // If the record has 'autogenSerialization' set to 0, nothing to do
   if (!record->getValueAsBit("autogenSerialization")) {
@@ -243,38 +261,70 @@ static void emitDeserializationFunction(const Record *record,
                     "SPIR-V ops can have only zero or one result");
   }
 
-  // Process arguments/attributes
+  // Process operands/attributes
   os << "  SmallVector<Value *, 4> operands;\n";
   os << "  SmallVector<NamedAttribute, 4> attributes;\n";
   unsigned operandNum = 0;
   for (unsigned i = 0, e = op.getNumArgs(); i < e; ++i) {
     auto argument = op.getArg(i);
-    os << "  if (wordIndex < words.size()) {\n";
-    if (argument.is<NamedTypeConstraint *>()) {
+    if (auto valueArg = argument.dyn_cast<NamedTypeConstraint *>()) {
+      if (valueArg->isVariadic()) {
+        if (i != e - 1) {
+          PrintFatalError(record->getLoc(),
+                          "SPIR-V ops can have Variadic<..> argument only if "
+                          "it's the last argument");
+        }
+        os << "  for (; wordIndex < words.size(); ++wordIndex)";
+      } else {
+        os << "  if (wordIndex < words.size())";
+      }
+      os << " {\n";
       os << "    auto arg = getValue(words[wordIndex]);\n";
       os << "    if (!arg) {\n";
       os << "      return emitError(unknownLoc, \"unknown result <id> : \") << "
             "words[wordIndex];\n";
       os << "    }\n";
       os << "    operands.push_back(arg);\n";
-      os << "    wordIndex++;\n";
+      if (!valueArg->isVariadic()) {
+        os << "    wordIndex++;\n";
+      }
       operandNum++;
+      os << "  }\n";
     } else {
+      os << "  if (wordIndex < words.size()) {\n";
       auto attr = argument.get<NamedAttribute *>();
       emitAttributeDeserialization(
           (attr->attr.isOptional() ? attr->attr.getBaseAttr() : attr->attr),
           record->getLoc(), "attributes", attr->name, "words", "wordIndex",
           "words.size()", os);
+      os << "  }\n";
     }
-    os << "  }\n";
   }
 
+  os << "  if (wordIndex != words.size()) {\n";
+  os << "    return emitError(unknownLoc, \"found more operands than expected "
+        "when deserializing "
+     << op.getQualCppClassName()
+     << ", only \") << wordIndex << \" of \" << words.size() << \" "
+        "processed\";\n";
+  os << "  }\n";
   os << formatv("  auto op = opBuilder.create<{0}>(unknownLoc, resultTypes, "
                 "operands, attributes); (void)op;\n",
                 op.getQualCppClassName());
   if (hasResult) {
-    os << "  valueMap[valueID] = op.getResult();\n";
+    os << "  valueMap[valueID] = op.getResult();\n\n";
   }
+
+  // Import decorations parsed
+  if (op.getNumResults() == 1) {
+    os << "  if (decorations.count(valueID)) {\n";
+    os << "    auto decorationAttrs = decorations[valueID];\n";
+    os << "    for (auto attr : decorationAttrs.getAttrs()) {\n";
+    os << "      op.setAttr(attr.first, attr.second);\n";
+    os << "    }\n";
+    os << "  }\n";
+  }
+
   os << "  return success();\n";
   os << "}\n\n";
 }
@@ -311,6 +361,7 @@ static bool emitSerializationFns(const RecordKeeper &recordKeeper,
       utilsString;
   raw_string_ostream dSerFn(dSerFnString), dDesFn(dDesFnString),
       serFn(serFnString), deserFn(deserFnString), utils(utilsString);
+  auto attrClass = recordKeeper.getClass("Attr");
 
   declareOpcodeFn(utils);
   initDispatchSerializationFn(dSerFn);
@@ -322,9 +373,9 @@ static bool emitSerializationFns(const RecordKeeper &recordKeeper,
     }
     Operator op(def);
     emitGetOpcodeFunction(def, op, utils);
-    emitSerializationFunction(def, op, serFn);
+    emitSerializationFunction(attrClass, def, op, serFn);
     emitSerializationDispatch(op, dSerFn);
-    emitDeserializationFunction(def, op, deserFn);
+    emitDeserializationFunction(attrClass, def, op, deserFn);
     emitDeserializationDispatch(op, def, dDesFn);
   }
   finalizeDispatchSerializationFn(dSerFn);
@@ -359,21 +410,6 @@ static void emitEnumGetSymbolizeFnDecl(raw_ostream &os) {
         "SymbolizeFnTy<EnumClass> symbolizeEnum();\n";
 }
 
-std::string convertSnakeCase(llvm::StringRef inputString) {
-  std::string snakeCase;
-  for (auto c : inputString) {
-    if (c >= 'A' && c <= 'Z') {
-      if (!snakeCase.empty()) {
-        snakeCase.push_back('_');
-      }
-      snakeCase.push_back((c - 'A') + 'a');
-    } else {
-      snakeCase.push_back(c);
-    }
-  }
-  return snakeCase;
-}
-
 static void emitEnumGetAttrNameFnDefn(const EnumAttr &enumAttr,
                                       raw_ostream &os) {
   auto enumName = enumAttr.getEnumClassName();
@@ -381,7 +417,7 @@ static void emitEnumGetAttrNameFnDefn(const EnumAttr &enumAttr,
      << " {\n";
   os << "  "
      << formatv("static constexpr const char attrName[] = \"{0}\";\n",
-                convertSnakeCase(enumName));
+                mlir::convertToSnakeCase(enumName));
   os << "  return attrName;\n";
   os << "}\n";
 }
@@ -401,6 +437,8 @@ static bool emitOpUtils(const RecordKeeper &recordKeeper, raw_ostream &os) {
   llvm::emitSourceFileHeader("SPIR-V Op Utilites", os);
 
   auto defs = recordKeeper.getAllDerivedDefinitions("I32EnumAttr");
+  os << "#ifndef SPIRV_OP_UTILS_H_\n";
+  os << "#define SPIRV_OP_UTILS_H_\n";
   emitEnumGetAttrNameFnDecl(os);
   emitEnumGetSymbolizeFnDecl(os);
   for (const auto *def : defs) {
@@ -408,6 +446,7 @@ static bool emitOpUtils(const RecordKeeper &recordKeeper, raw_ostream &os) {
     emitEnumGetAttrNameFnDefn(enumAttr, os);
     emitEnumGetSymbolizeFnDefn(enumAttr, os);
   }
+  os << "#endif // SPIRV_OP_UTILS_H\n";
   return false;
 }
 

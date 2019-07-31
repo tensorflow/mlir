@@ -72,7 +72,7 @@ void mlir::initializeLLVMPasses() {
 static void populatePassManagers(llvm::legacy::PassManager &modulePM,
                                  llvm::legacy::FunctionPassManager &funcPM,
                                  unsigned optLevel, unsigned sizeLevel,
-                                 llvm::TargetMachine *targetMachine = nullptr) {
+                                 llvm::TargetMachine *targetMachine) {
   llvm::PassManagerBuilder builder;
   builder.OptLevel = optLevel;
   builder.SizeLevel = sizeLevel;
@@ -127,7 +127,8 @@ std::function<llvm::Error(llvm::Module *)> mlir::makeLLVMPassesTransformer(
         continue;
 
       if (insertOptPasses && optPassesInsertPos == i) {
-        populatePassManagers(modulePM, funcPM, mbOptLevel.getValue(), 0);
+        populatePassManagers(modulePM, funcPM, mbOptLevel.getValue(), 0,
+                             nullptr /*TTI*/);
         insertOptPasses = false;
       }
 
@@ -140,7 +141,8 @@ std::function<llvm::Error(llvm::Module *)> mlir::makeLLVMPassesTransformer(
     }
 
     if (insertOptPasses)
-      populatePassManagers(modulePM, funcPM, mbOptLevel.getValue(), 0);
+      populatePassManagers(modulePM, funcPM, mbOptLevel.getValue(), 0,
+                           nullptr /*TTI*/);
 
     runPasses(modulePM, funcPM, *m);
     return llvm::Error::success();

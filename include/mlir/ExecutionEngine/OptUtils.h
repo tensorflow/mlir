@@ -42,9 +42,9 @@ void initializeLLVMPasses();
 
 /// Create a module transformer function for MLIR ExecutionEngine that runs
 /// LLVM IR passes corresponding to the given speed and size optimization
-/// levels (e.g. -O2 or -Os). If not null, \p targetMachine is used to
+/// levels (e.g. -O2 or -Os). If not null, `targetMachine` is used to
 /// initialize passes that provide target-specific information to the LLVM
-/// optimizer.
+/// optimizer. `targetMachine` must outlive the returned std::function.
 std::function<llvm::Error(llvm::Module *)>
 makeOptimizingTransformer(unsigned optLevel, unsigned sizeLevel,
                           llvm::TargetMachine *targetMachine);

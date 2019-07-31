@@ -1593,7 +1593,11 @@ void AffineLoadOp::build(Builder *builder, OperationState *result,
   result->addOperands(memref);
   result->addOperands(indices);
   auto memrefType = memref->getType().cast<MemRefType>();
-  auto map = builder->getMultiDimIdentityMap(memrefType.getRank());
+  auto rank = memrefType.getRank();
+  // Create identity map for memrefs with at least one dimension or {} -> (0)
+  // for zero-dimensional memrefs.
+  auto map = rank ? builder->getMultiDimIdentityMap(rank)
+                  : builder->getConstantAffineMap(0);
   result->addAttribute(getMapAttrName(), builder->getAffineMapAttr(map));
   result->types.push_back(memrefType.getElementType());
 }
@@ -1636,7 +1640,12 @@ LogicalResult AffineLoadOp::verify() {
   auto mapAttr = getAttrOfType<AffineMapAttr>(getMapAttrName());
   if (mapAttr) {
     AffineMap map = getAttrOfType<AffineMapAttr>(getMapAttrName()).getValue();
-    if (map.getNumResults() != getMemRefType().getRank())
+    auto rank = getMemRefType().getRank();
+    if (rank == 0) {
+      if (map.getNumResults() - 1 != rank)
+        return emitOpError("affine.load affine map num results must be one for "
+                           "zero-dimensional memrefs");
+    } else if (map.getNumResults() != getMemRefType().getRank())
       return emitOpError("affine.load affine map num results must equal"
                          " memref rank");
     if (map.getNumInputs() != getNumOperands() - 1)
@@ -1729,7 +1738,13 @@ LogicalResult AffineStoreOp::verify() {
   auto mapAttr = getAttrOfType<AffineMapAttr>(getMapAttrName());
   if (mapAttr) {
     AffineMap map = mapAttr.getValue();
-    if (map.getNumResults() != getMemRefType().getRank())
+    auto rank = getMemRefType().getRank();
+    if (rank == 0) {
+      if (map.getNumResults() - 1 != rank)
+        return emitOpError(
+            "affine.store affine map num results must be one for "
+            "zero-dimensional memrefs");
+    } else if (map.getNumResults() != rank)
       return emitOpError("affine.store affine map num results must equal"
                          " memref rank");
     if (map.getNumInputs() != getNumOperands() - 2)

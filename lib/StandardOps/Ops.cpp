@@ -1678,7 +1678,13 @@ static LogicalResult verify(LoadOp op) {
   if (op.getType() != op.getMemRefType().getElementType())
     return op.emitOpError("result type must match element type of memref");
 
-  if (op.getMemRefType().getRank() != op.getNumOperands() - 1)
+  auto rank = op.getMemRefType().getRank();
+  auto numOperands = op.getNumOperands();
+  if (rank == 0) {
+    if (rank != numOperands - 2 /*zero-dim with one index*/ &&
+        rank != numOperands - 1 /*zero-dim with no index*/)
+      return op.emitOpError("incorrect number of indices for zero-dim load");
+  } else if (rank != numOperands - 1)
     return op.emitOpError("incorrect number of indices for load");
 
   for (auto *idx : op.getIndices())
@@ -1990,7 +1996,13 @@ static LogicalResult verify(StoreOp op) {
     return op.emitOpError(
         "first operand must have same type memref element type");
 
-  if (op.getNumOperands() != 2 + op.getMemRefType().getRank())
+  auto rank = op.getMemRefType().getRank();
+  auto numOperands = op.getNumOperands();
+  if (rank == 0) {
+    if (numOperands != 3 /*zero-dim with one index*/ &&
+        numOperands != 2 /*zero-dim with no index*/)
+      return op.emitOpError("incorrect number of indices for zero-dim store");
+  } else if (numOperands != 2 + rank)
     return op.emitOpError("store index operand count not equal to memref rank");
 
   for (auto *idx : op.getIndices())

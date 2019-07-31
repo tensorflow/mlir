@@ -865,10 +865,11 @@ struct IndexCastOpLowering : public LLVMLegalizationPattern<IndexCastOp> {
   }
 };
 
-// Convert std.cmpi predicate into the LLVM dialect ICmpPredicate.  The two
+// Convert std.cmp predicate into the LLVM dialect CmpPredicate.  The two
 // enums share the numerical values so just cast.
-static LLVM::ICmpPredicate convertCmpIPredicate(CmpIPredicate pred) {
-  return static_cast<LLVM::ICmpPredicate>(pred);
+template<typename LLVMPredType, typename StdPredType>
+static LLVMPredType convertCmpPredicate(StdPredType pred) {
+  return static_cast<LLVMPredType>(pred);
 }
 
 struct CmpIOpLowering : public LLVMLegalizationPattern<CmpIOp> {
@@ -883,7 +884,26 @@ struct CmpIOpLowering : public LLVMLegalizationPattern<CmpIOp> {
     rewriter.replaceOpWithNewOp<LLVM::ICmpOp>(
         op, lowering.convertType(cmpiOp.getResult()->getType()),
         rewriter.getI64IntegerAttr(
-            static_cast<int64_t>(convertCmpIPredicate(cmpiOp.getPredicate()))),
+            static_cast<int64_t>(convertCmpPredicate<LLVM::ICmpPredicate>(cmpiOp.getPredicate()))),
+        transformed.lhs(), transformed.rhs());
+
+    return matchSuccess();
+  }
+};
+
+struct CmpFOpLowering : public LLVMLegalizationPattern<CmpFOp> {
+  using LLVMLegalizationPattern<CmpFOp>::LLVMLegalizationPattern;
+
+  PatternMatchResult
+  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto cmpfOp = cast<CmpFOp>(op);
+    CmpFOpOperandAdaptor transformed(operands);
+
+    rewriter.replaceOpWithNewOp<LLVM::FCmpOp>(
+        op, lowering.convertType(cmpfOp.getResult()->getType()),
+        rewriter.getI64IntegerAttr(
+            static_cast<int64_t>(convertCmpPredicate<LLVM::FCmpPredicate>(cmpfOp.getPredicate()))),
         transformed.lhs(), transformed.rhs());
 
     return matchSuccess();
@@ -1026,7 +1046,7 @@ void mlir::populateStdToLLVMConversionPatterns(
   patterns.insert<
       AddFOpLowering, AddIOpLowering, AndOpLowering, AllocOpLowering,
       BranchOpLowering, CallIndirectOpLowering, CallOpLowering, CmpIOpLowering,
-      CondBranchOpLowering, ConstLLVMOpLowering, DeallocOpLowering,
+      CmpFOpLowering, CondBranchOpLowering, ConstLLVMOpLowering, DeallocOpLowering,
       DimOpLowering, DivISOpLowering, DivIUOpLowering, DivFOpLowering,
       FuncOpConversion, IndexCastOpLowering, LoadOpLowering,
       MemRefCastOpLowering, MulFOpLowering, MulIOpLowering, OrOpLowering,

@@ -114,9 +114,10 @@ mlir::makeOptimizingTransformer(unsigned optLevel, unsigned sizeLevel,
 // optional optimization level to pre-populate the pass manager.
 std::function<llvm::Error(llvm::Module *)> mlir::makeLLVMPassesTransformer(
     llvm::ArrayRef<const llvm::PassInfo *> llvmPasses,
-    llvm::Optional<unsigned> mbOptLevel, unsigned optPassesInsertPos) {
-  return [llvmPasses, mbOptLevel,
-          optPassesInsertPos](llvm::Module *m) -> llvm::Error {
+    llvm::Optional<unsigned> mbOptLevel, llvm::TargetMachine *targetMachine,
+    unsigned optPassesInsertPos) {
+  return [llvmPasses, mbOptLevel, optPassesInsertPos,
+          targetMachine](llvm::Module *m) -> llvm::Error {
     llvm::legacy::PassManager modulePM;
     llvm::legacy::FunctionPassManager funcPM(m);
 
@@ -128,7 +129,7 @@ std::function<llvm::Error(llvm::Module *)> mlir::makeLLVMPassesTransformer(
 
       if (insertOptPasses && optPassesInsertPos == i) {
         populatePassManagers(modulePM, funcPM, mbOptLevel.getValue(), 0,
-                             nullptr /*TTI*/);
+                             targetMachine);
         insertOptPasses = false;
       }
 
@@ -142,7 +143,7 @@ std::function<llvm::Error(llvm::Module *)> mlir::makeLLVMPassesTransformer(
 
     if (insertOptPasses)
       populatePassManagers(modulePM, funcPM, mbOptLevel.getValue(), 0,
-                           nullptr /*TTI*/);
+                           targetMachine);
 
     runPasses(modulePM, funcPM, *m);
     return llvm::Error::success();

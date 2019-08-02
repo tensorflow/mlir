@@ -447,14 +447,7 @@ class TupleOf<list<Type> allowedTypes>
 // types.
 class NestedTupleOf<list<Type> allowedTypes> :
     MixedContainerType<AnyTypeOf<allowedTypes>, IsTupleTypePred,
-                       // TODO(b/133502599) Make it possible to use a C++ helper
-                       [{
-                         [&](){
-                           SmallVector<Type, 10> fTypes;
-                           $_self.cast<TupleType>().getFlattenedTypes(fTypes);
-                           return fTypes;
-                         }()
-                       }],
+                       "getFlattenedTypes($_self.cast<TupleType>())",
                        "nested tuple">;
 
 //===----------------------------------------------------------------------===//
@@ -518,6 +511,17 @@ class Attr<Pred condition, string descr = ""> :
   // convertFromStorage method to handle the case where the attribute is
   // not present.
   bit isOptional = 0;
+
+  // What is the base-level Attr instantiation that this Attr is built upon.
+  // Unset means this is a base-level Attr.
+  //
+  // This field is used by attribute wrapper classes (DefaultValuedAttr,
+  // OptionalAttr, etc.) to retrive the base-level attribute definition.
+  // This can be used for getting its name; otherwise, we will see
+  // "anonymous_<number>" as the attribute def name because of template
+  // instantiation.
+  // TOOD(b/132458159): deduplicate the fields in attribute wrapper classes.
+  Attr baseAttr = ?;
 }
 
 //===----------------------------------------------------------------------===//
@@ -535,9 +539,7 @@ class DefaultValuedAttr<Attr attr, string val> :
   let constBuilderCall = attr.constBuilderCall;
   let defaultValue = val;
 
-  // Remember `attr`'s def name.
-  // TOOD(b/132458159): consider embedding Attr as a field.
-  string baseAttr = !cast<string>(attr);
+  let baseAttr = attr;
 }
 
 // Decorates an attribute as optional. The return type of the generated
@@ -551,9 +553,7 @@ class OptionalAttr<Attr attr> : Attr<attr.predicate, attr.description> {
                            attr.convertFromStorage # ") : (llvm::None)";
   let isOptional = 1;
 
-  // Remember `attr`'s def name.
-  // TOOD(b/132458159): consider embedding Attr as a field.
-  string baseAttr = !cast<string>(attr);
+  let baseAttr = attr;
 }
 
 //===----------------------------------------------------------------------===//
@@ -639,6 +639,17 @@ class TypeAttrBase<string retType, string description> :
 }
 
 def TypeAttr : TypeAttrBase<"Type", "any type attribute">;
+
+// The mere presence of unit attributes has a meaning.  Therefore, unit
+// attributes are always treated as optional and accessors to them return
+// "true" if the attribute is present and "false" otherwise.
+def UnitAttr : Attr<CPred<"$_self.isa<UnitAttr>()">, "unit attribute"> {
+  let storageType = [{ UnitAttr }];
+  let constBuilderCall = "$_builder.getUnitAttr()";
+  let convertFromStorage = "$_self != nullptr";
+  let returnType = "bool";
+  let isOptional = 1;
+}
 
 //===----------------------------------------------------------------------===//
 // Enum attribute kinds
@@ -872,6 +883,7 @@ class ConstantAttr<Attr attribute, string val> : AttrConstraint<
 class ConstF32Attr<string val> : ConstantAttr<F32Attr, val>;
 def ConstBoolAttrFalse : ConstantAttr<BoolAttr, "false">;
 def ConstBoolAttrTrue : ConstantAttr<BoolAttr, "true">;
+def ConstUnitAttr : ConstantAttr<UnitAttr, "unit">;
 
 //===----------------------------------------------------------------------===//
 // Common attribute constraints
@@ -891,6 +903,8 @@ class Confined<Attr attr, list<AttrConstraint> constraints> : Attr<
   let constBuilderCall = attr.constBuilderCall;
   let defaultValue = attr.defaultValue;
   let isOptional = attr.isOptional;
+
+  let baseAttr = attr;
 }
 
 // An AttrConstraint that holds if all attr constraints specified in
@@ -958,6 +972,15 @@ class NativeOpTrait<string prop> : OpTrait {
   string trait = prop;
 }
 
+// ParamNativeOpTrait corresponds to the template-parameterized traits in the
+// C++ implementation.  MLIR uses nested class templates to implement such
+// traits leading to constructs of the form "TraitName<Parameters>::Impl". Use
+// the value in `prop` as the trait name and the value in `params` as
+// parameters to construct the native trait class name.
+class ParamNativeOpTrait<string prop, string params>
+    : NativeOpTrait<prop # "<" # params # ">::Impl"> {
+}
+
 // GenInternalOpTrait is an op trait that does not have direct C++ mapping but
 // affects op definition generator internals, like how op builders and
 // operand/attribute/result getters are generated.
@@ -990,6 +1013,14 @@ def SameOperandsAndResultElementType :
   NativeOpTrait<"SameOperandsAndResultElementType">;
 // Op is a terminator.
 def Terminator       : NativeOpTrait<"IsTerminator">;
+
+// Op's regions have a single block with the specified terminator.
+class SingleBlockImplicitTerminator<string op>
+    : ParamNativeOpTrait<"SingleBlockImplicitTerminator", op>;
+
+// Op's parent operation is the provided one.
+class HasParent<string op>
+    : ParamNativeOpTrait<"HasParent", op>;
 
 // Op result type is derived from the first attribute. If the attribute is an
 // subclass of `TypeAttrBase`, its value is used, otherwise, the type of the
@@ -1143,13 +1174,21 @@ class Results<dag rets> {
 }
 
 //===----------------------------------------------------------------------===//
+// Common value constraints
+//===----------------------------------------------------------------------===//
+
+def HasNoUseOf: Constraint<
+    CPred<"$_self->use_begin() == $_self->use_end()">, "has no use">;
+
+//===----------------------------------------------------------------------===//
 // Common op type constraints
 //===----------------------------------------------------------------------===//
+
 // These traits are for verifying properties of an op that require knowledge of
 // multiple arguments or results. For verifying properties of a single argument
 // or result, prefer operand type constraints.
 
-// These traits often require including "mlir/Support/TypeUtilities.h".
+// These traits often require including "mlir/IR/TypeUtilities.h".
 
 // TODO(b/135033717): Improve the autogenerated error messages.
 
@@ -1160,6 +1199,13 @@ class TCopVTEtIs<int idx, Type type> : And<[
      IsShapedTypePred>,
    SubstLeaves<"$_self", "getElementTypeOrSelf($_op.getOperand(" # idx # "))",
      type.predicate>]>;
+
+// Predicate to verify that a named argument or result's element type matches a
+// given type.
+class TypeIsPred<string name, Type type> :
+   SubstLeaves<"$_self", "$" # name # ".getType()", type.predicate>;
+class TypeIs<string name, Type type> : PredOpTrait<
+  "'" # name # "' is " # type.description, TypeIsPred<name, type>>;
 
 // Predicate to verify that a named argument or result's element type matches a
 // given type.
@@ -1368,11 +1414,5 @@ class NativeCodeCall<string expr> {
 // Directive used in result pattern to indicate that no new op are generated,
 // so to replace the matched DAG with an existing SSA value.
 def replaceWithValue;
-
-// Directive used in result pattern to indicate that no replacement is generated
-// for the current result. Predicates are generated to make sure the
-// corresponding result in source pattern is unused.
-//   syntax: (verifyUnusedValue)
-def verifyUnusedValue;
 
 #endif // OP_BASE

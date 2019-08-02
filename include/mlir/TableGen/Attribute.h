@@ -52,17 +52,6 @@ public:
   explicit Attribute(const llvm::Record *record);
   explicit Attribute(const llvm::DefInit *init);
 
-  // Returns true if this attribute is a derived attribute (i.e., a subclass
-  // of `DerivedAttr`).
-  bool isDerivedAttr() const;
-
-  // Returns true if this attribute is a type attribute (i.e., a subclass
-  // of `TypeAttrBase`).
-  bool isTypeAttr() const;
-
-  // Returns true if this attribute has storage type set.
-  bool hasStorageType() const;
-
   // Returns the storage type if set. Returns the default storage type
   // ("Attribute") otherwise.
   StringRef getStorageType() const;
@@ -84,6 +73,10 @@ public:
   // the constant value.
   StringRef getConstBuilderTemplate() const;
 
+  // Returns the base-level attribute that this attribute constraint is
+  // built upon.
+  Attribute getBaseAttr() const;
+
   // Returns whether this attribute has a default value's initializer.
   bool hasDefaultValueInitializer() const;
   // Returns the default value's initializer for this attribute.
@@ -91,6 +84,18 @@ public:
 
   // Returns whether this attribute is optional.
   bool isOptional() const;
+
+  // Returns true if this attribute is a derived attribute (i.e., a subclass
+  // of `DerivedAttr`).
+  bool isDerivedAttr() const;
+
+  // Returns true if this attribute is a type attribute (i.e., a subclass
+  // of `TypeAttrBase`).
+  bool isTypeAttr() const;
+
+  // Returns true if this attribute is an enum attribute (i.e., a subclass of
+  // `EnumAttrInfo`)
+  bool isEnumAttr() const;
 
   // Returns this attribute's TableGen def name. If this is an `OptionalAttr`
   // or `DefaultValuedAttr` without explicit name, returns the base attribute's
@@ -145,9 +150,6 @@ public:
   explicit EnumAttr(const llvm::Record *record);
   explicit EnumAttr(const llvm::Record &record);
   explicit EnumAttr(const llvm::DefInit *init);
-
-  // Returns true if this EnumAttr is backed by a StringAttr.
-  bool isStrEnum() const;
 
   // Returns the enum class name.
   StringRef getEnumClassName() const;

@@ -1,4 +1,4 @@
-// RUN: mlir-opt -test-legalize-patterns %s | FileCheck %s
+// RUN: mlir-opt -split-input-file -test-legalize-patterns -verify-diagnostics %s | FileCheck %s
 
 // CHECK-LABEL: verifyDirectPattern
 func @verifyDirectPattern() -> i32 {
@@ -49,13 +49,13 @@ func @remap_multi(%arg0: i64, %unused: i16, %arg1: i64) -> (i64, i64) {
  "test.invalid"(%arg0, %arg1) : (i64, i64) -> ()
 }
 
-// CHECK-LABEL: func @remap_nested
-func @remap_nested() {
+// CHECK-LABEL: func @no_remap_nested
+func @no_remap_nested() {
   // CHECK-NEXT: "foo.region"
   "foo.region"() ({
-    // CHECK-NEXT: ^bb0(%{{.*}}: f64, %{{.*}}: f64):
+    // CHECK-NEXT: ^bb0(%{{.*}}: i64, %{{.*}}: i16, %{{.*}}: i64):
     ^bb0(%i0: i64, %unused: i16, %i1: i64):
-      // CHECK-NEXT: "test.valid"{{.*}} : (f64, f64)
+      // CHECK-NEXT: "test.valid"{{.*}} : (i64, i64)
       "test.invalid"(%i0, %i1) : (i64, i64) -> ()
   }) : () -> ()
   return
@@ -90,4 +90,61 @@ func @dropped_input_in_use(%arg: i16, %arg2: i64) {
   // CHECK-NEXT: "test.cast"{{.*}} : () -> i16
   // CHECK-NEXT: "work"{{.*}} : (i16)
   "work"(%arg) : (i16) -> ()
+}
+
+// CHECK-LABEL: func @up_to_date_replacement
+func @up_to_date_replacement(%arg: i8) -> i8 {
+  // CHECK-NEXT: return
+  %repl_1 = "test.rewrite"(%arg) : (i8) -> i8
+  %repl_2 = "test.rewrite"(%repl_1) : (i8) -> i8
+  return %repl_2 : i8
+}
+
+// -----
+
+func @fail_to_convert_illegal_op() -> i32 {
+  // expected-error@+1 {{failed to legalize operation 'test.illegal_op_f'}}
+  %result = "test.illegal_op_f"() : () -> (i32)
+  return %result : i32
+}
+
+// -----
+
+func @fail_to_convert_illegal_op_in_region() {
+  // expected-error@+1 {{failed to legalize operation 'test.region_builder'}}
+  "test.region_builder"() : () -> ()
+  return
+}
+
+// -----
+
+// Check that the entry block arguments of a region are untouched in the case
+// of failure.
+
+// CHECK-LABEL: func @fail_to_convert_region
+func @fail_to_convert_region() {
+  // CHECK-NEXT: "test.drop_op"
+  // CHECK-NEXT: ^bb{{.*}}(%{{.*}}: i64):
+  "test.drop_op"() ({
+    ^bb1(%i0: i64):
+      // expected-error@+1 {{failed to legalize operation 'test.region_builder'}}
+      "test.region_builder"() : () -> ()
+      "test.valid"() : () -> ()
+  }) : () -> ()
+  return
+}
+
+// -----
+
+// Test parsing of an op with multiple region arguments, and without a
+// delimiter.
+
+// CHECK-LABEL: func @op_with_region_args
+func @op_with_region_args() {
+  // CHECK: "test.polyfor"() ( {
+  // CHECK-NEXT: ^bb{{.*}}(%{{.*}}: index, %{{.*}}: index, %{{.*}}: index):
+  test.polyfor %i, %j, %k {
+    "foo"() : () -> ()
+  }
+  return
 }

@@ -133,13 +133,36 @@ def LLVM_AndOp : LLVM_ArithmeticOp<"and", "CreateAnd">;
 def LLVM_OrOp : LLVM_ArithmeticOp<"or", "CreateOr">;
 def LLVM_XOrOp : LLVM_ArithmeticOp<"xor", "CreateXor">;
 
+// Predicate for integer comparisons.
+def ICmpPredicateEQ  : I64EnumAttrCase<"eq", 0>;
+def ICmpPredicateNE  : I64EnumAttrCase<"ne", 1>;
+def ICmpPredicateSLT : I64EnumAttrCase<"slt", 2>;
+def ICmpPredicateSLE : I64EnumAttrCase<"sle", 3>;
+def ICmpPredicateSGT : I64EnumAttrCase<"sgt", 4>;
+def ICmpPredicateSGE : I64EnumAttrCase<"sge", 5>;
+def ICmpPredicateULT : I64EnumAttrCase<"ult", 6>;
+def ICmpPredicateULE : I64EnumAttrCase<"ule", 7>;
+def ICmpPredicateUGT : I64EnumAttrCase<"ugt", 8>;
+def ICmpPredicateUGE : I64EnumAttrCase<"uge", 9>;
+def ICmpPredicate : I64EnumAttr<
+    "ICmpPredicate",
+    "llvm.icmp comparison predicate",
+    [ICmpPredicateEQ, ICmpPredicateNE, ICmpPredicateSLT, ICmpPredicateSLE,
+     ICmpPredicateSGT, ICmpPredicateSGE, ICmpPredicateULT, ICmpPredicateULE,
+     ICmpPredicateUGT, ICmpPredicateUGE]> {
+  let cppNamespace = "mlir::LLVM";
+
+  let returnType = "ICmpPredicate";
+  let convertFromStorage =
+      "static_cast<" # returnType # ">($_self.getValue().getZExtValue())";
+}
+
 // Other integer operations.
 def LLVM_ICmpOp : LLVM_OneResultOp<"icmp", [NoSideEffect]>,
-                  Arguments<(ins I64Attr:$predicate, LLVM_Type:$lhs,
+                  Arguments<(ins ICmpPredicate:$predicate, LLVM_Type:$lhs,
                              LLVM_Type:$rhs)> {
   let llvmBuilder = [{
-    $res = builder.CreateICmp(getLLVMCmpPredicate(
-        static_cast<CmpIPredicate>($predicate.getZExtValue())), $lhs, $rhs);
+    $res = builder.CreateICmp(getLLVMCmpPredicate($predicate), $lhs, $rhs);
   }];
   let parser = [{ return parseICmpOp(parser, result); }];
   let printer = [{ printICmpOp(p, *this); }];
@@ -196,6 +219,7 @@ def LLVM_PtrToIntOp : LLVM_CastOp<"ptrtoint", "CreatePtrToInt">;
 def LLVM_SExtOp : LLVM_CastOp<"sext", "CreateSExt">;
 def LLVM_ZExtOp : LLVM_CastOp<"zext", "CreateZExt">;
 def LLVM_TruncOp : LLVM_CastOp<"trunc", "CreateTrunc">;
+def LLVM_SIToFPOp : LLVM_CastOp<"sitofp", "CreateSIToFP">;
 
 // Call-related operations.
 def LLVM_CallOp : LLVM_Op<"call">,
@@ -279,6 +303,42 @@ def LLVM_ReturnOp : LLVM_TerminatorOp<"return", []> {
 
 // Pseudo-operations (do not appear in LLVM IR but necessary for the dialect to
 // work correctly).
+def LLVM_LLVMFuncOp : LLVM_ZeroResultOp<"func",
+      [NativeOpTrait<"IsIsolatedFromAbove">, NativeOpTrait<"FunctionLike">]> {
+  let summary = "LLVM dialect function, has wrapped LLVM IR function type";
+
+  let regions = (region AnyRegion:$body);
+
+  let skipDefaultBuilders = 1;
+
+  let builders = [
+    OpBuilder<"Builder *builder, OperationState *result, StringRef name, "
+              "LLVMType type, ArrayRef<NamedAttribute> attrs, "
+              "ArrayRef<NamedAttributeList> argAttrs = {}">
+  ];
+
+  let extraClassDeclaration = [{
+    LLVMType getType() {
+      return getAttrOfType<TypeAttr>(getTypeAttrName())
+          .getValue().cast<LLVMType>();
+    }
+    bool isVarArg() {
+      return getType().getUnderlyingType()->isFunctionVarArg();
+    }
+
+    // Hook for OpTrait::FunctionLike, returns the number of function arguments.
+    // Depends on the type attribute being correct as checked by verifyType.
+    unsigned getNumFuncArguments();
+
+    // Hook for OpTrait::FunctionLike, called after verifying that the 'type'
+    // attribute is present.  This can check for preconditions of the
+    // getNumArguments hook not failing.
+    LogicalResult verifyType();
+  }];
+
+  let verifier = [{ return ::verify(*this); }];
+}
+
 def LLVM_UndefOp : LLVM_OneResultOp<"undef", [NoSideEffect]>,
                    LLVM_Builder<"$res = llvm::UndefValue::get($_resultType);"> {
   let parser = [{ return parseUndefOp(parser, result); }];

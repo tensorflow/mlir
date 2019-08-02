@@ -471,15 +471,24 @@ static void printFloatValue(const APFloat &apValue, raw_ostream &os) {
             ((strValue[0] == '-' || strValue[0] == '+') &&
              (strValue[1] >= '0' && strValue[1] <= '9'))) &&
            "[-+]?[0-9] regex does not match!");
-    // Reparse stringized version!
-    if (APFloat(apValue.getSemantics(), strValue).bitwiseIsEqual(apValue)) {
-      os << strValue;
-      return;
+
+    // Parse back the stringized version and check that the value is equal
+    // (i.e., there is no precision loss). If it is not, use the default format
+    // of APFloat instead of the exponential notation.
+    if (!APFloat(apValue.getSemantics(), strValue).bitwiseIsEqual(apValue)) {
+      strValue.clear();
+      apValue.toString(strValue);
     }
+    os << strValue;
+    return;
   }
 
+  // Print special values in hexadecimal format.  The sign bit should be
+  // included in the literal.
   SmallVector<char, 16> str;
-  apValue.toString(str);
+  APInt apInt = apValue.bitcastToAPInt();
+  apInt.toString(str, /*Radix=*/16, /*Signed=*/false,
+                 /*formatAsCLiteral=*/true);
   os << str;
 }
 
@@ -718,7 +727,10 @@ void ModulePrinter::printAttribute(Attribute attr, bool mayElideType) {
 static void printDenseIntElement(DenseElementsAttr attr, raw_ostream &os,
                                  unsigned index) {
   APInt value = *std::next(attr.getIntValues().begin(), index);
-  value.print(os, /*isSigned=*/value.getBitWidth() != 1);
+  if (value.getBitWidth() == 1)
+    os << (value.getBoolValue() ? "true" : "false");
+  else
+    value.print(os, /*isSigned=*/true);
 }
 
 /// Print the float element of the given DenseElementsAttr at 'index'.

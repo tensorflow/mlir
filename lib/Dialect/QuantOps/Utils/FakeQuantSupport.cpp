@@ -21,11 +21,10 @@
 using namespace mlir;
 using namespace mlir::quant;
 
-UniformQuantizedType mlir::quant::fakeQuantAttrsToType(Location loc,
-                                                       unsigned numBits,
-                                                       double rmin, double rmax,
-                                                       bool narrowRange,
-                                                       Type expressedType) {
+UniformQuantizedType
+mlir::quant::fakeQuantAttrsToType(Location loc, unsigned numBits, double rmin,
+                                  double rmax, bool narrowRange,
+                                  Type expressedType, bool isSigned) {
   MLIRContext *ctx = expressedType.getContext();
   Type storageType;
   unsigned flags;
@@ -35,14 +34,26 @@ UniformQuantizedType mlir::quant::fakeQuantAttrsToType(Location loc,
   // Hard-coded type mapping from TFLite.
   if (numBits <= 8) {
     storageType = IntegerType::get(8, ctx);
-    flags = 0;
-    qmin = 0;
-    qmax = 255;
+    if (isSigned) {
+      flags = QuantizationFlags::Signed;
+      qmin = -128;
+      qmax = 127;
+    } else {
+      flags = 0;
+      qmin = 0;
+      qmax = 255;
+    }
   } else if (numBits <= 16) {
     storageType = IntegerType::get(16, ctx);
-    flags = QuantizationFlags::Signed;
-    qmin = -32768;
-    qmax = 32767;
+    if (isSigned) {
+      flags = QuantizationFlags::Signed;
+      qmin = -32768;
+      qmax = 32767;
+    } else {
+      flags = 0;
+      qmin = 0;
+      qmax = 65535;
+    }
   } else {
     emitError(loc, "unsupported FakeQuant number of bits: ") << numBits;
     return nullptr;

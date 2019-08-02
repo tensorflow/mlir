@@ -1,13 +1,13 @@
 add_subdirectory(Utils)
 
 add_llvm_library(MLIRTransforms
+  AffineDataCopyGeneration.cpp
   Canonicalizer.cpp
   CSE.cpp
   DialectConversion.cpp
-  DmaGeneration.cpp
+  LoopCoalescing.cpp
   LoopFusion.cpp
   LoopInvariantCodeMotion.cpp
-  LoopParametricTiling.cpp
   LoopTiling.cpp
   LoopUnrollAndJam.cpp
   LoopUnroll.cpp
@@ -29,6 +29,7 @@ add_dependencies(MLIRTransforms MLIRStandardOpsIncGen)
 target_link_libraries(MLIRTransforms
   MLIRAffineOps
   MLIRAnalysis
+  MLIRLoopOps
   MLIRPass
   MLIRTransformUtils
   MLIRVectorOps

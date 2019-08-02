@@ -40,3 +40,45 @@ func @succeededSameOperandAndResultShape(%t10x10 : tensor<10x10xf32>, %t1: tenso
   // expected-error@+1 {{requires the same shape for all operands and results}}
   %0 = "test.same_operand_and_result_shape"(%t1, %t10x10) : (tensor<1xf32>, tensor<10x10xf32>) -> tensor<10x10xf32>
 }
+
+// -----
+
+func @hasParent() {
+  "some.op"() ({
+   // expected-error@+1 {{'test.child' op expects parent op 'test.parent'}}
+    "test.child"() : () -> ()
+  }) : () -> ()
+}
+
+// -----
+
+func @singleBlockImplicitTerminator() {
+   // expected-error@+1 {{'test.SingleBlockImplicitTerminator' op expects a non-empty block}}
+  "test.SingleBlockImplicitTerminator"() ({
+  ^entry:
+  }) : () -> ()
+}
+
+// -----
+
+func @singleBlockImplicitTerminator() {
+   // expected-error@+1 {{'test.SingleBlockImplicitTerminator' op expects region #0 to have 0 or 1 block}}
+  "test.SingleBlockImplicitTerminator"() ({
+  ^entry:
+    "test.finish" () : () -> ()
+  ^other:
+    "test.finish" () : () -> ()
+  }) : () -> ()
+}
+
+// -----
+
+func @singleBlockImplicitTerminator() {
+   // expected-error@+2 {{'test.SingleBlockImplicitTerminator' op expects regions to end with 'test.finish'}}
+   // expected-note@+1 {{in custom textual format, the absence of terminator implies 'test.finish'}}
+  "test.SingleBlockImplicitTerminator"() ({
+  ^entry:
+    "test.non_existent_op"() : () -> ()
+  }) : () -> ()
+}
+

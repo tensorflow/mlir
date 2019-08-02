@@ -138,8 +138,9 @@ public:
   explicit RangeOpConversion(MLIRContext *context)
       : ConversionPattern(linalg::RangeOp::getOperationName(), 1, context) {}
 
-  PatternMatchResult matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
-                                     PatternRewriter &rewriter) const override {
+  PatternMatchResult
+  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+                  ConversionPatternRewriter &rewriter) const override {
     auto rangeOp = cast<linalg::RangeOp>(op);
     auto rangeDescriptorType =
         linalg::convertLinalgType(rangeOp.getResult()->getType());
@@ -165,8 +166,9 @@ public:
   explicit ViewOpConversion(MLIRContext *context)
       : ConversionPattern(linalg::ViewOp::getOperationName(), 1, context) {}
 
-  PatternMatchResult matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
-                                     PatternRewriter &rewriter) const override {
+  PatternMatchResult
+  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+                  ConversionPatternRewriter &rewriter) const override {
     auto viewOp = cast<linalg::ViewOp>(op);
     auto viewDescriptorType = linalg::convertLinalgType(viewOp.getViewType());
     auto memrefType =
@@ -290,8 +292,9 @@ public:
   explicit SliceOpConversion(MLIRContext *context)
       : ConversionPattern(linalg::SliceOp::getOperationName(), 1, context) {}
 
-  PatternMatchResult matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
-                                     PatternRewriter &rewriter) const override {
+  PatternMatchResult
+  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+                  ConversionPatternRewriter &rewriter) const override {
     auto sliceOp = cast<linalg::SliceOp>(op);
     auto newViewDescriptorType =
         linalg::convertLinalgType(sliceOp.getViewType());
@@ -382,8 +385,9 @@ public:
   explicit DropConsumer(MLIRContext *context)
       : ConversionPattern("some_consumer", 1, context) {}
 
-  PatternMatchResult matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
-                                     PatternRewriter &rewriter) const override {
+  PatternMatchResult
+  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+                  ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOp(op, llvm::None);
     return matchSuccess();
   }
@@ -410,27 +414,21 @@ struct LinalgTypeConverter : public LLVMTypeConverter {
 } // end anonymous namespace
 
 LogicalResult linalg::convertToLLVM(mlir::ModuleOp module) {
-  for (auto func : module.getOps<FuncOp>()) {
-    if (failed(mlir::lowerAffineConstructs(func)))
-      return failure();
-    if (failed(mlir::lowerControlFlow(func)))
-      return failure();
-  }
-
   // Convert Linalg ops to the LLVM IR dialect using the converter defined
   // above.
   LinalgTypeConverter converter(module.getContext());
   OwningRewritePatternList patterns;
+  populateAffineToStdConversionPatterns(patterns, module.getContext());
+  populateLoopToStdConversionPatterns(patterns, module.getContext());
   populateStdToLLVMConversionPatterns(converter, patterns);
   populateLinalg1ToLLVMConversionPatterns(patterns, module.getContext());
 
   ConversionTarget target(*module.getContext());
   target.addLegalDialect<LLVM::LLVMDialect>();
-  if (failed(applyConversionPatterns(module, target, converter,
-                                     std::move(patterns))))
-    return failure();
-
-  return success();
+  target.addLegalOp<ModuleOp, ModuleTerminatorOp>();
+  target.addDynamicallyLegalOp<FuncOp>(
+      [&](FuncOp op) { return converter.isSignatureLegal(op.getType()); });
+  return applyFullConversion(module, target, std::move(patterns), &converter);
 }
 
 namespace {

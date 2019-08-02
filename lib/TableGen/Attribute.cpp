@@ -63,9 +63,8 @@ bool tblgen::Attribute::isTypeAttr() const {
   return def->isSubClassOf("TypeAttrBase");
 }
 
-bool tblgen::Attribute::hasStorageType() const {
-  const auto *init = def->getValueInit("storageType");
-  return !getValueAsString(init).empty();
+bool tblgen::Attribute::isEnumAttr() const {
+  return def->isSubClassOf("EnumAttrInfo");
 }
 
 StringRef tblgen::Attribute::getStorageType() const {
@@ -96,6 +95,14 @@ StringRef tblgen::Attribute::getConstBuilderTemplate() const {
   return getValueAsString(init);
 }
 
+tblgen::Attribute tblgen::Attribute::getBaseAttr() const {
+  if (const auto *defInit =
+          llvm::dyn_cast<llvm::DefInit>(def->getValueInit("baseAttr"))) {
+    return Attribute(defInit).getBaseAttr();
+  }
+  return *this;
+}
+
 bool tblgen::Attribute::hasDefaultValueInitializer() const {
   const auto *init = def->getValueInit("defaultValue");
   return !getValueAsString(init).empty();
@@ -111,8 +118,9 @@ bool tblgen::Attribute::isOptional() const {
 }
 
 StringRef tblgen::Attribute::getAttrDefName() const {
-  if (def->isAnonymous() && (isOptional() || hasDefaultValueInitializer()))
-    return getValueAsString(def->getValueInit("baseAttr"));
+  if (def->isAnonymous()) {
+    return getBaseAttr().def->getName();
+  }
   return def->getName();
 }
 
@@ -161,10 +169,6 @@ tblgen::EnumAttr::EnumAttr(const llvm::Record &record) : Attribute(&record) {}
 
 tblgen::EnumAttr::EnumAttr(const llvm::DefInit *init)
     : EnumAttr(init->getDef()) {}
-
-bool tblgen::EnumAttr::isStrEnum() const {
-  return def->isSubClassOf("StrEnumAttr");
-}
 
 StringRef tblgen::EnumAttr::getEnumClassName() const {
   return def->getValueAsString("className");

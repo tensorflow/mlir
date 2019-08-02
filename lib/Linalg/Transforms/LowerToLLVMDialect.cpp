@@ -15,6 +15,7 @@
 // limitations under the License.
 // =============================================================================
 
+#include "mlir/Conversion/ControlFlowToCFG/ConvertControlFlowToCFG.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
 #include "mlir/EDSC/Builders.h"
@@ -163,8 +164,9 @@ public:
                                    LLVMTypeConverter &lowering_)
       : LLVMOpLowering(BufferAllocOp::getOperationName(), context, lowering_) {}
 
-  PatternMatchResult matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
-                                     PatternRewriter &rewriter) const override {
+  PatternMatchResult
+  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+                  ConversionPatternRewriter &rewriter) const override {
     auto indexType = IndexType::get(op->getContext());
     auto voidPtrTy =
         LLVM::LLVMType::getInt8Ty(lowering.getDialect()).getPointerTo();
@@ -226,8 +228,9 @@ public:
       : LLVMOpLowering(BufferDeallocOp::getOperationName(), context,
                        lowering_) {}
 
-  PatternMatchResult matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
-                                     PatternRewriter &rewriter) const override {
+  PatternMatchResult
+  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+                  ConversionPatternRewriter &rewriter) const override {
     auto voidPtrTy =
         LLVM::LLVMType::getInt8Ty(lowering.getDialect()).getPointerTo();
     // Insert the `free` declaration if it is not already present.
@@ -260,8 +263,9 @@ public:
   BufferSizeOpConversion(MLIRContext *context, LLVMTypeConverter &lowering_)
       : LLVMOpLowering(BufferSizeOp::getOperationName(), context, lowering_) {}
 
-  PatternMatchResult matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
-                                     PatternRewriter &rewriter) const override {
+  PatternMatchResult
+  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+                  ConversionPatternRewriter &rewriter) const override {
     auto int64Ty = lowering.convertType(rewriter.getIntegerType(64));
     edsc::ScopedContext context(rewriter, op->getLoc());
     rewriter.replaceOp(
@@ -276,8 +280,9 @@ public:
   explicit DimOpConversion(MLIRContext *context, LLVMTypeConverter &lowering_)
       : LLVMOpLowering(linalg::DimOp::getOperationName(), context, lowering_) {}
 
-  PatternMatchResult matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
-                                     PatternRewriter &rewriter) const override {
+  PatternMatchResult
+  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+                  ConversionPatternRewriter &rewriter) const override {
     auto dimOp = cast<linalg::DimOp>(op);
     auto indexTy = lowering.convertType(rewriter.getIndexType());
     edsc::ScopedContext context(rewriter, op->getLoc());
@@ -306,7 +311,7 @@ public:
   // a getelementptr. This must be called under an edsc::ScopedContext.
   Value *obtainDataPtr(Operation *op, Value *viewDescriptor,
                        ArrayRef<Value *> indices,
-                       PatternRewriter &rewriter) const {
+                       ConversionPatternRewriter &rewriter) const {
     auto loadOp = cast<Op>(op);
     auto elementTy = getPtrToElementType(loadOp.getViewType(), lowering);
     auto int64Ty = lowering.convertType(rewriter.getIntegerType(64));
@@ -332,8 +337,9 @@ public:
 // an LLVM IR load.
 class LoadOpConversion : public LoadStoreOpConversion<linalg::LoadOp> {
   using Base::Base;
-  PatternMatchResult matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
-                                     PatternRewriter &rewriter) const override {
+  PatternMatchResult
+  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+                  ConversionPatternRewriter &rewriter) const override {
     edsc::ScopedContext edscContext(rewriter, op->getLoc());
     auto elementTy = lowering.convertType(*op->result_type_begin());
     Value *viewDescriptor = operands[0];
@@ -350,8 +356,9 @@ public:
   explicit RangeOpConversion(MLIRContext *context, LLVMTypeConverter &lowering_)
       : LLVMOpLowering(RangeOp::getOperationName(), context, lowering_) {}
 
-  PatternMatchResult matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
-                                     PatternRewriter &rewriter) const override {
+  PatternMatchResult
+  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+                  ConversionPatternRewriter &rewriter) const override {
     auto rangeOp = cast<RangeOp>(op);
     auto rangeDescriptorTy =
         convertLinalgType(rangeOp.getResult()->getType(), lowering);
@@ -379,8 +386,9 @@ public:
       : LLVMOpLowering(RangeIntersectOp::getOperationName(), context,
                        lowering_) {}
 
-  PatternMatchResult matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
-                                     PatternRewriter &rewriter) const override {
+  PatternMatchResult
+  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+                  ConversionPatternRewriter &rewriter) const override {
     auto rangeIntersectOp = cast<RangeIntersectOp>(op);
     auto rangeDescriptorTy =
         convertLinalgType(rangeIntersectOp.getResult()->getType(), lowering);
@@ -422,8 +430,9 @@ public:
   explicit SliceOpConversion(MLIRContext *context, LLVMTypeConverter &lowering_)
       : LLVMOpLowering(SliceOp::getOperationName(), context, lowering_) {}
 
-  PatternMatchResult matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
-                                     PatternRewriter &rewriter) const override {
+  PatternMatchResult
+  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+                  ConversionPatternRewriter &rewriter) const override {
     auto sliceOp = cast<SliceOp>(op);
     auto viewDescriptorTy = convertLinalgType(sliceOp.getViewType(), lowering);
     auto viewType = sliceOp.getBaseViewType();
@@ -502,8 +511,9 @@ public:
 // an LLVM IR store.
 class StoreOpConversion : public LoadStoreOpConversion<linalg::StoreOp> {
   using Base::Base;
-  PatternMatchResult matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
-                                     PatternRewriter &rewriter) const override {
+  PatternMatchResult
+  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+                  ConversionPatternRewriter &rewriter) const override {
     edsc::ScopedContext edscContext(rewriter, op->getLoc());
     Value *data = operands[0];
     Value *viewDescriptor = operands[1];
@@ -520,8 +530,9 @@ public:
   explicit ViewOpConversion(MLIRContext *context, LLVMTypeConverter &lowering_)
       : LLVMOpLowering(ViewOp::getOperationName(), context, lowering_) {}
 
-  PatternMatchResult matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
-                                     PatternRewriter &rewriter) const override {
+  PatternMatchResult
+  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+                  ConversionPatternRewriter &rewriter) const override {
     auto viewOp = cast<ViewOp>(op);
     auto viewDescriptorTy = convertLinalgType(viewOp.getViewType(), lowering);
     auto elementTy = getPtrToElementType(viewOp.getViewType(), lowering);
@@ -597,9 +608,9 @@ static FuncOp getLLVMLibraryCallImplDefinition(FuncOp libFn) {
 // Get function definition for the LinalgOp. If it doesn't exist, insert a
 // definition.
 template <typename LinalgOp>
-static FuncOp getLLVMLibraryCallDeclaration(Operation *op,
-                                            LLVMTypeConverter &lowering,
-                                            PatternRewriter &rewriter) {
+static FuncOp
+getLLVMLibraryCallDeclaration(Operation *op, LLVMTypeConverter &lowering,
+                              ConversionPatternRewriter &rewriter) {
   assert(isa<LinalgOp>(op));
   auto fnName = LinalgOp::getLibraryCallName();
   auto module = op->getParentOfType<ModuleOp>();
@@ -688,8 +699,9 @@ public:
                               LinalgTypeConverter &lowering_)
       : LLVMOpLowering(LinalgOp::getOperationName(), context, lowering_) {}
 
-  PatternMatchResult matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
-                                     PatternRewriter &rewriter) const override {
+  PatternMatchResult
+  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+                  ConversionPatternRewriter &rewriter) const override {
     // Only emit library call declaration. Fill in the body later.
     auto f = getLLVMLibraryCallDeclaration<LinalgOp>(op, lowering, rewriter);
     static_cast<LinalgTypeConverter &>(lowering).addLibraryFnDeclaration(f);
@@ -746,80 +758,26 @@ static void lowerLinalgSubViewOps(FuncOp &f) {
   });
 }
 
-// Converts a `linalg.for` op to CFG form before actual conversion to the LLVM
-// dialect starts.
-static void lowerLinalgForToCFG(FuncOp &f) {
-  // Collect all the For operations. We do this as a prepass to avoid
-  // invalidating the walker with our rewrite.
-  SmallVector<linalg::ForOp, 8> instsToRewrite;
-  f.walk<linalg::ForOp>(
-      [&](linalg::ForOp op) { instsToRewrite.push_back(op); });
-
-  for (auto forOp : llvm::reverse(instsToRewrite)) {
-    auto *op = forOp.getOperation();
-    auto loc = op->getLoc();
-    using namespace edsc::op;
-    OpBuilder builder(op);
-    ScopedContext scope(builder, loc);
-    ValueHandle lb(forOp.getLowerBound()), ub(forOp.getUpperBound()),
-        step(forOp.getStep());
-
-    // 1. Split Block into init and end blocks, create body and condition blocks
-    // with the `iv` block argument.
-    auto *initBlock = op->getBlock();
-    auto *endBlock = initBlock->splitBlock(op);
-    BlockHandle conditionBlock, bodyBlock;
-    ValueHandle iv(IndexType::get(op->getContext()));
-    BlockBuilder(&conditionBlock, {&iv})();
-    BlockBuilder(&bodyBlock, {})();
-
-    // 2. Create and fill the condition block whose sole purpose is to evaluate
-    // iv and branch to either `bodyBlock` or `endBlock`. Add all branches to
-    // the `conditionBlock`.
-    // clang-format off
-    BlockBuilder(conditionBlock, Append())([&] {
-      auto cmp = cmpi(CmpIPredicate::SGT, ub, iv);
-      cond_br(cmp, bodyBlock, {}, endBlock, {});
-    });
-    BlockBuilder(bodyBlock, Append())([&] {
-      br(conditionBlock, addi(iv, step));
-    });
-    BlockBuilder(initBlock, Append())([&] {
-      br(conditionBlock, lb);
-    });
-    // clang-format on
-
-    // 3. Move the instructions from the for loop to the body, update all uses
-    // of the induction variable and clean up.
-    auto *oldBody = forOp.getBody();
-    bodyBlock.getBlock()->getOperations().splice(
-        bodyBlock.getBlock()->begin(), oldBody->getOperations(),
-        oldBody->begin(), std::prev(oldBody->end()));
-    forOp.getInductionVar()->replaceAllUsesWith(iv);
-    forOp.erase();
-  }
-}
-
 void LowerLinalgToLLVMPass::runOnModule() {
   auto module = getModule();
 
-  for (auto f : module.getOps<FuncOp>()) {
+  for (auto f : module.getOps<FuncOp>())
     lowerLinalgSubViewOps(f);
-    lowerLinalgForToCFG(f);
-    if (failed(lowerAffineConstructs(f)))
-      signalPassFailure();
-  }
 
   // Convert to the LLVM IR dialect using the converter defined above.
   OwningRewritePatternList patterns;
   LinalgTypeConverter converter(&getContext());
+  populateAffineToStdConversionPatterns(patterns, &getContext());
+  populateLoopToStdConversionPatterns(patterns, &getContext());
   populateStdToLLVMConversionPatterns(converter, patterns);
   populateLinalgToLLVMConversionPatterns(converter, patterns, &getContext());
 
   ConversionTarget target(getContext());
   target.addLegalDialect<LLVM::LLVMDialect>();
-  if (failed(applyConversionPatterns(module, target, converter,
-                                     std::move(patterns)))) {
+  target.addDynamicallyLegalOp<FuncOp>(
+      [&](FuncOp op) { return converter.isSignatureLegal(op.getType()); });
+  if (failed(applyPartialConversion(module, target, std::move(patterns),
+                                    &converter))) {
     signalPassFailure();
   }
 

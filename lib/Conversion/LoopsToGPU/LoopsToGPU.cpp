@@ -23,10 +23,10 @@
 
 #include "mlir/Conversion/LoopsToGPU/LoopsToGPU.h"
 #include "mlir/AffineOps/AffineOps.h"
-#include "mlir/GPU/GPUDialect.h"
+#include "mlir/Dialect/GPU/GPUDialect.h"
+#include "mlir/Dialect/LoopOps/LoopOps.h"
 #include "mlir/IR/AffineExpr.h"
 #include "mlir/IR/Builders.h"
-#include "mlir/Linalg/IR/LinalgOps.h"
 #include "mlir/StandardOps/Ops.h"
 #include "mlir/Transforms/LowerAffine.h"
 #include "mlir/Transforms/RegionUtils.h"
@@ -36,6 +36,7 @@
 #define DEBUG_TYPE "loops-to-gpu"
 
 using namespace mlir;
+using namespace mlir::loop;
 
 // Extract an indexed value from KernelDim3.
 static Value *getDim3Value(const gpu::KernelDim3 &dim3, unsigned pos) {
@@ -56,8 +57,8 @@ static Value *getDim3Value(const gpu::KernelDim3 &dim3, unsigned pos) {
 static Operation::operand_range getLowerBoundOperands(AffineForOp forOp) {
   return forOp.getLowerBoundOperands();
 }
-static SmallVector<Value *, 1> getLowerBoundOperands(linalg::ForOp forOp) {
-  SmallVector<Value *, 1> bounds(1, forOp.getLowerBound());
+static SmallVector<Value *, 1> getLowerBoundOperands(ForOp forOp) {
+  SmallVector<Value *, 1> bounds(1, forOp.lowerBound());
   return bounds;
 }
 
@@ -65,8 +66,8 @@ static SmallVector<Value *, 1> getLowerBoundOperands(linalg::ForOp forOp) {
 static Operation::operand_range getUpperBoundOperands(AffineForOp forOp) {
   return forOp.getUpperBoundOperands();
 }
-static SmallVector<Value *, 1> getUpperBoundOperands(linalg::ForOp forOp) {
-  SmallVector<Value *, 1> bounds(1, forOp.getUpperBound());
+static SmallVector<Value *, 1> getUpperBoundOperands(ForOp forOp) {
+  SmallVector<Value *, 1> bounds(1, forOp.upperBound());
   return bounds;
 }
 
@@ -75,17 +76,15 @@ static SmallVector<Value *, 1> getUpperBoundOperands(linalg::ForOp forOp) {
 static Value *getOrCreateStep(AffineForOp forOp, OpBuilder &builder) {
   return builder.create<ConstantIndexOp>(forOp.getLoc(), forOp.getStep());
 }
-static Value *getOrCreateStep(linalg::ForOp forOp, OpBuilder &) {
-  return forOp.getStep();
-}
+static Value *getOrCreateStep(ForOp forOp, OpBuilder &) { return forOp.step(); }
 
 // Get a Value for the loop lower bound.  If the value requires computation,
 // materialize the instructions using builder.
 static Value *getOrEmitLowerBound(AffineForOp forOp, OpBuilder &builder) {
   return lowerAffineLowerBound(forOp, builder);
 }
-static Value *getOrEmitLowerBound(linalg::ForOp forOp, OpBuilder &) {
-  return forOp.getLowerBound();
+static Value *getOrEmitLowerBound(ForOp forOp, OpBuilder &) {
+  return forOp.lowerBound();
 }
 
 // Get a Value for the loop upper bound.  If the value requires computation,
@@ -93,8 +92,8 @@ static Value *getOrEmitLowerBound(linalg::ForOp forOp, OpBuilder &) {
 static Value *getOrEmitUpperBound(AffineForOp forOp, OpBuilder &builder) {
   return lowerAffineUpperBound(forOp, builder);
 }
-static Value *getOrEmitUpperBound(linalg::ForOp forOp, OpBuilder &) {
-  return forOp.getUpperBound();
+static Value *getOrEmitUpperBound(ForOp forOp, OpBuilder &) {
+  return forOp.upperBound();
 }
 
 // Check the structure of the loop nest:
@@ -122,7 +121,7 @@ LogicalResult checkLoopNestMappable(OpTy forOp, unsigned numBlockDims,
   }
 
   OpTy currentLoop = forOp;
-  Region &limit = forOp.getRegion();
+  Region &limit = forOp.region();
   for (unsigned i = 0, e = numBlockDims + numThreadDims; i < e; ++i) {
     Operation *nested = &currentLoop.getBody()->front();
     if (!areValuesDefinedAbove(getLowerBoundOperands(currentLoop), limit) ||
@@ -243,7 +242,7 @@ void LoopToGpuConverter::createLaunch(OpTy rootForOp, OpTy innermostForOp,
   // Still assuming perfect nesting so there are no values other than induction
   // variables that are defined in one loop and used in deeper loops.
   llvm::SetVector<Value *> valuesToForwardSet;
-  getUsedValuesDefinedAbove(innermostForOp.getRegion(), rootForOp.getRegion(),
+  getUsedValuesDefinedAbove(innermostForOp.region(), rootForOp.region(),
                             valuesToForwardSet);
   auto valuesToForward = valuesToForwardSet.takeVector();
   auto originallyForwardedValues = valuesToForward.size();
@@ -328,11 +327,11 @@ static LogicalResult convertLoopNestToGPULaunch(OpTy forOp,
 LogicalResult mlir::convertAffineLoopNestToGPULaunch(AffineForOp forOp,
                                                      unsigned numBlockDims,
                                                      unsigned numThreadDims) {
-  return convertLoopNestToGPULaunch(forOp, numBlockDims, numThreadDims);
+  return ::convertLoopNestToGPULaunch(forOp, numBlockDims, numThreadDims);
 }
 
-LogicalResult mlir::convertLinalgLoopNestToGPULaunch(linalg::ForOp forOp,
-                                                     unsigned numBlockDims,
-                                                     unsigned numThreadDims) {
-  return convertLoopNestToGPULaunch(forOp, numBlockDims, numThreadDims);
+LogicalResult mlir::convertLoopNestToGPULaunch(ForOp forOp,
+                                               unsigned numBlockDims,
+                                               unsigned numThreadDims) {
+  return ::convertLoopNestToGPULaunch(forOp, numBlockDims, numThreadDims);
 }

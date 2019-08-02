@@ -27,9 +27,9 @@ func @func_with_ops(f32) {
   return
 }
 
-// CHECK-LABEL: func @standard_instrs(%arg0: tensor<4x4x?xf32>, %arg1: f32, %arg2: i32, %arg3: index) {
-func @standard_instrs(tensor<4x4x?xf32>, f32, i32, index) {
-^bb42(%t: tensor<4x4x?xf32>, %f: f32, %i: i32, %idx : index):
+// CHECK-LABEL: func @standard_instrs(%arg0: tensor<4x4x?xf32>, %arg1: f32, %arg2: i32, %arg3: index, %arg4: i64) {
+func @standard_instrs(tensor<4x4x?xf32>, f32, i32, index, i64) {
+^bb42(%t: tensor<4x4x?xf32>, %f: f32, %i: i32, %idx : index, %j: i64):
   // CHECK: %0 = dim %arg0, 2 : tensor<4x4x?xf32>
   %a = "std.dim"(%t){index = 2} : (tensor<4x4x?xf32>) -> index
 
@@ -285,11 +285,29 @@ func @standard_instrs(tensor<4x4x?xf32>, f32, i32, index) {
   // CHECK: = constant unit
   %73 = constant unit
 
+  // CHECK: constant true
+  %74 = constant true
+
+  // CHECK: constant false
+  %75 = constant false
+
   // CHECK: = index_cast {{.*}} : index to i64
-  %74 = index_cast %idx : index to i64
+  %76 = index_cast %idx : index to i64
 
   // CHECK: = index_cast {{.*}} : i32 to index
-  %75 = index_cast %i : i32 to index
+  %77 = index_cast %i : i32 to index
+
+  // CHECK: = sitofp {{.*}} : i32 to f32
+  %78 = sitofp %i : i32 to f32
+
+  // CHECK: = sitofp {{.*}} : i32 to f64
+  %79 = sitofp %i : i32 to f64
+
+  // CHECK: = sitofp {{.*}} : i64 to f32
+  %80 = sitofp %j : i64 to f32
+
+  // CHECK: = sitofp {{.*}} : i64 to f64
+  %81 = sitofp %j : i64 to f64
 
   return
 }
@@ -424,48 +442,3 @@ func @test_vector.transfer_ops(%arg0: memref<?x?xf32>) {
   return
 }
 
-func @std_for(%arg0 : index, %arg1 : index, %arg2 : index) {
-  for %i0 = %arg0 to %arg1 step %arg2 {
-    for %i1 = %arg0 to %arg1 step %arg2 {
-      %min_cmp = cmpi "slt", %i0, %i1 : index
-      %min = select %min_cmp, %i0, %i1 : index
-      %max_cmp = cmpi "sge", %i0, %i1 : index
-      %max = select %max_cmp, %i0, %i1 : index
-      for %i2 = %min to %max step %i1 {
-      }
-    }
-  }
-  return
-}
-// CHECK-LABEL: func @std_for(
-//  CHECK-NEXT:   for %{{.*}} = %{{.*}} to %{{.*}} step %{{.*}} {
-//  CHECK-NEXT:     for %{{.*}} = %{{.*}} to %{{.*}} step %{{.*}} {
-//  CHECK-NEXT:       %{{.*}} = cmpi "slt", %{{.*}}, %{{.*}} : index
-//  CHECK-NEXT:       %{{.*}} = select %{{.*}}, %{{.*}}, %{{.*}} : index
-//  CHECK-NEXT:       %{{.*}} = cmpi "sge", %{{.*}}, %{{.*}} : index
-//  CHECK-NEXT:       %{{.*}} = select %{{.*}}, %{{.*}}, %{{.*}} : index
-//  CHECK-NEXT:       for %{{.*}} = %{{.*}} to %{{.*}} step %{{.*}} {
-
-func @std_if(%arg0: i1, %arg1: f32) {
-  if %arg0 {
-    %0 = addf %arg1, %arg1 : f32
-  }
-  return
-}
-// CHECK-LABEL: func @std_if(
-//  CHECK-NEXT:   if %{{.*}} {
-//  CHECK-NEXT:     %{{.*}} = addf %{{.*}}, %{{.*}} : f32
-
-func @std_if_else(%arg0: i1, %arg1: f32) {
-  if %arg0 {
-    %0 = addf %arg1, %arg1 : f32
-  } else {
-    %1 = addf %arg1, %arg1 : f32
-  }
-  return
-}
-// CHECK-LABEL: func @std_if_else(
-//  CHECK-NEXT:   if %{{.*}} {
-//  CHECK-NEXT:     %{{.*}} = addf %{{.*}}, %{{.*}} : f32
-//  CHECK-NEXT:   } else {
-//  CHECK-NEXT:     %{{.*}} = addf %{{.*}}, %{{.*}} : f32

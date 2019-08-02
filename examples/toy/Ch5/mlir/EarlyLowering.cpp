@@ -57,7 +57,7 @@ namespace {
 /// time both side of the cast (producer and consumer) will be lowered to a
 /// dialect like LLVM and end up with the same LLVM representation, at which
 /// point this becomes a no-op and is eliminated.
-Value *typeCast(PatternRewriter &builder, Value *val, Type destTy) {
+Value *typeCast(ConversionPatternRewriter &builder, Value *val, Type destTy) {
   if (val->getType() == destTy)
     return val;
   return builder.create<toy::TypeCastOp>(val->getLoc(), val, destTy)
@@ -67,7 +67,7 @@ Value *typeCast(PatternRewriter &builder, Value *val, Type destTy) {
 /// Create a type cast to turn a toy.array into a memref. The Toy Array will be
 /// lowered to a memref during buffer allocation, at which point the type cast
 /// becomes useless.
-Value *memRefTypeCast(PatternRewriter &builder, Value *val) {
+Value *memRefTypeCast(ConversionPatternRewriter &builder, Value *val) {
   if (val->getType().isa<MemRefType>())
     return val;
   auto toyArrayTy = val->getType().dyn_cast<toy::ToyArrayType>();
@@ -87,8 +87,9 @@ public:
   explicit MulOpConversion(MLIRContext *context)
       : ConversionPattern(toy::MulOp::getOperationName(), 1, context) {}
 
-  PatternMatchResult matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
-                                     PatternRewriter &rewriter) const override {
+  PatternMatchResult
+  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+                  ConversionPatternRewriter &rewriter) const override {
     using namespace edsc;
     using intrinsics::constant_index;
     using linalg::intrinsics::range;
@@ -132,8 +133,8 @@ struct EarlyLoweringPass : public FunctionPass<EarlyLoweringPass> {
 
     OwningRewritePatternList patterns;
     RewriteListBuilder<MulOpConversion>::build(patterns, &getContext());
-    if (failed(applyConversionPatterns(getFunction(), target,
-                                       std::move(patterns)))) {
+    if (failed(applyPartialConversion(getFunction(), target,
+                                      std::move(patterns)))) {
       emitError(mlir::UnknownLoc::get(&getContext()), "Error lowering Toy\n");
       signalPassFailure();
     }

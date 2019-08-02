@@ -15,12 +15,13 @@
 // limitations under the License.
 // =============================================================================
 //
-// This file implements a pass to convert std.for, std.if and std.terminator ops
-// into standard CFG ops.
+// This file implements a pass to convert loop.for, loop.if and loop.terminator
+// ops into standard CFG ops.
 //
 //===----------------------------------------------------------------------===//
 
 #include "mlir/Conversion/ControlFlowToCFG/ConvertControlFlowToCFG.h"
+#include "mlir/Dialect/LoopOps/LoopOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Module.h"
@@ -38,11 +39,12 @@
 #include "llvm/IR/Type.h"
 
 using namespace mlir;
+using namespace mlir::loop;
 
 namespace {
 
-struct ControlFlowToCFGPass : public ModulePass<ControlFlowToCFGPass> {
-  void runOnModule() override;
+struct ControlFlowToCFGPass : public FunctionPass<ControlFlowToCFGPass> {
+  void runOnFunction() override;
 };
 
 // Create a CFG subgraph for the loop around its body blocks (if the body
@@ -52,7 +54,7 @@ struct ControlFlowToCFGPass : public ModulePass<ControlFlowToCFGPass> {
 // first/last blocks in the parent region.  The original loop operation is
 // replaced by the initialization operations that set up the initial value of
 // the loop induction variable (%iv) and computes the loop bounds that are loop-
-// invariant for affine loops.  The operations following the original std.for
+// invariant for affine loops.  The operations following the original loop.for
 // are split out into a separate continuation (exit) block. A condition block is
 // created before the continuation block. It checks the exit condition of the
 // loop and branches either to the continuation block, or to the first block of
@@ -98,22 +100,21 @@ struct ControlFlowToCFGPass : public ModulePass<ControlFlowToCFGPass> {
 //      |   <code after the ForOp> |
 //      +--------------------------------+
 //
-struct ForLowering : public ConversionPattern {
-  ForLowering(MLIRContext *ctx)
-      : ConversionPattern(ForOp::getOperationName(), 1, ctx) {}
+struct ForLowering : public OpRewritePattern<ForOp> {
+  using OpRewritePattern<ForOp>::OpRewritePattern;
 
-  PatternMatchResult matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+  PatternMatchResult matchAndRewrite(ForOp forOp,
                                      PatternRewriter &rewriter) const override;
 };
 
-// Create a CFG subgraph for the std.if operation (including its "then" and
+// Create a CFG subgraph for the loop.if operation (including its "then" and
 // optional "else" operation blocks).  We maintain the invariants that the
 // subgraph has a single entry and a single exit point, and that the entry/exit
 // blocks are respectively the first/last block of the enclosing region. The
-// operations following the std.if are split into a continuation (subgraph
+// operations following the loop.if are split into a continuation (subgraph
 // exit) block. The condition is lowered to a chain of blocks that implement the
 // short-circuit scheme.  Condition blocks are created by splitting out an empty
-// block from the block that contains the std.if operation.  They
+// block from the block that contains the loop.if operation.  They
 // conditionally branch to either the first block of the "then" region, or to
 // the first block of the "else" region.  If the latter is absent, they branch
 // to the continuation block instead.  The last blocks of "then" and "else"
@@ -148,19 +149,17 @@ struct ForLowering : public ConversionPattern {
 //      |   <code after the IfOp>  |
 //      +--------------------------------+
 //
-struct IfLowering : public ConversionPattern {
-  IfLowering(MLIRContext *ctx)
-      : ConversionPattern(IfOp::getOperationName(), 1, ctx) {}
+struct IfLowering : public OpRewritePattern<IfOp> {
+  using OpRewritePattern<IfOp>::OpRewritePattern;
 
-  PatternMatchResult matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+  PatternMatchResult matchAndRewrite(IfOp ifOp,
                                      PatternRewriter &rewriter) const override;
 };
 
-struct TerminatorLowering : public ConversionPattern {
-  TerminatorLowering(MLIRContext *ctx)
-      : ConversionPattern(TerminatorOp::getOperationName(), 1, ctx) {}
+struct TerminatorLowering : public OpRewritePattern<TerminatorOp> {
+  using OpRewritePattern<TerminatorOp>::OpRewritePattern;
 
-  PatternMatchResult matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+  PatternMatchResult matchAndRewrite(TerminatorOp op,
                                      PatternRewriter &rewriter) const override {
     rewriter.replaceOp(op, {});
     return matchSuccess();
@@ -169,12 +168,10 @@ struct TerminatorLowering : public ConversionPattern {
 } // namespace
 
 PatternMatchResult
-ForLowering::matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
-                             PatternRewriter &rewriter) const {
-  auto forOp = cast<ForOp>(op);
-  Location loc = op->getLoc();
+ForLowering::matchAndRewrite(ForOp forOp, PatternRewriter &rewriter) const {
+  Location loc = forOp.getLoc();
 
-  // Start by splitting the block containing the 'affine.for' into two parts.
+  // Start by splitting the block containing the 'loop.for' into two parts.
   // The part before will get the init code, the part after will be the end
   // point.
   auto *initBlock = rewriter.getInsertionBlock();
@@ -196,8 +193,7 @@ ForLowering::matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
   // branch back to the condition block.  Construct an expression f :
   // (x -> x+step) and apply this expression to the induction variable.
   rewriter.setInsertionPointToEnd(lastBodyBlock);
-  ForOpOperandAdaptor newOperands(operands);
-  auto *step = newOperands.step();
+  auto *step = forOp.step();
   auto *stepped = rewriter.create<AddIOp>(loc, iv, step).getResult();
   if (!stepped)
     return matchFailure();
@@ -205,8 +201,8 @@ ForLowering::matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
 
   // Compute loop bounds before branching to the condition.
   rewriter.setInsertionPointToEnd(initBlock);
-  Value *lowerBound = operands[0];
-  Value *upperBound = operands[1];
+  Value *lowerBound = forOp.lowerBound();
+  Value *upperBound = forOp.upperBound();
   if (!lowerBound || !upperBound)
     return matchFailure();
   rewriter.create<BranchOp>(loc, conditionBlock, lowerBound);
@@ -220,24 +216,22 @@ ForLowering::matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
                                 ArrayRef<Value *>(), endBlock,
                                 ArrayRef<Value *>());
   // Ok, we're done!
-  rewriter.replaceOp(op, {});
+  rewriter.replaceOp(forOp, {});
   return matchSuccess();
 }
 
 PatternMatchResult
-IfLowering::matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
-                            PatternRewriter &rewriter) const {
-  auto ifOp = cast<IfOp>(op);
-  auto loc = op->getLoc();
+IfLowering::matchAndRewrite(IfOp ifOp, PatternRewriter &rewriter) const {
+  auto loc = ifOp.getLoc();
 
-  // Start by splitting the block containing the 'std.if' into two parts.
+  // Start by splitting the block containing the 'loop.if' into two parts.
   // The part before will contain the condition, the part after will be the
   // continuation point.
   auto *condBlock = rewriter.getInsertionBlock();
   auto opPosition = rewriter.getInsertionPoint();
   auto *continueBlock = rewriter.splitBlock(condBlock, opPosition);
 
-  // Move blocks from the "then" region to the region containing 'std.if',
+  // Move blocks from the "then" region to the region containing 'loop.if',
   // place it before the continuation block, and branch to it.
   auto &thenRegion = ifOp.thenRegion();
   auto *thenBlock = &thenRegion.front();
@@ -246,7 +240,7 @@ IfLowering::matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
   rewriter.inlineRegionBefore(thenRegion, continueBlock);
 
   // Move blocks from the "else" region (if present) to the region containing
-  // 'std.if', place it before the continuation block and branch to it.  It
+  // 'loop.if', place it before the continuation block and branch to it.  It
   // will be placed after the "then" regions.
   auto *elseBlock = continueBlock;
   auto &elseRegion = ifOp.elseRegion();
@@ -258,38 +252,32 @@ IfLowering::matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
   }
 
   rewriter.setInsertionPointToEnd(condBlock);
-  IfOpOperandAdaptor newOperands(operands);
-  rewriter.create<CondBranchOp>(loc, newOperands.condition(), thenBlock,
+  rewriter.create<CondBranchOp>(loc, ifOp.condition(), thenBlock,
                                 /*trueArgs=*/ArrayRef<Value *>(), elseBlock,
                                 /*falseArgs=*/ArrayRef<Value *>());
 
   // Ok, we're done!
-  rewriter.replaceOp(op, {});
+  rewriter.replaceOp(ifOp, {});
   return matchSuccess();
 }
 
-LogicalResult mlir::lowerControlFlow(FuncOp func) {
-  OwningRewritePatternList patterns;
+void mlir::populateLoopToStdConversionPatterns(
+    OwningRewritePatternList &patterns, MLIRContext *ctx) {
   RewriteListBuilder<ForLowering, IfLowering, TerminatorLowering>::build(
-      patterns, func.getContext());
-  struct PartialConversionTarget : public ConversionTarget {
-    PartialConversionTarget(MLIRContext &context) : ConversionTarget(context) {}
-    bool isDynamicallyLegal(Operation *op) const override {
-      return !isa<ForOp>(op) && !isa<IfOp>(op) && !isa<TerminatorOp>(op);
-    }
-  };
-  PartialConversionTarget target(*func.getContext());
-  target.addDynamicallyLegalDialect<StandardOpsDialect>();
-  return applyConversionPatterns(func, target, std::move(patterns));
+      patterns, ctx);
 }
 
-void ControlFlowToCFGPass::runOnModule() {
-  for (auto func : getModule().getOps<FuncOp>())
-    if (failed(mlir::lowerControlFlow(func)))
-      return signalPassFailure();
+void ControlFlowToCFGPass::runOnFunction() {
+  OwningRewritePatternList patterns;
+  populateLoopToStdConversionPatterns(patterns, &getContext());
+  ConversionTarget target(getContext());
+  target.addLegalDialect<StandardOpsDialect>();
+  if (failed(
+          applyPartialConversion(getFunction(), target, std::move(patterns))))
+    signalPassFailure();
 }
 
-ModulePassBase *mlir::createConvertToCFGPass() {
+FunctionPassBase *mlir::createConvertToCFGPass() {
   return new ControlFlowToCFGPass();
 }
 

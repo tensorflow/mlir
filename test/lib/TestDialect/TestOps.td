@@ -187,6 +187,32 @@ def OperandOneAndResultHaveSameType :
   let results = (outs AnyTensor:$res);
 }
 
+def IfFirstOperandIsNoneThenSoIsSecond :
+    TEST_Op<"if_first_operand_is_none_then_so_is_second", [PredOpTrait<
+    "has either both none type operands or first is not none",
+     Or<[
+        And<[TypeIsPred<"x", NoneType>, TypeIsPred<"y", NoneType>]>,
+        Neg<TypeIsPred<"x", NoneType>>]>>]> {
+  let arguments = (ins AnyType:$x, AnyType:$y);
+}
+
+def BroadcastableOp : TEST_Op<"broadcastable", [Broadcastable]> {
+  let arguments = (ins AnyTensor:$x, AnyTensor:$y);
+  let results = (outs AnyTensor:$res);
+}
+
+// There the "HasParent" trait.
+def ParentOp : TEST_Op<"parent">;
+def ChildOp : TEST_Op<"child", [HasParent<"ParentOp">]>;
+
+
+def TerminatorOp : TEST_Op<"finish", [Terminator]> {
+}
+def SingleBlockImplicitTerminatorOp : TEST_Op<"SingleBlockImplicitTerminator",
+    [SingleBlockImplicitTerminator<"TerminatorOp">]> {
+  let regions = (region SizedRegion<1>:$region);
+}
+
 //===----------------------------------------------------------------------===//
 // Test Patterns
 //===----------------------------------------------------------------------===//
@@ -218,6 +244,16 @@ def : Pat<(OpD $input), (OpF $input), [], (addBenefit 10)>;
 // Verify that patterns with more source nodes are selected before those with fewer.
 def : Pat<(OpG $input), (OpB $input, ConstantAttr<I32Attr, "20">:$attr)>;
 def : Pat<(OpG (OpG $input)), (OpB $input, ConstantAttr<I32Attr, "34">:$attr)>;
+
+// Test patterns for zero-result op.
+def OpH : TEST_Op<"op_h">, Arguments<(ins I32:$arg)>, Results<(outs)>;
+def OpI : TEST_Op<"op_i">, Arguments<(ins I32:$arg)>, Results<(outs)>;
+def : Pat<(OpH $input), (OpI $input)>;
+
+// Test patterns for zero-input op.
+def OpJ : TEST_Op<"op_j">, Arguments<(ins)>, Results<(outs I32:$res)>;
+def OpK : TEST_Op<"op_k">, Arguments<(ins)>, Results<(outs I32:$res)>;
+def : Pat<(OpJ), (OpK)>;
 
 // Test NativeCodeCall.
 def OpNativeCodeCall1 : TEST_Op<"native_code_call1"> {
@@ -273,6 +309,48 @@ def : Pat<(OpAllAttrConstraint1
           (OpAllAttrConstraint2 $attr)>;
 
 //===----------------------------------------------------------------------===//
+// Test Patterns (Symbol Binding)
+
+// Test symbol binding.
+def OpSymbolBindingA : TEST_Op<"symbol_binding_a", []> {
+  let arguments = (ins I32:$operand, I64Attr:$attr);
+  let results = (outs I32:$result);
+}
+def OpSymbolBindingB : TEST_Op<"symbol_binding_b", []> {
+  let arguments = (ins I32:$operand);
+  let results = (outs I32:$result);
+
+  let builders = [
+    OpBuilder<
+      "Builder *builder, OperationState *state, Value *operand",
+      [{
+        state->types.assign({builder->getIntegerType(32)});
+        state->addOperands({operand});
+      }]>
+  ];
+}
+def OpSymbolBindingC : TEST_Op<"symbol_binding_c", []> {
+  let arguments = (ins I32:$operand);
+  let results = (outs I32:$result);
+  let builders = OpSymbolBindingB.builders;
+}
+def OpSymbolBindingD : TEST_Op<"symbol_binding_d", []> {
+  let arguments = (ins I32:$input1, I32:$input2, I64Attr:$attr);
+  let results = (outs I32:$result);
+}
+def HasOneUse: Constraint<CPred<"$0->hasOneUse()">, "has one use">;
+def : Pattern<
+    // Bind to source pattern op operand/attribute/result
+    (OpSymbolBindingA:$res_a $operand, $attr), [
+        // Bind to auxiliary op result
+        (OpSymbolBindingC:$res_c (OpSymbolBindingB:$res_b $operand)),
+
+        // Use bound symbols in resultant ops
+        (OpSymbolBindingD $res_b, $res_c, $attr)],
+    // Use bound symbols in additional constraints
+    [(HasOneUse $res_a)]>;
+
+//===----------------------------------------------------------------------===//
 // Test Patterns (Attributes)
 
 // Test matching against op attributes.
@@ -295,6 +373,17 @@ def : Pat<(OpAttrMatch1 $required, $optional, $default_valued,
                         MoreConstraint:$more),
           (OpAttrMatch2 $required, $optional, $default_valued, $more)>;
 
+// Test unit attrs.
+def OpAttrMatch3 : TEST_Op<"match_op_attribute3"> {
+  let arguments = (ins UnitAttr:$attr);
+  let results = (outs I32);
+}
+def OpAttrMatch4 : TEST_Op<"match_op_attribute4"> {
+  let arguments = (ins UnitAttr:$attr1, UnitAttr:$attr2);
+  let results = (outs I32);
+}
+def : Pat<(OpAttrMatch3 $attr), (OpAttrMatch4 ConstUnitAttr, $attr)>;
+
 // Test with constant attr.
 def OpC : TEST_Op<"op_c">, Arguments<(ins I32:$arg)>, Results<(outs I32:$res)>;
 def : Pat<(OpC $input), (OpB $input, ConstantAttr<I32Attr, "17">:$attr)>;
@@ -312,11 +401,13 @@ def MultiResultOpKind1: I64EnumAttrCase<"kind1", 1>;
 def MultiResultOpKind2: I64EnumAttrCase<"kind2", 2>;
 def MultiResultOpKind3: I64EnumAttrCase<"kind3", 3>;
 def MultiResultOpKind4: I64EnumAttrCase<"kind4", 4>;
+def MultiResultOpKind5: I64EnumAttrCase<"kind5", 5>;
+def MultiResultOpKind6: I64EnumAttrCase<"kind6", 6>;
 
 def MultiResultOpEnum: I64EnumAttr<
   "Multi-result op kinds", "", [
     MultiResultOpKind1, MultiResultOpKind2, MultiResultOpKind3,
-    MultiResultOpKind4
+    MultiResultOpKind4, MultiResultOpKind5, MultiResultOpKind6
   ]>;
 
 def ThreeResultOp : TEST_Op<"three_result"> {
@@ -350,13 +441,18 @@ def AnotherTwoResultOp : TEST_Op<"another_two_result"> {
   let results = (outs F32:$result1, F32:$result2);
 }
 
-def OneResultOp : TEST_Op<"one_result"> {
+def OneResultOp1 : TEST_Op<"one_result1"> {
   let arguments = (ins MultiResultOpEnum:$kind);
   let results = (outs F32:$result1);
 }
 
-def AnotherOneResultOp : TEST_Op<"another_one_result"> {
+def OneResultOp2 : TEST_Op<"one_result2"> {
   let arguments = (ins MultiResultOpEnum:$kind);
+  let results = (outs I32:$result1);
+}
+
+def OneResultOp3 : TEST_Op<"one_result3"> {
+  let arguments = (ins F32:$input);
   let results = (outs I32:$result1);
 }
 
@@ -367,30 +463,34 @@ def : Pat<(ThreeResultOp MultiResultOpKind1),
 // Test using multi-result op as a whole for partial replacement
 def : Pattern<(ThreeResultOp MultiResultOpKind2),
               [(TwoResultOp MultiResultOpKind2),
-               (OneResultOp MultiResultOpKind2)]>;
+               (OneResultOp1 MultiResultOpKind2)]>;
 def : Pattern<(ThreeResultOp MultiResultOpKind3),
-              [(AnotherOneResultOp MultiResultOpKind3),
+              [(OneResultOp2 MultiResultOpKind3),
                (AnotherTwoResultOp MultiResultOpKind3)]>;
 
 // Test using results separately in a multi-result op
 def : Pattern<(ThreeResultOp MultiResultOpKind4),
               [(TwoResultOp:$res1__0 MultiResultOpKind4),
-               (OneResultOp MultiResultOpKind4),
+               (OneResultOp1 MultiResultOpKind4),
                (TwoResultOp:$res2__1 MultiResultOpKind4)]>;
 
-//===----------------------------------------------------------------------===//
-// Test Directives
-//===----------------------------------------------------------------------===//
+// Test referencing a single value in the value pack
+// This rule only matches TwoResultOp if its second result has no use.
+def : Pattern<(TwoResultOp:$res MultiResultOpKind5),
+              [(OneResultOp2 MultiResultOpKind5),
+               (OneResultOp1 MultiResultOpKind5)],
+              [(HasNoUseOf:$res__1)]>;
 
-// Test 'verifyUnusedValue'
-def VUVTwoResultOp : TEST_Op<"vuv_two_result_op", []> {
-  let arguments = (ins I32:$input);
-  let results = (outs I32:$r1, I32:$r2);
-}
-def VUVFoldTwoResultOp : Pattern<(VUVTwoResultOp $input), [
-        (verifyUnusedValue),
-        (replaceWithValue $input)
-      ]>;
+// Test using auxiliary ops for replacing multi-result op
+def : Pattern<
+    (ThreeResultOp MultiResultOpKind6), [
+        // Auxiliary op generated to help building the final result but not
+        // directly used to replace the source op's results.
+        (TwoResultOp:$interm MultiResultOpKind6),
+
+        (OneResultOp3 $interm__1),
+        (AnotherTwoResultOp MultiResultOpKind6)
+    ]>;
 
 //===----------------------------------------------------------------------===//
 // Test Legalization
@@ -407,6 +507,7 @@ def ILLegalOpB : TEST_Op<"illegal_op_b">, Results<(outs I32:$res)>;
 def ILLegalOpC : TEST_Op<"illegal_op_c">, Results<(outs I32:$res)>;
 def ILLegalOpD : TEST_Op<"illegal_op_d">, Results<(outs I32:$res)>;
 def ILLegalOpE : TEST_Op<"illegal_op_e">, Results<(outs I32:$res)>;
+def ILLegalOpF : TEST_Op<"illegal_op_f">, Results<(outs I32:$res)>;
 def LegalOpA : TEST_Op<"legal_op_a">,
   Arguments<(ins Test_LegalizerEnum:$status)>, Results<(outs I32:$res)>;
 
@@ -425,10 +526,16 @@ def : Pat<(ILLegalOpD), (LegalOpA Test_LegalizerEnum_Failure)>;
 def : Pat<(ILLegalOpC), (ILLegalOpE), [], (addBenefit 10)>;
 def : Pat<(ILLegalOpE), (LegalOpA Test_LegalizerEnum_Success)>;
 
+// Check that patterns use the most up-to-date value when being replaced.
+def TestRewriteOp : TEST_Op<"rewrite">,
+  Arguments<(ins AnyType:$input)>, Results<(outs AnyType:$res)>;
+def : Pat<(TestRewriteOp $input), (replaceWithValue $input)>;
+
 //===----------------------------------------------------------------------===//
 // Test Type Legalization
 //===----------------------------------------------------------------------===//
 
+def TestRegionBuilderOp : TEST_Op<"region_builder">;
 def TestReturnOp : TEST_Op<"return", [Terminator]>,
   Arguments<(ins Variadic<AnyType>:$inputs)>;
 def TestCastOp : TEST_Op<"cast">,
@@ -437,5 +544,20 @@ def TestInvalidOp : TEST_Op<"invalid", [Terminator]>,
   Arguments<(ins Variadic<AnyType>:$inputs)>;
 def TestValidOp : TEST_Op<"valid", [Terminator]>,
   Arguments<(ins Variadic<AnyType>:$inputs)>;
+
+//===----------------------------------------------------------------------===//
+// Test region argument list parsing.
+//===----------------------------------------------------------------------===//
+
+def PolyForOp : TEST_Op<"polyfor">
+{
+  let summary =  "polyfor operation";
+  let description = [{
+    Test op with multiple region arguments, each argument of index type.
+  }];
+
+  let regions = (region SizedRegion<1>:$region);
+  let parser = [{ return ::parse$cppClass(parser, result); }];
+}
 
 #endif // TEST_OPS

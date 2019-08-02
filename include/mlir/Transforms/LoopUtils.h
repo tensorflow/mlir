@@ -30,10 +30,13 @@
 namespace mlir {
 class AffineMap;
 class AffineForOp;
-class ForOp;
 class FuncOp;
 class OpBuilder;
 class Value;
+
+namespace loop {
+class ForOp;
+} // end namespace loop
 
 /// Unrolls this for operation completely if the trip count is known to be
 /// constant. Returns failure otherwise.
@@ -54,6 +57,8 @@ LogicalResult loopUnrollUpToFactor(AffineForOp forOp, uint64_t unrollFactor);
 /// AffineForOp, and the second op is a terminator).
 void getPerfectlyNestedLoops(SmallVectorImpl<AffineForOp> &nestedLoops,
                              AffineForOp root);
+void getPerfectlyNestedLoops(SmallVectorImpl<loop::ForOp> &nestedLoops,
+                             loop::ForOp root);
 
 /// Unrolls and jams this loop by the specified factor. Returns success if the
 /// loop is successfully unroll-jammed.
@@ -129,9 +134,14 @@ void sinkLoop(AffineForOp forOp, unsigned loopDepth);
 /// occurrence in `forOps`, under each of the `targets`.
 /// Returns the new AffineForOps, one per each of (`forOps`, `targets`) pair,
 /// nested immediately under each of `targets`.
+using Loops = SmallVector<loop::ForOp, 8>;
+using TileLoops = std::pair<Loops, Loops>;
 SmallVector<SmallVector<AffineForOp, 8>, 8> tile(ArrayRef<AffineForOp> forOps,
                                                  ArrayRef<uint64_t> sizes,
                                                  ArrayRef<AffineForOp> targets);
+SmallVector<Loops, 8> tile(ArrayRef<loop::ForOp> forOps,
+                           ArrayRef<Value *> sizes,
+                           ArrayRef<loop::ForOp> targets);
 
 /// Performs tiling (with interchange) by strip-mining the `forOps` by `sizes`
 /// and sinking them, in their order of occurrence in `forOps`, under `target`.
@@ -139,18 +149,60 @@ SmallVector<SmallVector<AffineForOp, 8>, 8> tile(ArrayRef<AffineForOp> forOps,
 /// `target`.
 SmallVector<AffineForOp, 8> tile(ArrayRef<AffineForOp> forOps,
                                  ArrayRef<uint64_t> sizes, AffineForOp target);
+Loops tile(ArrayRef<loop::ForOp> forOps, ArrayRef<Value *> sizes,
+           loop::ForOp target);
 
-/// Tile a nest of standard for loops rooted at `rootForOp` with the given
+/// Tile a nest of loop::ForOp loops rooted at `rootForOp` with the given
 /// (parametric) sizes. Sizes are expected to be strictly positive values at
-/// runtime.  If more sizes than loops provided, discard the trailing values in
-/// sizes.  Assumes the loop nest is permutable.
-void tile(ForOp rootForOp, ArrayRef<Value *> sizes);
+/// runtime.  If more sizes than loops are provided, discard the trailing values
+/// in sizes.  Assumes the loop nest is permutable.
+/// Returns the newly created intra-tile loops.
+Loops tilePerfectlyNested(loop::ForOp rootForOp, ArrayRef<Value *> sizes);
 
 /// Tile a nest of standard for loops rooted at `rootForOp` by finding such
 /// parametric tile sizes that the outer loops have a fixed number of iterations
 /// as defined in `sizes`.
-void extractFixedOuterLoops(ForOp rootFOrOp, ArrayRef<int64_t> sizes);
+TileLoops extractFixedOuterLoops(loop::ForOp rootFOrOp,
+                                 ArrayRef<int64_t> sizes);
 
+/// Replace a perfect nest of "for" loops with a single linearized loop. Assumes
+/// `loops` contains a list of perfectly nested loops with bounds and steps
+/// independent of any loop induction variable involved in the nest.
+void coalesceLoops(MutableArrayRef<loop::ForOp> loops);
+
+/// Maps `forOp` for execution on a parallel grid of virtual `processorIds` of
+/// size given by `numProcessors`. This is achieved by embedding the SSA values
+/// corresponding to `processorIds` and `numProcessors` into the bounds and step
+/// of the `forOp`. No check is performed on the legality of the rewrite, it is
+/// the caller's responsibility to ensure legality.
+///
+/// Requires that `processorIds` and `numProcessors` have the same size and that
+/// for each idx, `processorIds`[idx] takes, at runtime, all values between 0
+/// and `numProcessors`[idx] - 1. This corresponds to traditional use cases for:
+///   1. GPU (threadIdx, get_local_id(), ...)
+///   2. MPI (MPI_Comm_rank)
+///   3. OpenMP (omp_get_thread_num)
+///
+/// Example:
+/// Assuming a 2-d grid with processorIds = [blockIdx.x, threadIdx.x] and
+/// numProcessors = [gridDim.x, blockDim.x], the loop:
+///
+/// ```
+///    loop.for %i = %lb to %ub step %step {
+///      ...
+///    }
+/// ```
+///
+/// is rewritten into a version resembling the following pseudo-IR:
+///
+/// ```
+///    loop.for %i = %lb + threadIdx.x + blockIdx.x * blockDim.x to %ub
+///       step %gridDim.x * blockDim.x {
+///      ...
+///    }
+/// ```
+void mapLoopToProcessorIds(loop::ForOp forOp, ArrayRef<Value *> processorId,
+                           ArrayRef<Value *> numProcessors);
 } // end namespace mlir
 
 #endif // MLIR_TRANSFORMS_LOOP_UTILS_H

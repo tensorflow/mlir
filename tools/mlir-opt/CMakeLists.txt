@@ -25,8 +25,10 @@ set(LIBS
   MLIRGPU
   MLIRGPUtoNVVMTransforms
   MLIRGPUtoROCDLTransforms
+  MLIRGPUtoSPIRVTransforms
   MLIRLinalg
   MLIRLLVMIR
+  MLIRLoopOps
   MLIRNVVMIR
   MLIROptMain
   MLIRParser

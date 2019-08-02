@@ -28,6 +28,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 using namespace mlir;
+using namespace mlir::detail;
 
 #define DEBUG_TYPE "dialect-conversion"
 
@@ -47,21 +48,26 @@ struct ArgConverter {
 
   /// Erase any rewrites registered for arguments to blocks within the given
   /// region. This function is called when the given region is to be destroyed.
-  void cancelPendingRewrites(Region &region);
+  void cancelPendingRewrites(Block *block);
 
-  /// Cleanup and undo any generated conversion values.
-  void discardRewrites();
+  /// Cleanup and undo any generated conversions for the arguments of block.
+  /// This method differs from 'cancelPendingRewrites' in that it returns the
+  /// block signature to its original state.
+  void discardPendingRewrites(Block *block);
 
   /// Replace usages of the cast operations with the argument directly.
   void applyRewrites();
 
-  /// Converts the signature of the given entry block.
-  void convertSignature(Block *block,
-                        TypeConverter::SignatureConversion &signatureConversion,
-                        BlockAndValueMapping &mapping);
+  /// Return if the signature of the given block has already been converted.
+  bool hasBeenConverted(Block *block) const { return argMapping.count(block); }
 
-  /// Converts the arguments of the given block.
-  LogicalResult convertArguments(Block *block, BlockAndValueMapping &mapping);
+  /// Attempt to convert the signature of the given block.
+  LogicalResult convertSignature(Block *block, BlockAndValueMapping &mapping);
+
+  /// Apply the given signature conversion on the given block.
+  void applySignatureConversion(
+      Block *block, TypeConverter::SignatureConversion &signatureConversion,
+      BlockAndValueMapping &mapping);
 
   /// Convert the given block argument given the provided set of new argument
   /// values that are to replace it. This function returns the operation used
@@ -94,59 +100,48 @@ struct ArgConverter {
   /// The pattern rewriter to use when materializing conversions.
   PatternRewriter &rewriter;
 };
+} // end anonymous namespace
 
 constexpr StringLiteral ArgConverter::kCastName;
 
-/// Erase any rewrites registered for arguments to blocks within the given
-/// region. This function is called when the given region is to be destroyed.
-void ArgConverter::cancelPendingRewrites(Region &region) {
-  for (auto &block : region) {
-    auto it = argMapping.find(&block);
-    if (it == argMapping.end())
-      continue;
-    for (auto *op : it->second) {
-      // If the operation exists within the parent block, like with 1->N cast
-      // operations, we don't need to drop them. They will be automatically
-      // cleaned up with the region is destroyed.
-      if (op->getBlock())
-        continue;
-
-      op->dropAllDefinedValueUses();
-      op->destroy();
-    }
-    argMapping.erase(it);
+/// Erase any rewrites registered for arguments to the given block.
+void ArgConverter::cancelPendingRewrites(Block *block) {
+  auto it = argMapping.find(block);
+  if (it == argMapping.end())
+    return;
+  for (auto *op : it->second) {
+    op->dropAllDefinedValueUses();
+    op->erase();
   }
+  argMapping.erase(it);
 }
 
-/// Cleanup and undo any generated conversion values.
-void ArgConverter::discardRewrites() {
-  // On failure reinstate all of the original block arguments.
-  Block *block;
-  ArrayRef<Operation *> argOps;
-  for (auto &mapping : argMapping) {
-    std::tie(block, argOps) = mapping;
+/// Cleanup and undo any generated conversions for the arguments of block.
+/// This method differs from 'cancelPendingRewrites' in that it returns the
+/// block signature to its original state.
+void ArgConverter::discardPendingRewrites(Block *block) {
+  auto it = argMapping.find(block);
+  if (it == argMapping.end())
+    return;
 
-    // Erase all of the new arguments.
-    for (int i = block->getNumArguments() - 1; i >= 0; --i) {
-      block->getArgument(i)->dropAllUses();
-      block->eraseArgument(i, /*updatePredTerms=*/false);
-    }
-
-    // Re-instate the old arguments.
-    for (unsigned i = 0, e = argOps.size(); i != e; ++i) {
-      auto *op = argOps[i];
-      auto *arg = block->addArgument(op->getResult(0)->getType());
-      op->getResult(0)->replaceAllUsesWith(arg);
-
-      // If this was a 1->N value mapping it exists within the parent block so
-      // erase it instead of destroying.
-      if (op->getBlock())
-        op->erase();
-      else
-        op->destroy();
-    }
+  // Erase all of the new arguments.
+  for (int i = block->getNumArguments() - 1; i >= 0; --i) {
+    block->getArgument(i)->dropAllUses();
+    block->eraseArgument(i, /*updatePredTerms=*/false);
   }
-  argMapping.clear();
+
+  // Re-instate the old arguments.
+  auto &mapping = it->second;
+  for (unsigned i = 0, e = mapping.size(); i != e; ++i) {
+    auto *op = mapping[i];
+    auto *arg = block->addArgument(op->getResult(0)->getType());
+    op->getResult(0)->replaceAllUsesWith(arg);
+
+    // If this operation is within a block, it will be cleaned up automatically.
+    if (!op->getBlock())
+      op->erase();
+  }
+  argMapping.erase(it);
 }
 
 /// Replace usages of the cast operations with the argument directly.
@@ -170,10 +165,13 @@ void ArgConverter::applyRewrites() {
         continue;
       }
 
-      // If mapping is from type to itself, replace the remaining uses and drop
-      // the cast operation.
-      if (op->getNumOperands() == 1 &&
-          op->getResult(0)->getType() == op->getOperand(0)->getType()) {
+      // If mapping is 1-1, replace the remaining uses and drop the cast
+      // operation.
+      // FIXME(riverriddle) This should check that the result type and operand
+      // type are the same, otherwise it should force a conversion to be
+      // materialized. This works around a current limitation with regards to
+      // region entry argument type conversion.
+      if (op->getNumOperands() == 1) {
         op->getResult(0)->replaceAllUsesWith(op->getOperand(0));
         op->destroy();
         continue;
@@ -196,11 +194,19 @@ void ArgConverter::applyRewrites() {
 }
 
 /// Converts the signature of the given entry block.
-void ArgConverter::convertSignature(
+LogicalResult ArgConverter::convertSignature(Block *block,
+                                             BlockAndValueMapping &mapping) {
+  if (auto conversion = typeConverter->convertBlockSignature(block))
+    return applySignatureConversion(block, *conversion, mapping), success();
+  return failure();
+}
+
+/// Apply the given signature conversion on the given block.
+void ArgConverter::applySignatureConversion(
     Block *block, TypeConverter::SignatureConversion &signatureConversion,
     BlockAndValueMapping &mapping) {
   unsigned origArgCount = block->getNumArguments();
-  auto convertedTypes = signatureConversion.getConvertedArgTypes();
+  auto convertedTypes = signatureConversion.getConvertedTypes();
   if (origArgCount == 0 && convertedTypes.empty())
     return;
 
@@ -223,37 +229,6 @@ void ArgConverter::convertSignature(
   // Erase all of the original arguments.
   for (unsigned i = 0; i != origArgCount; ++i)
     block->eraseArgument(0, /*updatePredTerms=*/false);
-}
-
-/// Converts the arguments of the given block.
-LogicalResult ArgConverter::convertArguments(Block *block,
-                                             BlockAndValueMapping &mapping) {
-  unsigned origArgCount = block->getNumArguments();
-  if (origArgCount == 0)
-    return success();
-
-  // Convert the types of each of the block arguments.
-  SmallVector<SmallVector<Type, 1>, 4> newArgTypes(origArgCount);
-  for (unsigned i = 0; i != origArgCount; ++i) {
-    auto *arg = block->getArgument(i);
-    if (failed(typeConverter->convertType(arg->getType(), newArgTypes[i])))
-      return emitError(block->getParent()->getLoc())
-             << "could not convert block argument of type " << arg->getType();
-  }
-
-  // Remap all of the original argument values.
-  auto &newArgMapping = argMapping[block];
-  rewriter.setInsertionPointToStart(block);
-  for (unsigned i = 0; i != origArgCount; ++i) {
-    SmallVector<Value *, 1> newArgs(block->addArguments(newArgTypes[i]));
-    newArgMapping.push_back(
-        convertArgument(block->getArgument(i), newArgs, mapping));
-  }
-
-  // Erase all of the original arguments.
-  for (unsigned i = 0; i != origArgCount; ++i)
-    block->eraseArgument(0, /*updatePredTerms=*/false);
-  return success();
 }
 
 /// Convert the given block argument given the provided set of new argument
@@ -294,9 +269,9 @@ Operation *ArgConverter::createCast(ArrayRef<Value *> inputs, Type outputType) {
 }
 
 //===----------------------------------------------------------------------===//
-// DialectConversionRewriter
+// ConversionPatternRewriterImpl
 //===----------------------------------------------------------------------===//
-
+namespace {
 /// This class contains a snapshot of the current conversion rewriter state.
 /// This is useful when saving and undoing a set of rewrites.
 struct RewriterState {
@@ -314,10 +289,11 @@ struct RewriterState {
   /// The current number of block actions performed.
   unsigned numBlockActions;
 };
+} // end anonymous namespace
 
-/// This class implements a pattern rewriter for ConversionPattern
-/// patterns. It automatically performs remapping of replaced operation values.
-struct DialectConversionRewriter final : public PatternRewriter {
+namespace mlir {
+namespace detail {
+struct ConversionPatternRewriterImpl {
   /// This class represents one requested operation replacement via 'replaceOp'.
   struct OpReplacement {
     OpReplacement() = default;
@@ -330,7 +306,7 @@ struct DialectConversionRewriter final : public PatternRewriter {
 
   /// The kind of the block action performed during the rewrite.  Actions can be
   /// undone if the conversion fails.
-  enum class BlockActionKind { Split, Move };
+  enum class BlockActionKind { Split, Move, TypeConversion };
 
   /// Original position of the given block in its parent region.  We cannot use
   /// a region iterator because it could have been invalidated by other region
@@ -343,6 +319,21 @@ struct DialectConversionRewriter final : public PatternRewriter {
   /// The storage class for an undoable block action (one of BlockActionKind),
   /// contains the information necessary to undo this action.
   struct BlockAction {
+    static BlockAction getSplit(Block *block, Block *originalBlock) {
+      BlockAction action{BlockActionKind::Split, block, {}};
+      action.originalBlock = originalBlock;
+      return action;
+    }
+    static BlockAction getMove(Block *block, BlockPosition originalPos) {
+      return {BlockActionKind::Move, block, {originalPos}};
+    }
+    static BlockAction getTypeConversion(Block *block) {
+      return BlockAction{BlockActionKind::TypeConversion, block, {}};
+    }
+
+    // The action kind.
+    BlockActionKind kind;
+
     // A pointer to the block that was created by the action.
     Block *block;
 
@@ -355,162 +346,51 @@ struct DialectConversionRewriter final : public PatternRewriter {
       // block that was split into two parts.
       Block *originalBlock;
     };
-
-    BlockActionKind kind;
   };
 
-  DialectConversionRewriter(MLIRContext *ctx, TypeConverter *converter)
-      : PatternRewriter(ctx), argConverter(converter, *this) {}
-  ~DialectConversionRewriter() = default;
+  ConversionPatternRewriterImpl(PatternRewriter &rewriter,
+                                TypeConverter *converter)
+      : argConverter(converter, rewriter) {}
 
   /// Return the current state of the rewriter.
-  RewriterState getCurrentState() {
-    return RewriterState(createdOps.size(), replacements.size(),
-                         blockActions.size());
-  }
+  RewriterState getCurrentState();
 
   /// Reset the state of the rewriter to a previously saved point.
-  void resetState(RewriterState state) {
-    // Reset any replaced operations and undo any saved mappings.
-    for (auto &repl : llvm::drop_begin(replacements, state.numReplacements))
-      for (auto *result : repl.op->getResults())
-        mapping.erase(result);
-    replacements.resize(state.numReplacements);
-
-    // Pop all of the newly created operations.
-    while (createdOps.size() != state.numCreatedOperations)
-      createdOps.pop_back_val()->erase();
-
-    // Undo any block operations.
-    undoBlockActions(state.numBlockActions);
-  }
+  void resetState(RewriterState state);
 
   /// Undo the block actions (motions, splits) one by one in reverse order until
   /// "numActionsToKeep" actions remains.
-  void undoBlockActions(unsigned numActionsToKeep = 0) {
-    for (auto &action :
-         llvm::reverse(llvm::drop_begin(blockActions, numActionsToKeep))) {
-      switch (action.kind) {
-      // Merge back the block that was split out.
-      case BlockActionKind::Split: {
-        action.originalBlock->getOperations().splice(
-            action.originalBlock->end(), action.block->getOperations());
-        action.block->erase();
-        break;
-      }
-      // Move the block back to its original position.
-      case BlockActionKind::Move: {
-        Region *originalRegion = action.originalPosition.region;
-        originalRegion->getBlocks().splice(
-            std::next(originalRegion->begin(),
-                      action.originalPosition.position),
-            action.block->getParent()->getBlocks(), action.block);
-        break;
-      }
-      }
-    }
-  }
+  void undoBlockActions(unsigned numActionsToKeep = 0);
 
   /// Cleanup and destroy any generated rewrite operations. This method is
   /// invoked when the conversion process fails.
-  void discardRewrites() {
-    argConverter.discardRewrites();
-
-    // Remove any newly created ops.
-    for (auto *op : createdOps) {
-      op->dropAllDefinedValueUses();
-      op->erase();
-    }
-
-    undoBlockActions();
-  }
+  void discardRewrites();
 
   /// Apply all requested operation rewrites. This method is invoked when the
   /// conversion process succeeds.
-  void applyRewrites() {
-    // Apply all of the rewrites replacements requested during conversion.
-    for (auto &repl : replacements) {
-      for (unsigned i = 0, e = repl.newValues.size(); i != e; ++i)
-        repl.op->getResult(i)->replaceAllUsesWith(repl.newValues[i]);
+  void applyRewrites();
 
-      // if this operation defines any regions, drop any pending argument
-      // rewrites.
-      if (repl.op->getNumRegions() && !argConverter.argMapping.empty()) {
-        for (auto &region : repl.op->getRegions())
-          argConverter.cancelPendingRewrites(region);
-      }
+  /// Convert the signature of the given block.
+  LogicalResult convertBlockSignature(Block *block);
 
-      repl.op->erase();
-    }
-
-    argConverter.applyRewrites();
-  }
+  /// Apply a signature conversion on the given region.
+  void applySignatureConversion(Region *region,
+                                TypeConverter::SignatureConversion &conversion);
 
   /// PatternRewriter hook for replacing the results of an operation.
   void replaceOp(Operation *op, ArrayRef<Value *> newValues,
-                 ArrayRef<Value *> valuesToRemoveIfDead) override {
-    assert(newValues.size() == op->getNumResults());
+                 ArrayRef<Value *> valuesToRemoveIfDead);
 
-    // Create mappings for each of the new result values.
-    for (unsigned i = 0, e = newValues.size(); i < e; ++i) {
-      assert((newValues[i] || op->getResult(i)->use_empty()) &&
-             "result value has remaining uses that must be replaced");
-      if (newValues[i])
-        mapping.map(op->getResult(i), newValues[i]);
-    }
+  /// Notifies that a block was split.
+  void notifySplitBlock(Block *block, Block *continuation);
 
-    // Record the requested operation replacement.
-    replacements.emplace_back(op, newValues);
-  }
-
-  /// PatternRewriter hook for splitting a block into two parts.
-  Block *splitBlock(Block *block, Block::iterator before) override {
-    auto *continuation = PatternRewriter::splitBlock(block, before);
-    BlockAction action;
-    action.kind = BlockActionKind::Split;
-    action.block = continuation;
-    action.originalBlock = block;
-    blockActions.push_back(action);
-    return continuation;
-  }
-
-  /// PatternRewriter hook for moving blocks out of a region.
-  void inlineRegionBefore(Region &region, Region &parent,
-                          Region::iterator before) override {
-    for (auto &pair : llvm::enumerate(region)) {
-      Block &block = pair.value();
-      unsigned position = pair.index();
-      BlockAction action;
-      action.kind = BlockActionKind::Move;
-      action.block = &block;
-      action.originalPosition = {&region, position};
-      blockActions.push_back(action);
-    }
-    PatternRewriter::inlineRegionBefore(region, parent, before);
-  }
-
-  /// PatternRewriter hook for creating a new operation.
-  Operation *createOperation(const OperationState &state) override {
-    auto *result = OpBuilder::createOperation(state);
-    createdOps.push_back(result);
-    return result;
-  }
-
-  /// PatternRewriter hook for updating the root operation in-place.
-  void notifyRootUpdated(Operation *op) override {
-    // The rewriter caches changes to the IR to allow for operating in-place and
-    // backtracking. The rewrite is currently not capable of backtracking
-    // in-place modifications.
-    llvm_unreachable("in-place operation updates are not supported");
-  }
+  /// Notifies that the blocks of a region are about to be moved.
+  void notifyRegionIsBeingInlinedBefore(Region &region, Region &parent,
+                                        Region::iterator before);
 
   /// Remap the given operands to those with potentially different types.
   void remapValues(Operation::operand_range operands,
-                   SmallVectorImpl<Value *> &remapped) {
-    remapped.reserve(llvm::size(operands));
-    for (Value *operand : operands)
-      remapped.push_back(mapping.lookupOrDefault(operand));
-  }
+                   SmallVectorImpl<Value *> &remapped);
 
   // Mapping between replaced values that differ in type. This happens when
   // replacing a value with one of a different type.
@@ -528,7 +408,224 @@ struct DialectConversionRewriter final : public PatternRewriter {
   /// Ordered list of block operations (creations, splits, motions).
   SmallVector<BlockAction, 4> blockActions;
 };
-} // end anonymous namespace
+} // end namespace detail
+} // end namespace mlir
+
+RewriterState ConversionPatternRewriterImpl::getCurrentState() {
+  return RewriterState(createdOps.size(), replacements.size(),
+                       blockActions.size());
+}
+
+void ConversionPatternRewriterImpl::resetState(RewriterState state) {
+  // Undo any block actions.
+  undoBlockActions(state.numBlockActions);
+
+  // Reset any replaced operations and undo any saved mappings.
+  for (auto &repl : llvm::drop_begin(replacements, state.numReplacements))
+    for (auto *result : repl.op->getResults())
+      mapping.erase(result);
+  replacements.resize(state.numReplacements);
+
+  // Pop all of the newly created operations.
+  while (createdOps.size() != state.numCreatedOperations)
+    createdOps.pop_back_val()->erase();
+}
+
+void ConversionPatternRewriterImpl::undoBlockActions(
+    unsigned numActionsToKeep) {
+  for (auto &action :
+       llvm::reverse(llvm::drop_begin(blockActions, numActionsToKeep))) {
+    switch (action.kind) {
+    // Merge back the block that was split out.
+    case BlockActionKind::Split: {
+      action.originalBlock->getOperations().splice(
+          action.originalBlock->end(), action.block->getOperations());
+      action.block->erase();
+      break;
+    }
+    // Move the block back to its original position.
+    case BlockActionKind::Move: {
+      Region *originalRegion = action.originalPosition.region;
+      originalRegion->getBlocks().splice(
+          std::next(originalRegion->begin(), action.originalPosition.position),
+          action.block->getParent()->getBlocks(), action.block);
+      break;
+    }
+    // Undo the type conversion.
+    case BlockActionKind::TypeConversion: {
+      argConverter.discardPendingRewrites(action.block);
+      break;
+    }
+    }
+  }
+  blockActions.resize(numActionsToKeep);
+}
+
+void ConversionPatternRewriterImpl::discardRewrites() {
+  undoBlockActions();
+
+  // Remove any newly created ops.
+  for (auto *op : createdOps) {
+    op->dropAllDefinedValueUses();
+    op->erase();
+  }
+}
+
+void ConversionPatternRewriterImpl::applyRewrites() {
+  // Apply all of the rewrites replacements requested during conversion.
+  for (auto &repl : replacements) {
+    for (unsigned i = 0, e = repl.newValues.size(); i != e; ++i)
+      repl.op->getResult(i)->replaceAllUsesWith(
+          mapping.lookupOrDefault(repl.newValues[i]));
+
+    // If this operation defines any regions, drop any pending argument
+    // rewrites.
+    if (argConverter.typeConverter && repl.op->getNumRegions()) {
+      for (auto &region : repl.op->getRegions())
+        for (auto &block : region)
+          argConverter.cancelPendingRewrites(&block);
+    }
+  }
+
+  // In a second pass, erase all of the replaced operations in reverse. This
+  // allows processing nested operations before their parent region is
+  // destroyed.
+  for (auto &repl : llvm::reverse(replacements))
+    repl.op->erase();
+
+  argConverter.applyRewrites();
+}
+
+LogicalResult
+ConversionPatternRewriterImpl::convertBlockSignature(Block *block) {
+  // Check to see if this block should not be converted:
+  // * The block is invalid, or there is no type converter.
+  // * The block has already been converted.
+  // * This is an entry block, these are converted explicitly via patterns.
+  if (!block || !argConverter.typeConverter ||
+      argConverter.hasBeenConverted(block) || block->isEntryBlock())
+    return success();
+
+  // Otherwise, try to convert the block signature.
+  if (failed(argConverter.convertSignature(block, mapping)))
+    return failure();
+  blockActions.push_back(BlockAction::getTypeConversion(block));
+  return success();
+}
+
+void ConversionPatternRewriterImpl::applySignatureConversion(
+    Region *region, TypeConverter::SignatureConversion &conversion) {
+  if (!region->empty()) {
+    argConverter.applySignatureConversion(&region->front(), conversion,
+                                          mapping);
+    blockActions.push_back(BlockAction::getTypeConversion(&region->front()));
+  }
+}
+
+void ConversionPatternRewriterImpl::replaceOp(
+    Operation *op, ArrayRef<Value *> newValues,
+    ArrayRef<Value *> valuesToRemoveIfDead) {
+  assert(newValues.size() == op->getNumResults());
+
+  // Create mappings for each of the new result values.
+  for (unsigned i = 0, e = newValues.size(); i < e; ++i) {
+    assert((newValues[i] || op->getResult(i)->use_empty()) &&
+           "result value has remaining uses that must be replaced");
+    if (newValues[i])
+      mapping.map(op->getResult(i), newValues[i]);
+  }
+
+  // Record the requested operation replacement.
+  replacements.emplace_back(op, newValues);
+}
+
+void ConversionPatternRewriterImpl::notifySplitBlock(Block *block,
+                                                     Block *continuation) {
+  blockActions.push_back(BlockAction::getSplit(continuation, block));
+}
+
+void ConversionPatternRewriterImpl::notifyRegionIsBeingInlinedBefore(
+    Region &region, Region &parent, Region::iterator before) {
+  for (auto &pair : llvm::enumerate(region)) {
+    Block &block = pair.value();
+    unsigned position = pair.index();
+    blockActions.push_back(BlockAction::getMove(&block, {&region, position}));
+  }
+}
+
+void ConversionPatternRewriterImpl::remapValues(
+    Operation::operand_range operands, SmallVectorImpl<Value *> &remapped) {
+  remapped.reserve(llvm::size(operands));
+  for (Value *operand : operands)
+    remapped.push_back(mapping.lookupOrDefault(operand));
+}
+
+//===----------------------------------------------------------------------===//
+// ConversionPatternRewriter
+//===----------------------------------------------------------------------===//
+
+ConversionPatternRewriter::ConversionPatternRewriter(MLIRContext *ctx,
+                                                     TypeConverter *converter)
+    : PatternRewriter(ctx),
+      impl(new detail::ConversionPatternRewriterImpl(*this, converter)) {}
+ConversionPatternRewriter::~ConversionPatternRewriter() {}
+
+/// PatternRewriter hook for replacing the results of an operation.
+void ConversionPatternRewriter::replaceOp(
+    Operation *op, ArrayRef<Value *> newValues,
+    ArrayRef<Value *> valuesToRemoveIfDead) {
+  impl->replaceOp(op, newValues, valuesToRemoveIfDead);
+}
+
+/// Apply a signature conversion to the entry block of the given region.
+void ConversionPatternRewriter::applySignatureConversion(
+    Region *region, TypeConverter::SignatureConversion &conversion) {
+  impl->applySignatureConversion(region, conversion);
+}
+
+/// Clone the given operation without cloning its regions.
+Operation *ConversionPatternRewriter::cloneWithoutRegions(Operation *op) {
+  Operation *newOp = OpBuilder::cloneWithoutRegions(*op);
+  impl->createdOps.push_back(newOp);
+  return newOp;
+}
+
+/// PatternRewriter hook for splitting a block into two parts.
+Block *ConversionPatternRewriter::splitBlock(Block *block,
+                                             Block::iterator before) {
+  auto *continuation = PatternRewriter::splitBlock(block, before);
+  impl->notifySplitBlock(block, continuation);
+  return continuation;
+}
+
+/// PatternRewriter hook for moving blocks out of a region.
+void ConversionPatternRewriter::inlineRegionBefore(Region &region,
+                                                   Region &parent,
+                                                   Region::iterator before) {
+  impl->notifyRegionIsBeingInlinedBefore(region, parent, before);
+  PatternRewriter::inlineRegionBefore(region, parent, before);
+}
+
+/// PatternRewriter hook for creating a new operation.
+Operation *
+ConversionPatternRewriter::createOperation(const OperationState &state) {
+  auto *result = OpBuilder::createOperation(state);
+  impl->createdOps.push_back(result);
+  return result;
+}
+
+/// PatternRewriter hook for updating the root operation in-place.
+void ConversionPatternRewriter::notifyRootUpdated(Operation *op) {
+  // The rewriter caches changes to the IR to allow for operating in-place and
+  // backtracking. The rewriter is currently not capable of backtracking
+  // in-place modifications.
+  llvm_unreachable("in-place operation updates are not supported");
+}
+
+/// Return a reference to the internal implementation.
+detail::ConversionPatternRewriterImpl &ConversionPatternRewriter::getImpl() {
+  return *impl;
+}
 
 //===----------------------------------------------------------------------===//
 // Conversion Patterns
@@ -539,12 +636,12 @@ PatternMatchResult
 ConversionPattern::matchAndRewrite(Operation *op,
                                    PatternRewriter &rewriter) const {
   SmallVector<Value *, 4> operands;
-  auto &dialectRewriter = static_cast<DialectConversionRewriter &>(rewriter);
-  dialectRewriter.remapValues(op->getOperands(), operands);
+  auto &dialectRewriter = static_cast<ConversionPatternRewriter &>(rewriter);
+  dialectRewriter.getImpl().remapValues(op->getOperands(), operands);
 
   // If this operation has no successors, invoke the rewrite directly.
   if (op->getNumSuccessors() == 0)
-    return matchAndRewrite(op, operands, rewriter);
+    return matchAndRewrite(op, operands, dialectRewriter);
 
   // Otherwise, we need to remap the successors.
   SmallVector<Block *, 2> destinations;
@@ -567,7 +664,7 @@ ConversionPattern::matchAndRewrite(Operation *op,
       op,
       llvm::makeArrayRef(operands.data(),
                          operands.data() + firstSuccessorOperand),
-      destinations, operandsPerDestination, rewriter);
+      destinations, operandsPerDestination, dialectRewriter);
 }
 
 //===----------------------------------------------------------------------===//
@@ -581,6 +678,8 @@ using LegalizationPatterns = SmallVector<RewritePattern *, 1>;
 /// This class defines a recursive operation legalizer.
 class OperationLegalizer {
 public:
+  using LegalizationAction = ConversionTarget::LegalizationAction;
+
   OperationLegalizer(ConversionTarget &targetInfo,
                      OwningRewritePatternList &patterns)
       : target(targetInfo) {
@@ -588,15 +687,18 @@ public:
     computeLegalizationGraphBenefit();
   }
 
+  /// Returns if the given operation is known to be illegal on the target.
+  bool isIllegal(Operation *op) const;
+
   /// Attempt to legalize the given operation. Returns success if the operation
   /// was legalized, failure otherwise.
-  LogicalResult legalize(Operation *op, DialectConversionRewriter &rewriter);
+  LogicalResult legalize(Operation *op, ConversionPatternRewriter &rewriter);
 
 private:
   /// Attempt to legalize the given operation by applying the provided pattern.
   /// Returns success if the operation was legalized, failure otherwise.
   LogicalResult legalizePattern(Operation *op, RewritePattern *pattern,
-                                DialectConversionRewriter &rewriter);
+                                ConversionPatternRewriter &rewriter);
 
   /// Build an optimistic legalization graph given the provided patterns. This
   /// function populates 'legalizerPatterns' with the operations that are not
@@ -626,24 +728,28 @@ private:
 };
 } // namespace
 
+bool OperationLegalizer::isIllegal(Operation *op) const {
+  // Check if the target explicitly marked this operation as illegal.
+  if (auto action = target.getOpAction(op->getName()))
+    return action == LegalizationAction::Illegal;
+  return false;
+}
+
 LogicalResult
 OperationLegalizer::legalize(Operation *op,
-                             DialectConversionRewriter &rewriter) {
+                             ConversionPatternRewriter &rewriter) {
+  // Make sure that the signature of the parent block has been converted.
+  if (failed(rewriter.getImpl().convertBlockSignature(op->getBlock())))
+    return failure();
+
   LLVM_DEBUG(llvm::dbgs() << "Legalizing operation : " << op->getName()
                           << "\n");
 
-  // Check if this was marked legal by the target.
-  if (auto action = target.getOpAction(op->getName())) {
-    // Check if this operation is always legal.
-    if (*action == ConversionTarget::LegalizationAction::Legal)
-      return success();
-
-    // Otherwise, handle dynamic legalization.
-    LLVM_DEBUG(llvm::dbgs() << "- Trying dynamic legalization.\n");
-    if (target.isDynamicallyLegal(op))
-      return success();
-
-    // Fallthough to see if a pattern can convert this into a legal operation.
+  // Check if this operation is legal on the target.
+  if (target.isLegal(op)) {
+    LLVM_DEBUG(llvm::dbgs()
+               << "-- Success : Operation marked legal by the target\n");
+    return success();
   }
 
   // Otherwise, we need to apply a legalization pattern to this operation.
@@ -653,8 +759,7 @@ OperationLegalizer::legalize(Operation *op,
     return failure();
   }
 
-  // TODO(riverriddle) This currently has no cost model and doesn't prioritize
-  // specific patterns in any way.
+  // The patterns are sorted by expected benefit, so try to apply each in-order.
   for (auto *pattern : it->second)
     if (succeeded(legalizePattern(op, pattern, rewriter)))
       return success();
@@ -665,7 +770,7 @@ OperationLegalizer::legalize(Operation *op,
 
 LogicalResult
 OperationLegalizer::legalizePattern(Operation *op, RewritePattern *pattern,
-                                    DialectConversionRewriter &rewriter) {
+                                    ConversionPatternRewriter &rewriter) {
   LLVM_DEBUG({
     llvm::dbgs() << "-* Applying rewrite pattern '" << op->getName() << " -> (";
     interleaveComma(pattern->getGeneratedOps(), llvm::dbgs());
@@ -681,10 +786,11 @@ OperationLegalizer::legalizePattern(Operation *op, RewritePattern *pattern,
     return failure();
   }
 
-  RewriterState curState = rewriter.getCurrentState();
+  auto &rewriterImpl = rewriter.getImpl();
+  RewriterState curState = rewriterImpl.getCurrentState();
   auto cleanupFailure = [&] {
     // Reset the rewriter state and pop this pattern.
-    rewriter.resetState(curState);
+    rewriterImpl.resetState(curState);
     appliedPatterns.erase(pattern);
     return failure();
   };
@@ -698,9 +804,9 @@ OperationLegalizer::legalizePattern(Operation *op, RewritePattern *pattern,
 
   // Recursively legalize each of the new operations.
   for (unsigned i = curState.numCreatedOperations,
-                e = rewriter.createdOps.size();
+                e = rewriterImpl.createdOps.size();
        i != e; ++i) {
-    if (failed(legalize(rewriter.createdOps[i], rewriter))) {
+    if (failed(legalize(rewriterImpl.createdOps[i], rewriter))) {
       LLVM_DEBUG(llvm::dbgs() << "-- FAIL: Generated operation was illegal.\n");
       return cleanupFailure();
     }
@@ -725,7 +831,7 @@ void OperationLegalizer::buildLegalizationGraph(
     auto root = pattern->getRootKind();
 
     // Skip operations that are always known to be legal.
-    if (target.getOpAction(root) == ConversionTarget::LegalizationAction::Legal)
+    if (target.getOpAction(root) == LegalizationAction::Legal)
       continue;
 
     // Add this pattern to the invalid set for the root op and record this root
@@ -743,7 +849,9 @@ void OperationLegalizer::buildLegalizationGraph(
 
     // Check to see if any of the generated operations are invalid.
     if (llvm::any_of(pattern->getGeneratedOps(), [&](OperationName op) {
-          return !legalizerPatterns.count(op) && !target.getOpAction(op);
+          auto action = target.getOpAction(op);
+          return !legalizerPatterns.count(op) &&
+                 (!action || action == LegalizationAction::Illegal);
         }))
       continue;
 
@@ -833,153 +941,173 @@ void OperationLegalizer::computeLegalizationGraphBenefit() {
 }
 
 //===----------------------------------------------------------------------===//
-// FunctionConverter
+// OperationConverter
 //===----------------------------------------------------------------------===//
 namespace {
-// This class converts a single function using the given pattern matcher. If a
+enum OpConversionMode {
+  // In this mode, the conversion will ignore failed conversions to allow
+  // illegal operations to co-exist in the IR.
+  Partial,
+
+  // In this mode, all operations must be legal for the given target for the
+  // conversion to succeeed.
+  Full,
+
+  // In this mode, operations are analyzed for legality. No actual rewrites are
+  // applied to the operations on success.
+  Analysis,
+};
+
+// This class converts operations using the given pattern matcher. If a
 // TypeConverter object is provided, then the types of block arguments will be
 // converted using the appropriate 'convertType' calls.
-struct FunctionConverter {
-  explicit FunctionConverter(MLIRContext *ctx, ConversionTarget &target,
-                             OwningRewritePatternList &patterns,
-                             TypeConverter *conversion = nullptr)
-      : typeConverter(conversion), opLegalizer(target, patterns) {}
+struct OperationConverter {
+  explicit OperationConverter(ConversionTarget &target,
+                              OwningRewritePatternList &patterns,
+                              OpConversionMode mode,
+                              DenseSet<Operation *> *legalizableOps = nullptr)
+      : opLegalizer(target, patterns), mode(mode),
+        legalizableOps(legalizableOps) {}
 
-  /// Converts the given function to the conversion target. Returns failure on
-  /// error, success otherwise. If 'signatureConversion' is provided, the
-  /// arguments of the entry block are updated accordingly.
-  LogicalResult
-  convertFunction(FuncOp f,
-                  TypeConverter::SignatureConversion *signatureConversion);
+  /// Converts the given operations to the conversion target.
+  LogicalResult convertOperations(ArrayRef<Operation *> ops,
+                                  TypeConverter *typeConverter);
 
-  /// Converts the given region starting from the entry block and following the
-  /// block successors. Returns failure on error, success otherwise. Prints
-  /// error messages at `loc`.
-  LogicalResult convertRegion(DialectConversionRewriter &rewriter,
-                              Region &region, bool convertEntryTypes = true);
+private:
+  /// Converts an operation with the given rewriter.
+  LogicalResult convert(ConversionPatternRewriter &rewriter, Operation *op);
 
-  /// Converts a block by traversing its operations sequentially, attempting to
-  /// match a pattern. If there is no match, recurses the operations regions if
-  /// it has any.
-  //
-  /// After converting operations, traverses the successor blocks unless they
-  /// have been visited already as indicated in `visitedBlocks`.
-  LogicalResult convertBlock(DialectConversionRewriter &rewriter, Block *block,
-                             DenseSet<Block *> &visitedBlocks);
+  /// Recursively collect all of the operations to convert from within 'region'.
+  LogicalResult computeConversionSet(Region &region,
+                                     std::vector<Operation *> &toConvert);
 
-  /// Pointer to a specific dialect conversion info.
-  TypeConverter *typeConverter;
+  /// Converts the type signatures of the blocks nested within 'op' that have
+  /// yet to be converted.
+  LogicalResult convertBlockSignatures(ConversionPatternRewriter &rewriter,
+                                       Operation *op);
 
   /// The legalizer to use when converting operations.
   OperationLegalizer opLegalizer;
+
+  /// The conversion mode to use when legalizing operations.
+  OpConversionMode mode;
+
+  /// A set of pre-existing operations that were found to be legalizable to the
+  /// target. This field is only used when mode == OpConversionMode::Analysis.
+  DenseSet<Operation *> *legalizableOps;
 };
 } // end anonymous namespace
 
 LogicalResult
-FunctionConverter::convertBlock(DialectConversionRewriter &rewriter,
-                                Block *block,
-                                DenseSet<Block *> &visitedBlocks) {
-  // First, add the current block to the list of visited blocks.
-  visitedBlocks.insert(block);
+OperationConverter::convertBlockSignatures(ConversionPatternRewriter &rewriter,
+                                           Operation *op) {
+  SmallVector<Region *, 8> worklist;
+  for (auto &region : op->getRegions())
+    worklist.push_back(&region);
 
-  if (block->empty())
-    return success();
-
-  // Preserve the successors before rewriting the operations.
-  SmallVector<Block *, 4> successors(block->getSuccessors());
-
-  // Iterate over ops and convert them.  Since the conversion may split the
-  // block, we eagerly take the pointer to the next operation in it.  Splitting
-  // moves the operations from one block to another, so this will keep
-  // considering the original list of operations independently of the block
-  // within which they are currently located.  This relies on iplist node API
-  // to get the next node in the list witout knowing which list it is, iterators
-  // are unsuitable because block splitting invalidates all iterators following
-  // the current one. Any operation inserted by the conversion, independently of
-  // its parent block, will be recursively legalized independently of this
-  // function.
-  Operation *current = &block->front();
-  Operation *next = nullptr;
-  do {
-    next = current->getNextNode();
-    // Traverse any held regions.
-    for (auto &region : current->getRegions())
-      if (!region.empty() && failed(convertRegion(rewriter, region)))
+  while (!worklist.empty()) {
+    for (auto &block : *worklist.pop_back_val()) {
+      if (failed(rewriter.getImpl().convertBlockSignature(&block)))
         return failure();
-
-    // Legalize the current operation.
-    (void)opLegalizer.legalize(current, rewriter);
-  } while ((current = next));
-
-  // Recurse to children that haven't been visited.
-  for (Block *succ : successors) {
-    if (visitedBlocks.count(succ))
-      continue;
-    if (failed(convertBlock(rewriter, succ, visitedBlocks)))
-      return failure();
+      for (auto &nestedOp : block)
+        for (auto &region : nestedOp.getRegions())
+          worklist.push_back(&region);
+    }
   }
   return success();
 }
 
 LogicalResult
-FunctionConverter::convertRegion(DialectConversionRewriter &rewriter,
-                                 Region &region, bool convertEntryTypes) {
-  assert(!region.empty() && "expected non-empty region");
+OperationConverter::computeConversionSet(Region &region,
+                                         std::vector<Operation *> &toConvert) {
+  if (region.empty())
+    return success();
 
-  // Create the arguments of each of the blocks in the region. If a type
-  // converter was not provided, then we don't need to change any of the block
-  // types.
-  if (typeConverter) {
-    for (Block &block :
-         llvm::drop_begin(region.getBlocks(), convertEntryTypes ? 0 : 1)) {
-      if (failed(
-              rewriter.argConverter.convertArguments(&block, rewriter.mapping)))
-        return failure();
+  // Traverse starting from the entry block.
+  SmallVector<Block *, 16> worklist(1, &region.front());
+  DenseSet<Block *> visitedBlocks;
+  visitedBlocks.insert(&region.front());
+  while (!worklist.empty()) {
+    auto *block = worklist.pop_back_val();
+
+    // Compute the conversion set of each of the nested operations.
+    for (auto &op : *block) {
+      toConvert.emplace_back(&op);
+      for (auto &region : op.getRegions())
+        computeConversionSet(region, toConvert);
     }
+
+    // Recurse to children that haven't been visited.
+    for (Block *succ : block->getSuccessors())
+      if (visitedBlocks.insert(succ).second)
+        worklist.push_back(succ);
   }
 
-  // Store the number of blocks before conversion (new blocks may be added due
-  // to splits or moves, but the operations in them will be processed
-  // elsewhere).
-  unsigned numBlocks = std::distance(region.begin(), region.end());
-
-  // Start a DFS-order traversal of the CFG to make sure defs are converted
-  // before uses in dominated blocks.
-  llvm::DenseSet<Block *> visitedBlocks;
-  if (failed(convertBlock(rewriter, &region.front(), visitedBlocks)))
-    return failure();
-
-  // If some blocks are not reachable through successor chains, they should have
-  // been removed by the DCE before this.
-  if (visitedBlocks.size() != numBlocks)
+  // Check that all blocks in the region were visited.
+  if (llvm::any_of(llvm::drop_begin(region.getBlocks(), 1),
+                   [&](Block &block) { return !visitedBlocks.count(&block); }))
     return emitError(region.getLoc(), "unreachable blocks were not converted");
   return success();
 }
 
-LogicalResult FunctionConverter::convertFunction(
-    FuncOp f, TypeConverter::SignatureConversion *signatureConversion) {
-  // If this is an external function, there is nothing else to do.
-  if (f.isExternal())
+LogicalResult OperationConverter::convert(ConversionPatternRewriter &rewriter,
+                                          Operation *op) {
+  // Legalize the given operation.
+  if (failed(opLegalizer.legalize(op, rewriter))) {
+    // Handle the case of a failed conversion for each of the different modes.
+    /// Full conversions expect all operations to be converted.
+    if (mode == OpConversionMode::Full)
+      return op->emitError()
+             << "failed to legalize operation '" << op->getName() << "'";
+    /// Partial conversions allow conversions to fail iff the operation was not
+    /// explicitly marked as illegal.
+    if (mode == OpConversionMode::Partial && opLegalizer.isIllegal(op))
+      return op->emitError()
+             << "failed to legalize operation '" << op->getName()
+             << "' that was explicitly marked illegal";
+  } else if (mode == OpConversionMode::Analysis) {
+    /// Analysis conversions don't fail if any operations fail to legalize, they
+    /// are only interested in the operations that were successfully legalized.
+    legalizableOps->insert(op);
+  }
+  return success();
+}
+
+LogicalResult
+OperationConverter::convertOperations(ArrayRef<Operation *> ops,
+                                      TypeConverter *typeConverter) {
+  if (ops.empty())
     return success();
 
-  DialectConversionRewriter rewriter(f.getContext(), typeConverter);
-
-  // Update the signature of the entry block.
-  if (signatureConversion) {
-    rewriter.argConverter.convertSignature(
-        &f.getBody().front(), *signatureConversion, rewriter.mapping);
+  /// Compute the set of operations and blocks to convert.
+  std::vector<Operation *> toConvert;
+  for (auto *op : ops) {
+    toConvert.emplace_back(op);
+    for (auto &region : op->getRegions())
+      if (failed(computeConversionSet(region, toConvert)))
+        return failure();
   }
 
-  // Rewrite the function body.
-  if (failed(
-          convertRegion(rewriter, f.getBody(), /*convertEntryTypes=*/false))) {
-    // Reset any of the generated rewrites.
-    rewriter.discardRewrites();
-    return failure();
+  // Convert each operation and discard rewrites on failure.
+  ConversionPatternRewriter rewriter(ops.front()->getContext(), typeConverter);
+  for (auto *op : toConvert)
+    if (failed(convert(rewriter, op)))
+      return rewriter.getImpl().discardRewrites(), failure();
+
+  // If a type converter was provided, ensure that all blocks have had their
+  // signatures properly converted.
+  if (typeConverter) {
+    for (auto *op : ops)
+      if (failed(convertBlockSignatures(rewriter, op)))
+        return rewriter.getImpl().discardRewrites(), failure();
   }
 
-  // Otherwise the body conversion succeeded, so apply all rewrites.
-  rewriter.applyRewrites();
+  // Otherwise, the body conversion succeeded. Apply rewrites if this is not an
+  // analysis conversion.
+  if (mode == OpConversionMode::Analysis)
+    rewriter.getImpl().discardRewrites();
+  else
+    rewriter.getImpl().applyRewrites();
   return success();
 }
 
@@ -987,34 +1115,21 @@ LogicalResult FunctionConverter::convertFunction(
 // Type Conversion
 //===----------------------------------------------------------------------===//
 
-/// Append new result types to the signature conversion.
-void TypeConverter::SignatureConversion::addResults(ArrayRef<Type> results) {
-  resultTypes.append(results.begin(), results.end());
-}
-
 /// Remap an input of the original signature with a new set of types. The
 /// new types are appended to the new signature conversion.
-void TypeConverter::SignatureConversion::addInputs(
-    unsigned origInputNo, ArrayRef<Type> types,
-    ArrayRef<NamedAttributeList> attrs) {
+void TypeConverter::SignatureConversion::addInputs(unsigned origInputNo,
+                                                   ArrayRef<Type> types) {
   assert(!types.empty() && "expected valid types");
   remapInput(origInputNo, /*newInputNo=*/argTypes.size(), types.size());
-  addInputs(types, attrs);
+  addInputs(types);
 }
 
 /// Append new input types to the signature conversion, this should only be
 /// used if the new types are not intended to remap an existing input.
-void TypeConverter::SignatureConversion::addInputs(
-    ArrayRef<Type> types, ArrayRef<NamedAttributeList> attrs) {
+void TypeConverter::SignatureConversion::addInputs(ArrayRef<Type> types) {
   assert(!types.empty() &&
          "1->0 type remappings don't need to be added explicitly");
-  assert(attrs.empty() || types.size() == attrs.size());
-
   argTypes.append(types.begin(), types.end());
-  if (attrs.empty())
-    argAttrs.resize(argTypes.size());
-  else
-    argAttrs.append(attrs.begin(), attrs.end());
 }
 
 /// Remap an input of the original signature with a range of types in the
@@ -1037,41 +1152,35 @@ LogicalResult TypeConverter::convertType(Type t,
   return failure();
 }
 
-/// Convert the given FunctionType signature.
-auto TypeConverter::convertSignature(FunctionType type,
-                                     ArrayRef<NamedAttributeList> argAttrs)
-    -> llvm::Optional<SignatureConversion> {
-  SignatureConversion result(type.getNumInputs());
-  if (failed(convertSignature(type, argAttrs, result)))
-    return llvm::None;
-  return result;
+/// Convert the given set of types, filling 'results' as necessary. This
+/// returns failure if the conversion of any of the types fails, success
+/// otherwise.
+LogicalResult TypeConverter::convertTypes(ArrayRef<Type> types,
+                                          SmallVectorImpl<Type> &results) {
+  for (auto type : types)
+    if (failed(convertType(type, results)))
+      return failure();
+  return success();
 }
 
-/// This hook allows for changing a FunctionType signature.
-LogicalResult
-TypeConverter::convertSignature(FunctionType type,
-                                ArrayRef<NamedAttributeList> argAttrs,
-                                SignatureConversion &result) {
-  // Convert the original function arguments.
-  for (unsigned i = 0, e = type.getNumInputs(); i != e; ++i)
-    if (failed(convertSignatureArg(i, type.getInput(i), argAttrs[i], result)))
-      return failure();
+/// Return true if the given type is legal for this type converter, i.e. the
+/// type converts to itself.
+bool TypeConverter::isLegal(Type type) {
+  SmallVector<Type, 1> results;
+  return succeeded(convertType(type, results)) && results.size() == 1 &&
+         results.front() == type;
+}
 
-  // Convert the original function results.
-  SmallVector<Type, 1> convertedTypes;
-  for (auto t : type.getResults()) {
-    convertedTypes.clear();
-    if (failed(convertType(t, convertedTypes)))
-      return failure();
-    result.addResults(convertedTypes);
-  }
-
-  return success();
+/// Return true if the inputs and outputs of the given function type are
+/// legal.
+bool TypeConverter::isSignatureLegal(FunctionType funcType) {
+  return llvm::all_of(
+      llvm::concat<const Type>(funcType.getInputs(), funcType.getResults()),
+      [this](Type type) { return isLegal(type); });
 }
 
 /// This hook allows for converting a specific argument of a signature.
 LogicalResult TypeConverter::convertSignatureArg(unsigned inputNo, Type type,
-                                                 NamedAttributeList attrs,
                                                  SignatureConversion &result) {
   // Try to convert the given input type.
   SmallVector<Type, 1> convertedTypes;
@@ -1083,10 +1192,72 @@ LogicalResult TypeConverter::convertSignatureArg(unsigned inputNo, Type type,
     return success();
 
   // Otherwise, add the new inputs.
-  auto convertedAttrs =
-      convertedTypes.size() == 1 ? llvm::makeArrayRef(attrs) : llvm::None;
-  result.addInputs(inputNo, convertedTypes, convertedAttrs);
+  result.addInputs(inputNo, convertedTypes);
   return success();
+}
+
+/// Create a default conversion pattern that rewrites the type signature of a
+/// FuncOp.
+namespace {
+struct FuncOpSignatureConversion : public ConversionPattern {
+  FuncOpSignatureConversion(MLIRContext *ctx, TypeConverter &converter)
+      : ConversionPattern(FuncOp::getOperationName(), 1, ctx),
+        converter(converter) {}
+
+  /// Hook for derived classes to implement combined matching and rewriting.
+  PatternMatchResult
+  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto funcOp = cast<FuncOp>(op);
+    FunctionType type = funcOp.getType();
+
+    // Convert the original function arguments.
+    TypeConverter::SignatureConversion result(type.getNumInputs());
+    for (unsigned i = 0, e = type.getNumInputs(); i != e; ++i)
+      if (failed(converter.convertSignatureArg(i, type.getInput(i), result)))
+        return matchFailure();
+
+    // Convert the original function results.
+    SmallVector<Type, 1> convertedResults;
+    if (failed(converter.convertTypes(type.getResults(), convertedResults)))
+      return matchFailure();
+
+    // Create a new function with an updated signature.
+    auto newFuncOp = rewriter.cloneWithoutRegions(funcOp);
+    rewriter.inlineRegionBefore(funcOp.getBody(), newFuncOp.getBody(),
+                                newFuncOp.end());
+    newFuncOp.setType(FunctionType::get(result.getConvertedTypes(),
+                                        convertedResults, funcOp.getContext()));
+
+    // Tell the rewriter to convert the region signature.
+    rewriter.applySignatureConversion(&newFuncOp.getBody(), result);
+    rewriter.replaceOp(op, llvm::None);
+    return matchSuccess();
+  }
+
+  /// The type converter to use when rewriting the signature.
+  TypeConverter &converter;
+};
+} // end anonymous namespace
+
+void mlir::populateFuncOpTypeConversionPattern(
+    OwningRewritePatternList &patterns, MLIRContext *ctx,
+    TypeConverter &converter) {
+  RewriteListBuilder<FuncOpSignatureConversion>::build(patterns, ctx,
+                                                       converter);
+}
+
+/// This function converts the type signature of the given block, by invoking
+/// 'convertSignatureArg' for each argument. This function should return a valid
+/// conversion for the signature on success, None otherwise.
+auto TypeConverter::convertBlockSignature(Block *block)
+    -> llvm::Optional<SignatureConversion> {
+  SignatureConversion conversion(block->getNumArguments());
+  for (unsigned i = 0, e = block->getNumArguments(); i != e; ++i)
+    if (failed(convertSignatureArg(i, block->getArgument(i)->getType(),
+                                   conversion)))
+      return llvm::None;
+  return conversion;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1120,63 +1291,102 @@ auto ConversionTarget::getOpAction(OperationName op) const
   return llvm::None;
 }
 
-//===----------------------------------------------------------------------===//
-// Conversion Application
-//===----------------------------------------------------------------------===//
+/// Return if the given operation instance is legal on this target.
+bool ConversionTarget::isLegal(Operation *op) const {
+  auto action = getOpAction(op->getName());
 
-/// Convert the given module with the provided conversion patterns and type
-/// conversion object. If conversion fails for specific functions, those
-/// functions remains unmodified.
-LogicalResult
-mlir::applyConversionPatterns(ModuleOp module, ConversionTarget &target,
-                              TypeConverter &converter,
-                              OwningRewritePatternList &&patterns) {
-  SmallVector<FuncOp, 32> allFunctions(module.getOps<FuncOp>());
-  return applyConversionPatterns(allFunctions, target, converter,
-                                 std::move(patterns));
-}
+  // Handle dynamic legality.
+  if (action == LegalizationAction::Dynamic) {
+    // Check for callbacks on the operation or dialect.
+    auto opFn = opLegalityFns.find(op->getName());
+    if (opFn != opLegalityFns.end())
+      return opFn->second(op);
+    auto dialectFn = dialectLegalityFns.find(op->getName().getDialect());
+    if (dialectFn != dialectLegalityFns.end())
+      return dialectFn->second(op);
 
-/// Convert the given functions with the provided conversion patterns.
-LogicalResult mlir::applyConversionPatterns(
-    MutableArrayRef<FuncOp> fns, ConversionTarget &target,
-    TypeConverter &converter, OwningRewritePatternList &&patterns) {
-  if (fns.empty())
-    return success();
-
-  // Build the function converter.
-  auto *ctx = fns.front().getContext();
-  FunctionConverter funcConverter(ctx, target, patterns, &converter);
-
-  // Try to convert each of the functions within the module.
-  SmallVector<NamedAttributeList, 4> argAttrs;
-  for (auto func : fns) {
-    argAttrs.clear();
-    func.getAllArgAttrs(argAttrs);
-
-    // Convert the function type using the type converter.
-    auto conversion = converter.convertSignature(func.getType(), argAttrs);
-    if (!conversion)
-      return failure();
-
-    // Update the function signature.
-    func.setType(conversion->getConvertedType(ctx));
-    func.setAllArgAttrs(conversion->getConvertedArgAttrs());
-
-    // Convert the body of this function.
-    if (failed(funcConverter.convertFunction(func, &*conversion)))
-      return failure();
+    // Otherwise, invoke the hook on the derived instance.
+    return isDynamicallyLegal(op);
   }
 
-  return success();
+  // Otherwise, the operation is only legal if it was marked 'Legal'.
+  return action == LegalizationAction::Legal;
 }
 
-/// Convert the given function with the provided conversion patterns. This will
-/// convert as many of the operations within 'fn' as possible given the set of
-/// patterns.
-LogicalResult
-mlir::applyConversionPatterns(FuncOp fn, ConversionTarget &target,
-                              OwningRewritePatternList &&patterns) {
-  // Convert the body of this function.
-  FunctionConverter converter(fn.getContext(), target, patterns);
-  return converter.convertFunction(fn, /*signatureConversion=*/nullptr);
+/// Set the dynamic legality callback for the given operation.
+void ConversionTarget::setLegalityCallback(
+    OperationName name, const DynamicLegalityCallbackFn &callback) {
+  assert(callback && "expected valid legality callback");
+  opLegalityFns[name] = callback;
+}
+
+/// Set the dynamic legality callback for the given dialects.
+void ConversionTarget::setLegalityCallback(
+    ArrayRef<StringRef> dialects, const DynamicLegalityCallbackFn &callback) {
+  assert(callback && "expected valid legality callback");
+  for (StringRef dialect : dialects)
+    dialectLegalityFns[dialect] = callback;
+}
+
+//===----------------------------------------------------------------------===//
+// Op Conversion Entry Points
+//===----------------------------------------------------------------------===//
+
+/// Apply a partial conversion on the given operations, and all nested
+/// operations. This method converts as many operations to the target as
+/// possible, ignoring operations that failed to legalize.
+LogicalResult mlir::applyPartialConversion(ArrayRef<Operation *> ops,
+                                           ConversionTarget &target,
+                                           OwningRewritePatternList &&patterns,
+                                           TypeConverter *converter) {
+  OperationConverter opConverter(target, patterns, OpConversionMode::Partial);
+  return opConverter.convertOperations(ops, converter);
+}
+LogicalResult mlir::applyPartialConversion(Operation *op,
+                                           ConversionTarget &target,
+                                           OwningRewritePatternList &&patterns,
+                                           TypeConverter *converter) {
+  return applyPartialConversion(llvm::makeArrayRef(op), target,
+                                std::move(patterns), converter);
+}
+
+/// Apply a complete conversion on the given operations, and all nested
+/// operations. This method will return failure if the conversion of any
+/// operation fails.
+LogicalResult mlir::applyFullConversion(ArrayRef<Operation *> ops,
+                                        ConversionTarget &target,
+                                        OwningRewritePatternList &&patterns,
+                                        TypeConverter *converter) {
+  OperationConverter opConverter(target, patterns, OpConversionMode::Full);
+  return opConverter.convertOperations(ops, converter);
+}
+LogicalResult mlir::applyFullConversion(Operation *op, ConversionTarget &target,
+                                        OwningRewritePatternList &&patterns,
+                                        TypeConverter *converter) {
+  return applyFullConversion(llvm::makeArrayRef(op), target,
+                             std::move(patterns), converter);
+}
+
+/// Apply an analysis conversion on the given operations, and all nested
+/// operations. This method analyzes which operations would be successfully
+/// converted to the target if a conversion was applied. All operations that
+/// were found to be legalizable to the given 'target' are placed within the
+/// provided 'convertedOps' set; note that no actual rewrites are applied to the
+/// operations on success and only pre-existing operations are added to the set.
+LogicalResult mlir::applyAnalysisConversion(ArrayRef<Operation *> ops,
+                                            ConversionTarget &target,
+                                            OwningRewritePatternList &&patterns,
+                                            DenseSet<Operation *> &convertedOps,
+                                            TypeConverter *converter) {
+  OperationConverter opConverter(target, patterns, OpConversionMode::Analysis,
+                                 &convertedOps);
+  return opConverter.convertOperations(ops, converter);
+}
+LogicalResult mlir::applyAnalysisConversion(Operation *op,
+                                            ConversionTarget &target,
+                                            OwningRewritePatternList &&patterns,
+                                            DenseSet<Operation *> &convertedOps,
+                                            TypeConverter *converter) {
+  return applyAnalysisConversion(llvm::makeArrayRef(op), target,
+                                 std::move(patterns), convertedOps, converter);
 }

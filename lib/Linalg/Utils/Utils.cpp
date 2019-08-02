@@ -20,6 +20,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "mlir/Linalg/Utils/Utils.h"
+#include "mlir/Dialect/LoopOps/LoopOps.h"
 #include "mlir/EDSC/Helpers.h"
 #include "mlir/IR/AffineExpr.h"
 #include "mlir/IR/AffineMap.h"
@@ -29,6 +30,7 @@
 #include "mlir/Linalg/Passes.h"
 #include "mlir/Linalg/Utils/Intrinsics.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/StandardOps/Ops.h"
 #include "mlir/Support/STLExtras.h"
 #include "mlir/Transforms/FoldUtils.h"
 
@@ -37,6 +39,7 @@ using namespace mlir::edsc;
 using namespace mlir::edsc::intrinsics;
 using namespace mlir::linalg;
 using namespace mlir::linalg::intrinsics;
+using namespace mlir::loop;
 
 mlir::edsc::LoopRangeBuilder::LoopRangeBuilder(ValueHandle *iv,
                                                ValueHandle range) {
@@ -47,7 +50,7 @@ mlir::edsc::LoopRangeBuilder::LoopRangeBuilder(ValueHandle *iv,
   auto lb = rangeOp.min();
   auto ub = rangeOp.max();
   auto step = rangeOp.step();
-  auto forOp = OperationHandle::createOp<linalg::ForOp>(lb, ub, step);
+  auto forOp = OperationHandle::createOp<ForOp>(lb, ub, step);
   *iv = ValueHandle(forOp.getInductionVar());
   auto *body = forOp.getBody();
   enter(body, /*prev=*/1);
@@ -55,8 +58,8 @@ mlir::edsc::LoopRangeBuilder::LoopRangeBuilder(ValueHandle *iv,
 
 mlir::edsc::LoopRangeBuilder::LoopRangeBuilder(ValueHandle *iv,
                                                SubViewOp::Range range) {
-  auto forOp = OperationHandle::createOp<linalg::ForOp>(range.min, range.max,
-                                                        range.step);
+  auto forOp =
+      OperationHandle::createOp<ForOp>(range.min, range.max, range.step);
   *iv = ValueHandle(forOp.getInductionVar());
   auto *body = forOp.getBody();
   enter(body, /*prev=*/1);
@@ -137,6 +140,26 @@ SmallVector<Value *, 4> mlir::linalg::applyMapToValues(OpBuilder &b,
   for (auto expr : map.getResults()) {
     AffineMap map = AffineMap::get(numDims, 0, expr);
     res.push_back(emitOrFoldComposedAffineApply(b, loc, map, values, state));
+  }
+  return res;
+}
+
+/// Returns all the operands of `linalgOp` that are not views.
+/// Asserts that these operands are value types to allow transformations like
+/// tiling to just use the values when cloning `linalgOp`.
+SmallVector<Value *, 4>
+mlir::linalg::getAssumedNonViewOperands(LinalgOp linalgOp) {
+  auto *op = linalgOp.getOperation();
+  unsigned numViews = linalgOp.getNumInputsAndOutputs();
+  unsigned nOperands = op->getNumOperands() - numViews;
+  SmallVector<Value *, 4> res;
+  res.reserve(nOperands);
+  for (unsigned i = 0; i < nOperands; ++i) {
+    res.push_back(op->getOperand(numViews + i));
+    auto t = res.back()->getType();
+    (void)t;
+    assert((t.isIntOrIndexOrFloat() || t.isa<VectorType>()) &&
+           "expected scalar or vector type");
   }
   return res;
 }

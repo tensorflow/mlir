@@ -1067,7 +1067,7 @@ static LogicalResult verify(ConstantOp &op) {
     return op.emitOpError() << "requires attribute's type (" << value.getType()
                             << ") to match op's return type (" << type << ")";
 
-  if (type.isa<IndexType>())
+  if (type.isa<IndexType>() || value.isa<BoolAttr>())
     return success();
 
   if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
@@ -1114,8 +1114,7 @@ static LogicalResult verify(ConstantOp &op) {
   if (type.isa<NoneType>() && value.isa<UnitAttr>())
     return success();
 
-  return op.emitOpError(
-      "requires a result type that aligns with the 'value' attribute");
+  return op.emitOpError("unsupported 'value' attribute: ") << value;
 }
 
 OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
@@ -1133,8 +1132,9 @@ bool ConstantOp::isBuildableWith(Attribute value, Type type) {
   if (value.getType() != type)
     return false;
   // Finally, check that the attribute kind is handled.
-  return value.isa<IntegerAttr>() || value.isa<FloatAttr>() ||
-         value.isa<ElementsAttr>() || value.isa<UnitAttr>();
+  return value.isa<BoolAttr>() || value.isa<IntegerAttr>() ||
+         value.isa<FloatAttr>() || value.isa<ElementsAttr>() ||
+         value.isa<UnitAttr>();
 }
 
 void ConstantFloatOp::build(Builder *builder, OperationState *result,
@@ -1636,186 +1636,6 @@ OpFoldResult ExtractElementOp::fold(ArrayRef<Attribute> operands) {
   return {};
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// ForOp.
-////////////////////////////////////////////////////////////////////////////////
-
-// Check that if a "block" is not empty, it has a `TerminatorOp` terminator.
-static LogicalResult checkHasTerminator(OpState &op, Block &block) {
-  if (block.empty() || isa<TerminatorOp>(block.back()))
-    return success();
-
-  return op.emitOpError("expects regions to end with '" +
-                        TerminatorOp::getOperationName() + "'")
-             .attachNote()
-         << "in custom textual format, the absence of terminator implies '"
-         << TerminatorOp::getOperationName() << "'";
-}
-
-void mlir::ensureStdTerminator(Region &region, Builder &builder, Location loc) {
-  impl::ensureRegionTerminator<TerminatorOp>(region, builder, loc);
-}
-
-void ForOp::build(Builder *builder, OperationState *result, Value *lb,
-                  Value *ub, Value *step) {
-  result->addOperands({lb, ub, step});
-  Region *bodyRegion = result->addRegion();
-  ensureStdTerminator(*bodyRegion, *builder, result->location);
-  bodyRegion->front().addArgument(builder->getIndexType());
-}
-
-LogicalResult verify(ForOp op) {
-  if (auto cst = dyn_cast_or_null<ConstantIndexOp>(op.step()->getDefiningOp()))
-    if (cst.getValue() <= 0)
-      return op.emitOpError("constant step operand must be nonnegative");
-
-  // Check that the body defines as single block argument for the induction
-  // variable.
-  auto *body = op.body();
-  if (body->getNumArguments() != 1 ||
-      !body->getArgument(0)->getType().isIndex())
-    return op.emitOpError("expected body to have a single index argument for "
-                          "the induction variable");
-  if (failed(checkHasTerminator(op, *body)))
-    return failure();
-  return success();
-}
-
-static void print(OpAsmPrinter *p, ForOp op) {
-  *p << op.getOperationName() << " " << *op.getInductionVar() << " = "
-     << *op.lowerBound() << " to " << *op.upperBound() << " step "
-     << *op.step();
-  p->printRegion(op.region(),
-                 /*printEntryBlockArgs=*/false,
-                 /*printBlockTerminators=*/false);
-  p->printOptionalAttrDict(op.getAttrs());
-}
-
-static ParseResult parseForOp(OpAsmParser *parser, OperationState *result) {
-  auto &builder = parser->getBuilder();
-  OpAsmParser::OperandType inductionVariable, lb, ub, step;
-  // Parse the induction variable followed by '='.
-  if (parser->parseRegionArgument(inductionVariable) || parser->parseEqual())
-    return failure();
-
-  // Parse loop bounds.
-  Type indexType = builder.getIndexType();
-  if (parser->parseOperand(lb) ||
-      parser->resolveOperand(lb, indexType, result->operands) ||
-      parser->parseKeyword("to") || parser->parseOperand(ub) ||
-      parser->resolveOperand(ub, indexType, result->operands) ||
-      parser->parseKeyword("step") || parser->parseOperand(step) ||
-      parser->resolveOperand(step, indexType, result->operands))
-    return failure();
-
-  // Parse the body region.
-  Region *body = result->addRegion();
-  if (parser->parseRegion(*body, inductionVariable, indexType))
-    return failure();
-
-  ensureStdTerminator(*body, builder, result->location);
-
-  // Parse the optional attribute list.
-  if (parser->parseOptionalAttributeDict(result->attributes))
-    return failure();
-
-  return success();
-}
-
-ForOp getForOpInductionVarOwner(Value *val) {
-  auto *ivArg = dyn_cast<BlockArgument>(val);
-  if (!ivArg)
-    return ForOp();
-  assert(ivArg->getOwner() && "unlinked block argument");
-  auto *containingInst = ivArg->getOwner()->getContainingOp();
-  return dyn_cast_or_null<ForOp>(containingInst);
-}
-
-//===----------------------------------------------------------------------===//
-// IfOp
-//===----------------------------------------------------------------------===//
-
-void IfOp::build(Builder *builder, OperationState *result, Value *cond,
-                 bool withElseRegion) {
-  result->addOperands(cond);
-  Region *thenRegion = result->addRegion();
-  Region *elseRegion = result->addRegion();
-  ensureStdTerminator(*thenRegion, *builder, result->location);
-  if (withElseRegion)
-    ensureStdTerminator(*elseRegion, *builder, result->location);
-}
-
-static LogicalResult verify(IfOp op) {
-  // Verify that the entry of each child region does not have arguments.
-  for (auto &region : op.getOperation()->getRegions()) {
-    if (region.empty())
-      continue;
-
-    // TODO(riverriddle) We currently do not allow multiple blocks in child
-    // regions.
-    if (std::next(region.begin()) != region.end())
-      return op.emitOpError("expected one block per 'then' or 'else' regions");
-    if (failed(checkHasTerminator(op, region.front())))
-      return failure();
-
-    for (auto &b : region)
-      if (b.getNumArguments() != 0)
-        return op.emitOpError(
-            "requires that child entry blocks have no arguments");
-  }
-  return success();
-}
-
-static ParseResult parseIfOp(OpAsmParser *parser, OperationState *result) {
-  // Create the regions for 'then'.
-  result->regions.reserve(2);
-  Region *thenRegion = result->addRegion();
-  Region *elseRegion = result->addRegion();
-
-  auto &builder = parser->getBuilder();
-  OpAsmParser::OperandType cond;
-  Type i1Type = builder.getIntegerType(1);
-  if (parser->parseOperand(cond) ||
-      parser->resolveOperand(cond, i1Type, result->operands))
-    return failure();
-
-  // Parse the 'then' region.
-  if (parser->parseRegion(*thenRegion, {}, {}))
-    return failure();
-  ensureStdTerminator(*thenRegion, parser->getBuilder(), result->location);
-
-  // If we find an 'else' keyword then parse the 'else' region.
-  if (!parser->parseOptionalKeyword("else")) {
-    if (parser->parseRegion(*elseRegion, {}, {}))
-      return failure();
-    ensureStdTerminator(*elseRegion, parser->getBuilder(), result->location);
-  }
-
-  // Parse the optional attribute list.
-  if (parser->parseOptionalAttributeDict(result->attributes))
-    return failure();
-
-  return success();
-}
-
-static void print(OpAsmPrinter *p, IfOp op) {
-  *p << IfOp::getOperationName() << " " << *op.condition();
-  p->printRegion(op.thenRegion(),
-                 /*printEntryBlockArgs=*/false,
-                 /*printBlockTerminators=*/false);
-
-  // Print the 'else' regions if it exists and has a block.
-  auto &elseRegion = op.elseRegion();
-  if (!elseRegion.empty()) {
-    *p << " else";
-    p->printRegion(elseRegion,
-                   /*printEntryBlockArgs=*/false,
-                   /*printBlockTerminators=*/false);
-  }
-
-  p->printOptionalAttrDict(op.getAttrs());
-}
-
 //===----------------------------------------------------------------------===//
 // IndexCastOp
 //===----------------------------------------------------------------------===//
@@ -2048,9 +1868,7 @@ static void print(OpAsmPrinter *p, ReturnOp op) {
 }
 
 static LogicalResult verify(ReturnOp op) {
-  // TODO(b/137008268): Return op should verify that it is nested directly
-  // within a function operation.
-  auto function = op.getParentOfType<FuncOp>();
+  auto function = cast<FuncOp>(op.getParentOp());
 
   // The operand number and types must match the function signature.
   const auto &results = function.getType().getResults();
@@ -2067,6 +1885,15 @@ static LogicalResult verify(ReturnOp op) {
              << ") doesn't match function result type (" << results[i] << ")";
 
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// SIToFPOp
+//===----------------------------------------------------------------------===//
+
+// sitofp is applicable from integer types to float types.
+bool SIToFPOp::areCastCompatible(Type a, Type b) {
+  return a.isa<IntegerType>() && b.isa<FloatType>();
 }
 
 //===----------------------------------------------------------------------===//

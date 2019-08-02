@@ -34,7 +34,7 @@ func @rank(f32) {
 
 func @constant() {
 ^bb:
-  %x = "std.constant"(){value = "xyz"} : () -> i32 // expected-error {{requires a result type that aligns with the 'value' attribute}}
+  %x = "std.constant"(){value = "xyz"} : () -> i32 // expected-error {{unsupported 'value' attribute}}
   return
 }
 
@@ -702,112 +702,26 @@ func @index_cast_float_to_index(%arg0: f32) {
 
 // -----
 
-func @std_for_lb(%arg0: f32, %arg1: index) {
-  // expected-error@+1 {{operand #0 must be index}}
-  "std.for"(%arg0, %arg1, %arg1) : (f32, index, index) -> ()
+func @sitofp_i32_to_i64(%arg0 : i32) {
+  // expected-error@+1 {{are cast incompatible}}
+  %0 = sitofp %arg0 : i32 to i64
   return
 }
 
 // -----
 
-func @std_for_ub(%arg0: f32, %arg1: index) {
-  // expected-error@+1 {{operand #1 must be index}}
-  "std.for"(%arg1, %arg0, %arg1) : (index, f32, index) -> ()
+func @sitofp_f32_to_i32(%arg0 : f32) {
+  // expected-error@+1 {{are cast incompatible}}
+  %0 = sitofp %arg0 : f32 to i32
   return
 }
 
 // -----
 
-func @std_for_step(%arg0: f32, %arg1: index) {
-  // expected-error@+1 {{operand #2 must be index}}
-  "std.for"(%arg1, %arg1, %arg0) : (index, index, f32) -> ()
-  return
-}
-
-// -----
-
-func @std_for_step_nonnegative(%arg0: index) {
-  // expected-error@+2 {{constant step operand must be nonnegative}}
-  %c0 = constant 0 : index
-  "std.for"(%arg0, %arg0, %c0) ({^bb0:}) : (index, index, index) -> ()
-  return
-}
-
-// -----
-
-func @std_for_one_region(%arg0: index) {
-  // expected-error@+1 {{incorrect number of regions: expected 1 but found 2}}
-  "std.for"(%arg0, %arg0, %arg0) (
-    {"std.terminator"() : () -> ()},
-    {"std.terminator"() : () -> ()}
-  ) : (index, index, index) -> ()
-  return
-}
-
-// -----
-
-func @std_for_single_block(%arg0: index) {
-  // expected-error@+1 {{region #0 ('region') failed to verify constraint: region with 1 blocks}}
-  "std.for"(%arg0, %arg0, %arg0) (
-    {
-    ^bb1:
-      "std.terminator"() : () -> ()
-    ^bb2:
-      "std.terminator"() : () -> ()
-    }
-  ) : (index, index, index) -> ()
-  return
-}
-
-// -----
-
-func @std_for_single_index_argument(%arg0: index) {
-  // expected-error@+1 {{expected body to have a single index argument for the induction variable}}
-  "std.for"(%arg0, %arg0, %arg0) (
-    {
-    ^bb0(%i0 : f32):
-      "std.terminator"() : () -> ()
-    }
-  ) : (index, index, index) -> ()
-  return
-}
-
-// -----
-
-func @std_if_not_i1(%arg0: index) {
-  // expected-error@+1 {{operand #0 must be 1-bit integer}}
-  "std.if"(%arg0) : (index) -> ()
-  return
-}
-
-// -----
-
-func @std_if_more_than_2_regions(%arg0: i1) {
-  // expected-error@+1 {{op has incorrect number of regions: expected 2}}
-  "std.if"(%arg0) ({}, {}, {}): (i1) -> ()
-  return
-}
-
-// -----
-
-func @std_if_not_one_block_per_region(%arg0: i1) {
-  // expected-error@+1 {{region #0 ('thenRegion') failed to verify constraint: region with 1 blocks}}
-  "std.if"(%arg0) ({
-    ^bb0:
-      "std.terminator"() : () -> ()
-    ^bb1:
-      "std.terminator"() : () -> ()
-  }, {}): (i1) -> ()
-  return
-}
-
-// -----
-
-func @std_if_illegal_block_argument(%arg0: i1) {
-  // expected-error@+1 {{requires that child entry blocks have no arguments}}
-  "std.if"(%arg0) ({
-    ^bb0(%0 : index):
-      "std.terminator"() : () -> ()
-  }, {}): (i1) -> ()
+func @return_not_in_function() {
+  "foo.region"() ({
+    // expected-error@+1 {{'std.return' op expects parent op 'func'}}
+    return
+  }): () -> ()
   return
 }

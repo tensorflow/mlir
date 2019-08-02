@@ -15,10 +15,11 @@ add_llvm_library(MLIRTestDialect
 )
 add_dependencies(MLIRTestDialect
   MLIRTestOpsIncGen
-  MLIRTypeUtilities
+  MLIRIR
   LLVMSupport
 )
 target_link_libraries(MLIRTestDialect
-  MLIRTypeUtilities
+  MLIRDialect
+  MLIRIR
   LLVMSupport
 )

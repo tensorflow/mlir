@@ -19,6 +19,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "mlir/Dialect/LoopOps/LoopOps.h"
 #include "mlir/EDSC/Helpers.h"
 #include "mlir/IR/AffineExpr.h"
 #include "mlir/IR/AffineExprVisitor.h"
@@ -41,6 +42,7 @@ using namespace mlir::edsc;
 using namespace mlir::edsc::intrinsics;
 using namespace mlir::linalg;
 using namespace mlir::linalg::intrinsics;
+using namespace mlir::loop;
 
 #define DEBUG_TYPE "linalg-tiling"
 
@@ -383,8 +385,6 @@ mlir::linalg::tileLinalgOp(LinalgOp op, ArrayRef<Value *> tileSizes,
     auto b = ScopedContext::getBuilder();
     auto loc = ScopedContext::getLocation();
     SmallVector<Value *, 4> ivValues(ivs.begin(), ivs.end());
-    // If/when the assertion below becomes false, templatize `makeTiledViews`.
-    assert(op.getNumInputsAndOutputs() == op.getOperation()->getNumOperands());
     auto views =
         makeTiledViews(b, loc, op, ivValues, tileSizes, viewSizes, folder);
 
@@ -394,6 +394,8 @@ mlir::linalg::tileLinalgOp(LinalgOp op, ArrayRef<Value *> tileSizes,
                                                  viewsToPromote.end()),
                                 [](bool b) { return b; });
     if (!promote) {
+      auto operands = getAssumedNonViewOperands(op);
+      views.append(operands.begin(), operands.end());
       res = op.create(b, loc, views, op.getAttrs());
       return;
     }
@@ -424,6 +426,8 @@ mlir::linalg::tileLinalgOp(LinalgOp op, ArrayRef<Value *> tileSizes,
         opViews[i] = views[i];
       }
     }
+    auto operands = getAssumedNonViewOperands(op);
+    opViews.append(operands.begin(), operands.end());
     res = op.create(b, loc, opViews, op.getAttrs());
 
     // 6. Emit write-back for the promoted output views: copy the partial view.
@@ -442,7 +446,7 @@ mlir::linalg::tileLinalgOp(LinalgOp op, ArrayRef<Value *> tileSizes,
   SmallVector<ForOp, 8> loops;
   loops.reserve(ivs.size());
   for (auto iv : ivs)
-    loops.push_back(linalg::getForInductionVarOwner(iv));
+    loops.push_back(loop::getForInductionVarOwner(iv));
 
   return TiledLinalgOp{res, loops};
 }

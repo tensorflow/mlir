@@ -35,46 +35,15 @@
 using namespace mlir;
 using namespace mlir::LLVM;
 
+#include "mlir/LLVMIR/LLVMOpsEnums.cpp.inc"
+
 //===----------------------------------------------------------------------===//
 // Printing/parsing for LLVM::ICmpOp.
 //===----------------------------------------------------------------------===//
 
-// Return an array of mnemonics for ICmpPredicates indexed by its value.
-static const char *const *getICmpPredicateNames() {
-  static const char *predicateNames[]{/*EQ*/ "eq",
-                                      /*NE*/ "ne",
-                                      /*SLT*/ "slt",
-                                      /*SLE*/ "sle",
-                                      /*SGT*/ "sgt",
-                                      /*SGE*/ "sge",
-                                      /*ULT*/ "ult",
-                                      /*ULE*/ "ule",
-                                      /*UGT*/ "ugt",
-                                      /*UGE*/ "uge"};
-  return predicateNames;
-}
-
-// Returns a value of the ICmp predicate corresponding to the given mnemonic.
-// Returns -1 if there is no such mnemonic.
-static int getICmpPredicateByName(StringRef name) {
-  return llvm::StringSwitch<int>(name)
-      .Case("eq", 0)
-      .Case("ne", 1)
-      .Case("slt", 2)
-      .Case("sle", 3)
-      .Case("sgt", 4)
-      .Case("sge", 5)
-      .Case("ult", 6)
-      .Case("ule", 7)
-      .Case("ugt", 8)
-      .Case("uge", 9)
-      .Default(-1);
-}
-
 static void printICmpOp(OpAsmPrinter *p, ICmpOp &op) {
-  *p << op.getOperationName() << " \""
-     << getICmpPredicateNames()[op.predicate().getZExtValue()] << "\" "
-     << *op.getOperand(0) << ", " << *op.getOperand(1);
+  *p << op.getOperationName() << " \"" << stringifyICmpPredicate(op.predicate())
+     << "\" " << *op.getOperand(0) << ", " << *op.getOperand(1);
   p->printOptionalAttrDict(op.getAttrs(), {"predicate"});
   *p << " : " << op.lhs()->getType();
 }
@@ -104,13 +73,15 @@ static ParseResult parseICmpOp(OpAsmParser *parser, OperationState *result) {
   if (!predicateStr)
     return parser->emitError(predicateLoc,
                              "expected 'predicate' attribute of string type");
-  int predicateValue = getICmpPredicateByName(predicateStr.getValue());
-  if (predicateValue == -1)
+  Optional<ICmpPredicate> predicateValue =
+      symbolizeICmpPredicate(predicateStr.getValue());
+  if (!predicateValue)
     return parser->emitError(predicateLoc)
            << "'" << predicateStr.getValue()
            << "' is an incorrect value of the 'predicate' attribute";
 
-  attrs[0].second = parser->getBuilder().getI64IntegerAttr(predicateValue);
+  attrs[0].second = parser->getBuilder().getI64IntegerAttr(
+      static_cast<int64_t>(predicateValue.getValue()));
 
   // The result type is either i1 or a vector type <? x i1> if the inputs are
   // vectors.
@@ -728,6 +699,69 @@ static ParseResult parseConstantOp(OpAsmParser *parser,
     return failure();
 
   result->addTypes(type);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Builder and verifier for LLVM::LLVMFuncOp.
+//===----------------------------------------------------------------------===//
+
+void LLVMFuncOp::build(Builder *builder, OperationState *result, StringRef name,
+                       LLVMType type, ArrayRef<NamedAttribute> attrs,
+                       ArrayRef<NamedAttributeList> argAttrs) {
+  result->addRegion();
+  result->addAttribute(SymbolTable::getSymbolAttrName(),
+                       builder->getStringAttr(name));
+  result->addAttribute("type", builder->getTypeAttr(type));
+  result->attributes.append(attrs.begin(), attrs.end());
+  if (argAttrs.empty())
+    return;
+
+  unsigned numInputs = type.getUnderlyingType()->getFunctionNumParams();
+  assert(numInputs == argAttrs.size() &&
+         "expected as many argument attribute lists as arguments");
+  SmallString<8> argAttrName;
+  for (unsigned i = 0; i < numInputs; ++i)
+    if (auto argDict = argAttrs[i].getDictionary())
+      result->addAttribute(getArgAttrName(i, argAttrName), argDict);
+}
+
+// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
+// attribute is present.  This can check for preconditions of the
+// getNumArguments hook not failing.
+LogicalResult LLVMFuncOp::verifyType() {
+  auto llvmType = getTypeAttr().getValue().dyn_cast_or_null<LLVMType>();
+  if (!llvmType || !llvmType.getUnderlyingType()->isFunctionTy())
+    return emitOpError("requires '" + getTypeAttrName() +
+                       "' attribute of wrapped LLVM function type");
+
+  return success();
+}
+
+// Hook for OpTrait::FunctionLike, returns the number of function arguments.
+// Depends on the type attribute being correct as checked by verifyType
+unsigned LLVMFuncOp::getNumFuncArguments() {
+  return getType().getUnderlyingType()->getFunctionNumParams();
+}
+
+static LogicalResult verify(LLVMFuncOp op) {
+  if (op.isExternal())
+    return success();
+
+  auto *funcType = cast<llvm::FunctionType>(op.getType().getUnderlyingType());
+  unsigned numArguments = funcType->getNumParams();
+  Block &entryBlock = op.front();
+  for (unsigned i = 0; i < numArguments; ++i) {
+    Type argType = entryBlock.getArgument(i)->getType();
+    auto argLLVMType = argType.dyn_cast<LLVMType>();
+    if (!argLLVMType)
+      return op.emitOpError("entry block argument #")
+             << i << " is not of LLVM type";
+    if (funcType->getParamType(i) != argLLVMType.getUnderlyingType())
+      return op.emitOpError("the type of entry block argument #")
+             << i << " does not match the function signature";
+  }
+
   return success();
 }
 

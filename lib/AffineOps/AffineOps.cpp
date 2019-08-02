@@ -1594,10 +1594,10 @@ void AffineLoadOp::build(Builder *builder, OperationState *result,
   result->addOperands(indices);
   auto memrefType = memref->getType().cast<MemRefType>();
   auto rank = memrefType.getRank();
-  // Create identity map for memrefs with at least one dimension or {} -> (0)
+  // Create identity map for memrefs with at least one dimension or () -> ()
   // for zero-dimensional memrefs.
   auto map = rank ? builder->getMultiDimIdentityMap(rank)
-                  : builder->getConstantAffineMap(0);
+                  : builder->getNullAffineMap(builder->getContext());
   result->addAttribute(getMapAttrName(), builder->getAffineMapAttr(map));
   result->types.push_back(memrefType.getElementType());
 }
@@ -1642,9 +1642,10 @@ LogicalResult AffineLoadOp::verify() {
     AffineMap map = getAttrOfType<AffineMapAttr>(getMapAttrName()).getValue();
     auto rank = getMemRefType().getRank();
     if (rank == 0) {
-      if (map.getNumResults() - 1 != rank)
-        return emitOpError("affine.load affine map num results must be one for "
-                           "zero-dimensional memrefs");
+      if (map.getNumResults() != 0)
+        return emitOpError(
+            "affine.load affine map num results must be zero for "
+            "zero-dimensional memrefs");
     } else if (map.getNumResults() != getMemRefType().getRank())
       return emitOpError("affine.load affine map num results must equal"
                          " memref rank");
@@ -1740,9 +1741,9 @@ LogicalResult AffineStoreOp::verify() {
     AffineMap map = mapAttr.getValue();
     auto rank = getMemRefType().getRank();
     if (rank == 0) {
-      if (map.getNumResults() - 1 != rank)
+      if (map.getNumResults() != 0)
         return emitOpError(
-            "affine.store affine map num results must be one for "
+            "affine.store affine map num results must be zero for "
             "zero-dimensional memrefs");
     } else if (map.getNumResults() != rank)
       return emitOpError("affine.store affine map num results must equal"

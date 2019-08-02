@@ -291,6 +291,10 @@ IntegerSet Builder::getIntegerSet(unsigned dimCount, unsigned symbolCount,
   return IntegerSet::get(dimCount, symbolCount, constraints, isEq);
 }
 
+AffineMap Builder::getNullAffineMap(MLIRContext *context) {
+  return AffineMap::get(context);
+}
+
 AffineMap Builder::getConstantAffineMap(int64_t val) {
   return AffineMap::get(/*dimCount=*/0, /*symbolCount=*/0,
                         {getAffineConstantExpr(val)});

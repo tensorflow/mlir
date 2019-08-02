@@ -1139,3 +1139,39 @@ func @bool_literal_in_non_bool_tensor() {
   // expected-error @+1 {{expected i1 type for 'true' or 'false' values}}
   "foo"() {bar = dense<true> : tensor<2xi16>} : () -> ()
 }
+
+// -----
+
+func @zero_dim_affine_load(%arg0 : memref<i32>) {
+  %c0 = constant 0 : index
+  // expected-error @+1 {{'affine.load' op affine.load affine map num results must be zero for zero-dimensional memrefs}}
+  %0 = affine.load %arg0[%c0, %c0] : memref<i32>
+  return
+}
+
+// -----
+
+func @zero_dim_affine_store(%arg0 : memref<i32>, %arg1 : i32) {
+  %c0 = constant 0 : index
+  // expected-error @+1 {{'affine.store' op affine.store affine map num results must be zero for zero-dimensional memref}}
+  affine.store %arg1, %arg0[%c0, %c0] : memref<i32>
+  return
+}
+
+// -----
+
+func @zero_dim_std_load(%arg0 : memref<i32>) {
+  %c0 = constant 0 : index
+  // expected-error @+1 {{'std.load' op incorrect number of indices for zero-dim load}}
+  %0 = std.load %arg0[%c0, %c0] : memref<i32>
+  return
+}
+
+// -----
+
+func @zero_dim_std_store(%arg0 : memref<i32>, %arg1 : i32) {
+  %c0 = constant 0 : index
+  // expected-error @+1 {{'std.store' op incorrect number of indices for zero-dim store}}
+  store %arg1, %arg0[%c0, %c0] : memref<i32>
+  return
+}

@@ -1681,8 +1681,7 @@ static LogicalResult verify(LoadOp op) {
   auto rank = op.getMemRefType().getRank();
   auto numOperands = op.getNumOperands();
   if (rank == 0) {
-    if (rank != numOperands - 2 /*zero-dim with one index*/ &&
-        rank != numOperands - 1 /*zero-dim with no index*/)
+    if (numOperands != 1)
       return op.emitOpError("incorrect number of indices for zero-dim load");
   } else if (rank != numOperands - 1)
     return op.emitOpError("incorrect number of indices for load");
@@ -1999,8 +1998,7 @@ static LogicalResult verify(StoreOp op) {
   auto rank = op.getMemRefType().getRank();
   auto numOperands = op.getNumOperands();
   if (rank == 0) {
-    if (numOperands != 3 /*zero-dim with one index*/ &&
-        numOperands != 2 /*zero-dim with no index*/)
+    if (numOperands != 2)
       return op.emitOpError("incorrect number of indices for zero-dim store");
   } else if (numOperands != 2 + rank)
     return op.emitOpError("store index operand count not equal to memref rank");

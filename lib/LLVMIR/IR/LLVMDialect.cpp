@@ -635,10 +635,6 @@ static void printReturnOp(OpAsmPrinter *p, ReturnOp &op) {
   *p << ' ' << *op.getOperand(0) << " : " << op.getOperand(0)->getType();
 }
 
-static void printUnreachableOp(OpAsmPrinter *p, UnreachableOp &op) {
-  *p << op.getOperationName() << " : () -> ()";
-}
-
 // <operation> ::= `llvm.return` ssa-use-list attribute-dict? `:`
 //                 type-list-no-parens
 static ParseResult parseReturnOp(OpAsmParser *parser, OperationState *result) {
@@ -655,15 +651,6 @@ static ParseResult parseReturnOp(OpAsmParser *parser, OperationState *result) {
       parser->resolveOperand(operands[0], type, result->operands))
     return failure();
   return success();
-}
-
-// <operation> ::= `llvm.unreachable` `:` type-list-no-parens
-static ParseResult parseUnreachableOp(OpAsmParser *parser,
-                                      OperationState *result) {
-  Type type;
-  if (parser->parseColonType(type))
-    return success();
-  return failure();
 }
 
 //===----------------------------------------------------------------------===//

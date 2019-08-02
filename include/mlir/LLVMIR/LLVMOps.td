@@ -301,14 +301,9 @@ def LLVM_ReturnOp : LLVM_TerminatorOp<"return", []> {
   let printer = [{ printReturnOp(p, *this); }];
 }
 def LLVM_UnreachableOp : LLVM_TerminatorOp<"unreachable", []> {
-  string llvmBuilder = [{
-    builder.CreateUnreachable();
-  }];
-  let verifier = [{
-    return success();
-  }];
-  let parser = [{ return parseUnreachableOp(parser, result); }];
-  let printer = [{ printUnreachableOp(p, *this); }];
+  string llvmBuilder = [{ builder.CreateUnreachable(); }];
+  let parser = [{ return success(); }];
+  let printer = [{ *p << getOperationName(); }];
 }
 
 // Pseudo-operations (do not appear in LLVM IR but necessary for the dialect to

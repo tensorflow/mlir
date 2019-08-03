@@ -56,6 +56,26 @@ func @verifyAllAttrConstraintOf() -> (i32, i32, i32) {
 }
 
 //===----------------------------------------------------------------------===//
+// Test Symbol Binding
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: symbolBinding
+func @symbolBinding(%arg0: i32) -> i32 {
+  // An op with one use is matched.
+  // CHECK: %0 = "test.symbol_binding_b"(%arg0)
+  // CHECK: %1 = "test.symbol_binding_c"(%0)
+  // CHECK: %2 = "test.symbol_binding_d"(%0, %1) {attr = 42 : i64}
+  %0 = "test.symbol_binding_a"(%arg0) {attr = 42} : (i32) -> (i32)
+
+  // An op without any use is not matched.
+  // CHECK: "test.symbol_binding_a"(%arg0)
+  %1 = "test.symbol_binding_a"(%arg0) {attr = 42} : (i32) -> (i32)
+
+  // CHECK: return %2
+  return %0: i32
+}
+
+//===----------------------------------------------------------------------===//
 // Test Attributes
 //===----------------------------------------------------------------------===//
 
@@ -147,7 +167,7 @@ func @useMultiResultOpToReplaceWhole() -> (i32, f32, f32) {
 // CHECK-LABEL: @useMultiResultOpToReplacePartial1
 func @useMultiResultOpToReplacePartial1() -> (i32, f32, f32) {
   // CHECK: %0:2 = "test.two_result"()
-  // CHECK: %1 = "test.one_result"()
+  // CHECK: %1 = "test.one_result1"()
   // CHECK: return %0#0, %0#1, %1
   %0:3 = "test.three_result"() {kind = 2} : () -> (i32, f32, f32)
   return %0#0, %0#1, %0#2 : i32, f32, f32
@@ -155,7 +175,7 @@ func @useMultiResultOpToReplacePartial1() -> (i32, f32, f32) {
 
 // CHECK-LABEL: @useMultiResultOpToReplacePartial2
 func @useMultiResultOpToReplacePartial2() -> (i32, f32, f32) {
-  // CHECK: %0 = "test.another_one_result"()
+  // CHECK: %0 = "test.one_result2"()
   // CHECK: %1:2 = "test.another_two_result"()
   // CHECK: return %0, %1#0, %1#1
   %0:3 = "test.three_result"() {kind = 3} : () -> (i32, f32, f32)
@@ -165,7 +185,7 @@ func @useMultiResultOpToReplacePartial2() -> (i32, f32, f32) {
 // CHECK-LABEL: @useMultiResultOpResultsSeparately
 func @useMultiResultOpResultsSeparately() -> (i32, f32, f32) {
   // CHECK: %0:2 = "test.two_result"()
-  // CHECK: %1 = "test.one_result"()
+  // CHECK: %1 = "test.one_result1"()
   // CHECK: %2:2 = "test.two_result"()
   // CHECK: return %0#0, %1, %2#1
   %0:3 = "test.three_result"() {kind = 4} : () -> (i32, f32, f32)
@@ -175,10 +195,23 @@ func @useMultiResultOpResultsSeparately() -> (i32, f32, f32) {
 // CHECK-LABEL: @constraintOnSourceOpResult
 func @constraintOnSourceOpResult() -> (i32, f32, i32) {
   // CHECK: %0:2 = "test.two_result"()
-  // CHECK: %1 = "test.another_one_result"()
-  // CHECK: %2 = "test.one_result"()
+  // CHECK: %1 = "test.one_result2"()
+  // CHECK: %2 = "test.one_result1"()
   // CHECK: return %0#0, %0#1, %1
   %0:2 = "test.two_result"() {kind = 5} : () -> (i32, f32)
   %1:2 = "test.two_result"() {kind = 5} : () -> (i32, f32)
   return %0#0, %0#1, %1#0 : i32, f32, i32
+}
+
+// CHECK-LABEL: @useAuxiliaryOpToReplaceMultiResultOp
+func @useAuxiliaryOpToReplaceMultiResultOp() -> (i32, f32, f32) {
+  // An auxiliary op is generated to help building the op for replacing the
+  // matched op.
+  // CHECK: %0:2 = "test.two_result"()
+
+  // CHECK: %1 = "test.one_result3"(%0#1)
+  // CHECK: %2:2 = "test.another_two_result"()
+  // CHECK: return %1, %2#0, %2#1
+  %0:3 = "test.three_result"() {kind = 6} : () -> (i32, f32, f32)
+  return %0#0, %0#1, %0#2 : i32, f32, f32
 }

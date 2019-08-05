@@ -1597,7 +1597,7 @@ void AffineLoadOp::build(Builder *builder, OperationState *result,
   // Create identity map for memrefs with at least one dimension or () -> ()
   // for zero-dimensional memrefs.
   auto map = rank ? builder->getMultiDimIdentityMap(rank)
-                  : builder->getNullAffineMap(builder->getContext());
+                  : builder->getEmptyAffineMap(builder->getContext());
   result->addAttribute(getMapAttrName(), builder->getAffineMapAttr(map));
   result->types.push_back(memrefType.getElementType());
 }
@@ -1640,13 +1640,7 @@ LogicalResult AffineLoadOp::verify() {
   auto mapAttr = getAttrOfType<AffineMapAttr>(getMapAttrName());
   if (mapAttr) {
     AffineMap map = getAttrOfType<AffineMapAttr>(getMapAttrName()).getValue();
-    auto rank = getMemRefType().getRank();
-    if (rank == 0) {
-      if (map.getNumResults() != 0)
-        return emitOpError(
-            "affine.load affine map num results must be zero for "
-            "zero-dimensional memrefs");
-    } else if (map.getNumResults() != getMemRefType().getRank())
+    if (map.getNumResults() != getMemRefType().getRank())
       return emitOpError("affine.load affine map num results must equal"
                          " memref rank");
     if (map.getNumInputs() != getNumOperands() - 1)
@@ -1739,13 +1733,7 @@ LogicalResult AffineStoreOp::verify() {
   auto mapAttr = getAttrOfType<AffineMapAttr>(getMapAttrName());
   if (mapAttr) {
     AffineMap map = mapAttr.getValue();
-    auto rank = getMemRefType().getRank();
-    if (rank == 0) {
-      if (map.getNumResults() != 0)
-        return emitOpError(
-            "affine.store affine map num results must be zero for "
-            "zero-dimensional memrefs");
-    } else if (map.getNumResults() != rank)
+    if (map.getNumResults() != getMemRefType().getRank())
       return emitOpError("affine.store affine map num results must equal"
                          " memref rank");
     if (map.getNumInputs() != getNumOperands() - 2)

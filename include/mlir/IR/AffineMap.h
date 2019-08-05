@@ -145,8 +145,8 @@ public:
 private:
   ImplType *map;
 
-  static AffineMap get_impl(unsigned dimCount, unsigned symbolCount,
-                            ArrayRef<AffineExpr> results, MLIRContext *context);
+  static AffineMap getImpl(unsigned dimCount, unsigned symbolCount,
+                           ArrayRef<AffineExpr> results, MLIRContext *context);
 };
 
 // Make AffineExpr hashable.

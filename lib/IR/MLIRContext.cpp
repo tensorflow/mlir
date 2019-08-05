@@ -568,9 +568,9 @@ StorageUniquer &MLIRContext::getAffineUniquer() {
   return getImpl().affineUniquer;
 }
 
-AffineMap AffineMap::get_impl(unsigned dimCount, unsigned symbolCount,
-                              ArrayRef<AffineExpr> results,
-                              MLIRContext *context) {
+AffineMap AffineMap::getImpl(unsigned dimCount, unsigned symbolCount,
+                             ArrayRef<AffineExpr> results,
+                             MLIRContext *context) {
   auto &impl = context->getImpl();
   auto key = std::make_tuple(dimCount, symbolCount, results);
 
@@ -588,14 +588,14 @@ AffineMap AffineMap::get_impl(unsigned dimCount, unsigned symbolCount,
 }
 
 AffineMap AffineMap::get(MLIRContext *context) {
-  return get_impl(/*dimCount=*/0, /*symbolCount=*/0, /*results=*/{}, context);
+  return getImpl(/*dimCount=*/0, /*symbolCount=*/0, /*results=*/{}, context);
 }
 
 AffineMap AffineMap::get(unsigned dimCount, unsigned symbolCount,
                          ArrayRef<AffineExpr> results) {
   // The number of results can't be zero.
   assert(!results.empty());
-  return get_impl(dimCount, symbolCount, results, results[0].getContext());
+  return getImpl(dimCount, symbolCount, results, results[0].getContext());
 }
 
 //===----------------------------------------------------------------------===//

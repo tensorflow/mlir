@@ -297,7 +297,7 @@ IntegerSet Builder::getIntegerSet(unsigned dimCount, unsigned symbolCount,
   return IntegerSet::get(dimCount, symbolCount, constraints, isEq);
 }
 
-AffineMap Builder::getNullAffineMap(MLIRContext *context) {
+AffineMap Builder::getEmptyAffineMap(MLIRContext *context) {
   return AffineMap::get(context);
 }
 

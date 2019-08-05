@@ -151,7 +151,7 @@ public:
 
   // Special cases of affine maps and integer sets
   /// Returns a zero result affine map with no dimensions or symbols: () -> ().
-  AffineMap getNullAffineMap(MLIRContext *context);
+  AffineMap getEmptyAffineMap(MLIRContext *context);
   /// Returns a single constant result affine map with 0 dimensions and 0
   /// symbols.  One constant result: () -> (val).
   AffineMap getConstantAffineMap(int64_t val);

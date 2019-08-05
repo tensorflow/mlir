@@ -825,3 +825,9 @@ func @stringconstant() -> !llvm<"i8*"> {
   llvm.return %1 : !llvm<"i8*">
 }
 
+// CHECK-LABEL: define void @noreach() {
+// CHECK-NEXT:    unreachable
+// CHECK-NEXT:  }
+func @noreach() {
+  llvm.unreachable
+}

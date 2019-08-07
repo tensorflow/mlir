@@ -1597,7 +1597,7 @@ void AffineLoadOp::build(Builder *builder, OperationState *result,
   // Create identity map for memrefs with at least one dimension or () -> ()
   // for zero-dimensional memrefs.
   auto map = rank ? builder->getMultiDimIdentityMap(rank)
-                  : builder->getEmptyAffineMap(builder->getContext());
+                  : builder->getEmptyAffineMap();
   result->addAttribute(getMapAttrName(), builder->getAffineMapAttr(map));
   result->types.push_back(memrefType.getElementType());
 }

@@ -538,13 +538,15 @@ static void print(OpAsmPrinter *p, GenericOp op) {
   auto dictAttr = DictionaryAttr::get(attrs, op.getContext());
   *p << op.getOperationName() << " " << dictAttr << " ";
   p->printOperands(op.getOperands());
+  if (!op.region().empty())
+    p->printRegion(op.region());
   p->printOptionalAttrDict(op.getAttrs(), attrNames);
   *p << ": ";
   interleaveComma(op.getOperandTypes(), *p);
 }
 
 static ParseResult parseGenericOp(OpAsmParser *parser, OperationState *result) {
-  SmallVector<OpAsmParser::OperandType, 8> operandsInfo;
+  SmallVector<OpAsmParser::OperandType, 8> operandsInfo, regionOperandsInfo;
   DictionaryAttr dictAttr;
   // Parse the core linalg traits that must check into a dictAttr.
   // The name is unimportant as we will overwrite result->attributes.
@@ -556,8 +558,13 @@ static ParseResult parseGenericOp(OpAsmParser *parser, OperationState *result) {
   result->attributes.assign(dictAttr.getValue().begin(),
                             dictAttr.getValue().end());
 
+  Region &region = *result->addRegion();
+  SmallVector<Type, 8> operandTypes, regionTypes;
   // Optional attributes may be added.
-  SmallVector<Type, 8> operandTypes;
+  // Either Optional "fun" attribute or region must be specified.
+  if (!dictAttr.get("fun") &&
+      parser->parseOptionalRegion(region, regionOperandsInfo, regionTypes))
+    return failure();
   if (parser->parseOptionalAttributeDict(result->attributes) ||
       parser->parseColonTypeList(operandTypes))
     return failure();
@@ -572,18 +579,36 @@ static LogicalResult verify(GenericOp op) {
   if (nViews != llvm::size(op.views()))
     return op.emitError("op expected exactly ") << nViews << " view operands";
 
-  auto m = op.getParentOfType<ModuleOp>();
-  auto fun = m.lookupSymbol<FuncOp>(op.fun());
-  if (!fun || !fun.getType())
-    return op.emitError(
-        "op expected fun attribute to refer to a defined symbol");
+  auto &region = op.region();
+  auto funOp = op.getFunction();
+  auto funType = funOp ? funOp.getType() : FunctionType();
+  if (!region.empty()) {
+    if (region.getBlocks().size() != 1)
+      return op.emitError("op expected region with 1 block");
 
-  auto funType = fun.getType();
-  if (funType.getNumInputs() != nViews)
-    return op.emitError("op expected fun arguments to match number of views");
-  if (funType.getNumResults() != op.getNumOutputs())
-    return op.emitError(
-        "op expected fun results to match number of output views");
+    auto &block = region.getBlocks().front();
+    if (block.getNumArguments() != nViews)
+      return op.emitError(
+          "op expected number of block arguments to match number of views");
+
+    for (unsigned i = 0; i < nViews; ++i) {
+      auto viewType = op.getViewType(i);
+      if (viewType.getElementType() != block.getArgument(i)->getType())
+        return op.emitError("op expected block argument ")
+               << i << " of the same type as elemental type of "
+               << ((i < nInputViews) ? "input " : "output ")
+               << "view: " << viewType;
+    }
+  } else {
+    if (!funOp || !funOp.getType())
+      return op.emitError(
+          "op expected fun attribute to refer to a defined symbol");
+    if (funType.getNumInputs() != nViews)
+      return op.emitError("op expected fun arguments to match number of views");
+    if (funType.getNumResults() != op.getNumOutputs())
+      return op.emitError(
+          "op expected fun results to match number of output views");
+  }
 
   auto nLoops = op.getNumLoops();
   SmallVector<AffineMap, 4> indexingMaps;
@@ -615,15 +640,18 @@ static LogicalResult verify(GenericOp op) {
       return op.emitError("op expected indexing_map #")
              << idx << " results to match view rank: " << view;
 
-    if (funType.getInput(idx) != view.getElementType())
-      return op.emitError("op expected fun argument ")
-             << idx << " to match view element type: " << view.getElementType();
+    if (funType) {
+      if (funType.getInput(idx) != view.getElementType())
+        return op.emitError("op expected fun argument ")
+               << idx
+               << " to match view element type: " << view.getElementType();
 
-    if (idx >= nInputViews)
-      if (funType.getResult(idx - nInputViews) != view.getElementType())
-        return op.emitError("op expected fun result ")
-               << idx << " to match output view element type: "
-               << view.getElementType();
+      if (idx >= nInputViews)
+        if (funType.getResult(idx - nInputViews) != view.getElementType())
+          return op.emitError("op expected fun result ")
+                 << idx << " to match output view element type: "
+                 << view.getElementType();
+    }
   }
 
   auto concatMap = concatAffineMaps(indexingMaps);
@@ -632,6 +660,56 @@ static LogicalResult verify(GenericOp op) {
     return op.emitError("op expected the concatenation of maps in indexing_map "
                         "to be invertible");
 
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// YieldOp
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseYieldOp(OpAsmParser *parser, OperationState *result) {
+  SmallVector<OpAsmParser::OperandType, 2> opInfo;
+  SmallVector<Type, 2> types;
+  llvm::SMLoc loc = parser->getCurrentLocation();
+  return failure(parser->parseOperandList(opInfo) ||
+                 (!opInfo.empty() && parser->parseColonTypeList(types)) ||
+                 parser->resolveOperands(opInfo, types, loc, result->operands));
+}
+
+static void print(OpAsmPrinter *p, YieldOp op) {
+  *p << op.getOperationName();
+  if (op.getNumOperands() > 0) {
+    *p << ' ';
+    p->printOperands(op.operand_begin(), op.operand_end());
+    *p << " : ";
+    interleaveComma(op.getOperands(), *p,
+                    [&](Value *e) { p->printType(e->getType()); });
+  }
+}
+
+static LogicalResult verify(YieldOp op) {
+  auto *parentOp = op.getParentOp();
+  if (parentOp->getNumRegions() != 1 || parentOp->getRegion(0).empty())
+    return op.emitOpError("op expected single non-empty parent region");
+
+  auto genericOp = dyn_cast<GenericOp>(parentOp);
+  if (!genericOp)
+    return op.emitOpError("op expected '")
+           << GenericOp::getOperationName() << "' parent op";
+
+  // The operand number and types must match the view element types.
+  auto nOutputViews = genericOp.getNumOutputs();
+  if (op.getNumOperands() != nOutputViews)
+    return op.emitOpError("op expected ")
+           << nOutputViews << " operand to match enclosing linalg.generic op";
+
+  for (unsigned i = 0; i != nOutputViews; ++i) {
+    auto elementType = genericOp.getOutputViewType(i).getElementType();
+    if (op.getOperand(i)->getType() != elementType)
+      return op.emitError("type of return operand ")
+             << i << " (" << op.getOperand(i)->getType()
+             << ") doesn't match view element type (" << elementType << ")";
+  }
   return success();
 }
 
@@ -846,23 +924,6 @@ static SmallVector<AffineExpr, 4> concat(ArrayRef<AffineExpr> a,
   return res;
 }
 
-static SmallVector<ValueHandle, 8>
-foldedAffineApplies(OpBuilder &b, Location loc, AffineMap map,
-                    ArrayRef<Value *> vals, OperationFolder &folder) {
-  assert(map.getNumSymbols() == 0);
-  assert(map.getNumInputs() == vals.size());
-  SmallVector<ValueHandle, 8> res;
-  res.reserve(map.getNumResults());
-  auto dims = map.getNumDims();
-  for (auto e : map.getResults()) {
-    auto exprMap = AffineMap::get(dims, 0, e);
-    SmallVector<Value *, 4> operands(vals.begin(), vals.end());
-    canonicalizeMapAndOperands(&exprMap, &operands);
-    res.push_back(affine_apply(folder, exprMap, operands));
-  }
-  return res;
-}
-
 // Note: both functions below would completely disappear with a simple tensor
 // kernel language.
 //
@@ -949,165 +1010,4 @@ SmallVector<AffineMap, 4> mlir::linalg::loopToOperandRangesMaps(Operation *op) {
     return res;
   }
   llvm_unreachable("Missing loopToOperandRangesMaps for op");
-}
-
-static SmallVector<Value *, 4> permuteIvs(ArrayRef<Value *> ivs,
-                                          Optional<AffineMap> permutation,
-                                          OperationFolder &state) {
-  return permutation ? applyMapToValues(ScopedContext::getBuilder(),
-                                        ScopedContext::getLocation(),
-                                        permutation.getValue(), ivs, state)
-                     : SmallVector<Value *, 4>(ivs.begin(), ivs.end());
-}
-
-// Ideally this should all be Tablegen'd but there is no good story for op
-// expansion directly in MLIR for now.
-void mlir::linalg::emitScalarImplementation(
-    llvm::ArrayRef<Value *> parallelIvs, llvm::ArrayRef<Value *> reductionIvs,
-    llvm::ArrayRef<Value *> windowIvs, LinalgOp &linalgOp,
-    OperationFolder &folder) {
-  using linalg_load = ValueBuilder<linalg::LoadOp>;
-  using linalg_store = OperationBuilder<linalg::StoreOp>;
-  using IndexedValue = TemplatedIndexedValue<linalg_load, linalg_store>;
-  using edsc::op::operator+;
-  using edsc::op::operator*;
-  using edsc::op::operator==;
-  using edsc::intrinsics::select;
-
-  auto nPar = parallelIvs.size();
-  auto nRed = reductionIvs.size();
-  auto nWin = windowIvs.size();
-  SmallVector<Value *, 8> allIvs;
-  allIvs.reserve(nPar + nRed + nWin);
-  allIvs.assign(parallelIvs.begin(), parallelIvs.end());
-  allIvs.append(reductionIvs.begin(), reductionIvs.end());
-  allIvs.append(windowIvs.begin(), windowIvs.end());
-
-  // Default OpBuilder supports 0-D case (no loops).
-  OpBuilder b(linalgOp.getOperation());
-  auto nLoops = nPar + nRed + nWin;
-  if (nLoops > 0) {
-    auto innermostLoop = loop::getForInductionVarOwner(allIvs.back());
-    // accounts for linalg.terminator in loop.
-    b = innermostLoop.getBodyBuilder();
-  }
-
-  auto loc = linalgOp.getLoc();
-  ScopedContext scope(b, loc);
-  auto *op = linalgOp.getOperation();
-  if (auto copyOp = dyn_cast<CopyOp>(op)) {
-    OperationFolder state;
-    auto inputIvs = permuteIvs(parallelIvs, copyOp.inputPermutation(), state);
-    auto outputIvs = permuteIvs(parallelIvs, copyOp.outputPermutation(), state);
-    SmallVector<IndexHandle, 8> iivs(inputIvs.begin(), inputIvs.end());
-    SmallVector<IndexHandle, 8> oivs(outputIvs.begin(), outputIvs.end());
-    // clang-format off
-    IndexedValue O(copyOp.getOutput(0)), I(copyOp.getInput(0));
-    nLoops > 0 ?
-        O(oivs) = I(iivs) :
-        O() = I();
-    // clang-format on
-    return;
-  }
-  if (auto fillOp = dyn_cast<FillOp>(op)) {
-    SmallVector<IndexHandle, 8> ivs(parallelIvs.begin(), parallelIvs.end());
-    // clang-format off
-    IndexedValue O(fillOp.getOutput(0));
-    nLoops > 0 ?
-        O(ivs) = ValueHandle(fillOp.getValue()) :
-        O() = ValueHandle(fillOp.getValue());
-    // clang-format on
-    return;
-  }
-  if (auto dotOp = dyn_cast<DotOp>(op)) {
-    IndexHandle r_i(reductionIvs[0]);
-    IndexedValue A(dotOp.getInput(0)), B(dotOp.getInput(1)),
-        C(dotOp.getOutput(0));
-    C() = C() + A(r_i) * B(r_i);
-    return;
-  }
-  if (auto matvecOp = dyn_cast<MatvecOp>(op)) {
-    IndexHandle i(parallelIvs[0]), r_j(reductionIvs[0]);
-    IndexedValue A(matvecOp.getInput(0)), B(matvecOp.getInput(1)),
-        C(matvecOp.getOutput(0));
-    C(i) = C(i) + A(i, r_j) * B(r_j);
-    return;
-  }
-  if (auto matmulOp = dyn_cast<MatmulOp>(op)) {
-    IndexHandle i(parallelIvs[0]), j(parallelIvs[1]), r_k(reductionIvs[0]);
-    IndexedValue A(matmulOp.getInput(0)), B(matmulOp.getInput(1)),
-        C(matmulOp.getOutput(0));
-    C(i, j) = C(i, j) + A(i, r_k) * B(r_k, j);
-    return;
-  }
-  if (auto convOp = dyn_cast<ConvOp>(op)) {
-    auto maps = loopToOperandRangesMaps(op);
-    SmallVector<ValueHandle, 8> fIdx(
-        foldedAffineApplies(b, loc, maps[0], allIvs, folder));
-    SmallVector<ValueHandle, 8> imIdx(
-        foldedAffineApplies(b, loc, maps[1], allIvs, folder));
-    SmallVector<ValueHandle, 8> oIdx(
-        foldedAffineApplies(b, loc, maps[2], allIvs, folder));
-    IndexedValue F(convOp.filter()), I(convOp.input()), O(convOp.output());
-    O(oIdx) += F(fIdx) * I(imIdx);
-    return;
-  }
-  if (auto genericOp = dyn_cast<GenericOp>(op)) {
-    using edsc::intrinsics::detail::ValueHandleArray;
-    unsigned nInputs = genericOp.getNumInputs();
-    unsigned nOutputs = genericOp.getNumOutputs();
-    SmallVector<Value *, 4> indexedValues(nInputs + nOutputs);
-    // Emits the MLIR for the scalar part of the generic op by:
-    //   1. Emitting linalg_load and linalg_store ops for each input and output
-    //      view in order. This is achieved by applying the appropriate input or
-    //      output map to the enclosing induction variables.
-    //   2. Emitting a call to `op.fun()` that takes as arguments the scalars
-    //      from point 1. above.
-    //   3. Emitting linalg_store to store the results of 2. to the output
-    //      views.
-    //
-    // An example output may resemble:
-    //
-    // ```
-    //    loop.for %i = %c0 to %0 step %c1 {
-    //      loop.for %j = %c0 to %1 step %c1 {
-    //        loop.for %k = %c0 to %4 step %c1 {
-    //          %11 = linalg.load %arg0[%i, %j] : !linalg.view<?x?xf32>
-    //          %12 = linalg.load %arg1[%i, %j, %k] : !linalg.view<?x?x?xf32>
-    //          %13 = linalg.load %arg2[%i, %k, %j] : !linalg.view<?x?x?xf32>
-    //          %14:2 = call @foo(%11, %12, %13) : (f32, f32, f32) -> (f32, f32)
-    //          linalg.store %14#0, %arg1[%i, %j, %k] : !linalg.view<?x?x?xf32>
-    //          linalg.store %14#1, %arg2[%i, %k, %j] : !linalg.view<?x?x?xf32>
-    //       }
-    //      }
-    //    }
-    // ```
-
-    // 1.a. Emit linalg_load from input views.
-    for (unsigned i = 0, e = nInputs; i < e; ++i) {
-      ValueHandleArray indexing(foldedAffineApplies(
-          b, loc, genericOp.getInputIndexingMap(i), allIvs, folder));
-      indexedValues[i] = linalg_load(genericOp.getInput(i), indexing);
-    }
-    // 1.b. Emit linalg_load from output views..
-    for (unsigned i = 0, e = nOutputs; i < e; ++i) {
-      ValueHandleArray indexing(foldedAffineApplies(
-          b, loc, genericOp.getOutputIndexingMap(i), allIvs, folder));
-      indexedValues[nInputs + i] =
-          linalg_load(genericOp.getOutput(i), indexing);
-    }
-    // 2. Emit call.
-    auto m = genericOp.getParentOfType<ModuleOp>();
-    auto fun = m.lookupSymbol<FuncOp>(genericOp.fun());
-    Operation *callOp = call(fun, indexedValues);
-    assert(callOp->getNumResults() == genericOp.getNumOutputs());
-    // 3. Emit linalg_store.
-    for (unsigned i = 0, e = nOutputs; i < e; ++i) {
-      ValueHandleArray indexing(foldedAffineApplies(
-          b, loc, genericOp.getOutputIndexingMap(i), allIvs, folder));
-      linalg_store(callOp->getResult(i), genericOp.getOutput(i), indexing);
-    }
-    return;
-  }
-  llvm_unreachable("Missing emitScalarImplementation for op");
 }

@@ -481,20 +481,20 @@ func @cond_br_same_target(%arg0: i1, %arg1: i32, %arg2 : i32) -> (i32) {
 // CHECK-LABEL: func @fcmp(%arg0: !llvm.float, %arg1: !llvm.float) {
 func @fcmp(f32, f32) -> () {
 ^bb0(%arg0: f32, %arg1: f32):
-  // CHECK: {{.*}} = llvm.fcmp "oeq" %arg0, %arg1 : !llvm.float
-  // CHECK-NEXT: {{.*}} = llvm.fcmp "ogt" %arg0, %arg1 : !llvm.float
-  // CHECK-NEXT: {{.*}} = llvm.fcmp "oge" %arg0, %arg1 : !llvm.float
-  // CHECK-NEXT: {{.*}} = llvm.fcmp "olt" %arg0, %arg1 : !llvm.float
-  // CHECK-NEXT: {{.*}} = llvm.fcmp "ole" %arg0, %arg1 : !llvm.float
-  // CHECK-NEXT: {{.*}} = llvm.fcmp "one" %arg0, %arg1 : !llvm.float
-  // CHECK-NEXT: {{.*}} = llvm.fcmp "ord" %arg0, %arg1 : !llvm.float
-  // CHECK-NEXT: {{.*}} = llvm.fcmp "ueq" %arg0, %arg1 : !llvm.float
-  // CHECK-NEXT: {{.*}} = llvm.fcmp "ugt" %arg0, %arg1 : !llvm.float
-  // CHECK-NEXT: {{.*}} = llvm.fcmp "uge" %arg0, %arg1 : !llvm.float
-  // CHECK-NEXT: {{.*}} = llvm.fcmp "ult" %arg0, %arg1 : !llvm.float
-  // CHECK-NEXT: {{.*}} = llvm.fcmp "ule" %arg0, %arg1 : !llvm.float
-  // CHECK-NEXT: {{.*}} = llvm.fcmp "une" %arg0, %arg1 : !llvm.float
-  // CHECK-NEXT: {{.*}} = llvm.fcmp "uno" %arg0, %arg1 : !llvm.float
+  // CHECK:      llvm.fcmp "oeq" %arg0, %arg1 : !llvm.float
+  // CHECK-NEXT: llvm.fcmp "ogt" %arg0, %arg1 : !llvm.float
+  // CHECK-NEXT: llvm.fcmp "oge" %arg0, %arg1 : !llvm.float
+  // CHECK-NEXT: llvm.fcmp "olt" %arg0, %arg1 : !llvm.float
+  // CHECK-NEXT: llvm.fcmp "ole" %arg0, %arg1 : !llvm.float
+  // CHECK-NEXT: llvm.fcmp "one" %arg0, %arg1 : !llvm.float
+  // CHECK-NEXT: llvm.fcmp "ord" %arg0, %arg1 : !llvm.float
+  // CHECK-NEXT: llvm.fcmp "ueq" %arg0, %arg1 : !llvm.float
+  // CHECK-NEXT: llvm.fcmp "ugt" %arg0, %arg1 : !llvm.float
+  // CHECK-NEXT: llvm.fcmp "uge" %arg0, %arg1 : !llvm.float
+  // CHECK-NEXT: llvm.fcmp "ult" %arg0, %arg1 : !llvm.float
+  // CHECK-NEXT: llvm.fcmp "ule" %arg0, %arg1 : !llvm.float
+  // CHECK-NEXT: llvm.fcmp "une" %arg0, %arg1 : !llvm.float
+  // CHECK-NEXT: llvm.fcmp "uno" %arg0, %arg1 : !llvm.float
   // CHECK-NEXT: llvm.return
   %1 = cmpf "oeq", %arg0, %arg1 : f32
   %2 = cmpf "ogt", %arg0, %arg1 : f32

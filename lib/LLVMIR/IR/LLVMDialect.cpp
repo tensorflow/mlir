@@ -85,18 +85,16 @@ static ParseResult parseCmpOp(OpAsmParser *parser, OperationState *result) {
 
   int64_t predicateValue = 0;
   if (std::is_same<CmpPredicateType, ICmpPredicate>()) {
-    Optional<ICmpPredicate> predicate;
-    predicate = symbolizeICmpPredicate(predicateStr.getValue());
+    Optional<ICmpPredicate> predicate = symbolizeICmpPredicate(predicateStr.getValue());
     if (!predicate)
-    return parser->emitError(predicateLoc)
+      return parser->emitError(predicateLoc)
            << "'" << predicateStr.getValue()
            << "' is an incorrect value of the 'predicate' attribute";
     predicateValue = static_cast<int64_t>(predicate.getValue());
   } else {
-    Optional<FCmpPredicate> predicate;
-    predicate = symbolizeFCmpPredicate(predicateStr.getValue());
+    Optional<FCmpPredicate> predicate = symbolizeFCmpPredicate(predicateStr.getValue());
     if (!predicate)
-    return parser->emitError(predicateLoc)
+      return parser->emitError(predicateLoc)
            << "'" << predicateStr.getValue()
            << "' is an incorrect value of the 'predicate' attribute";
     predicateValue = static_cast<int64_t>(predicate.getValue());

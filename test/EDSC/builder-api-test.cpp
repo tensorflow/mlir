@@ -502,30 +502,30 @@ TEST_FUNC(select_op_f32) {
   // CHECK-LABEL: @select_op
   //      CHECK: affine.for %{{.*}} = 0 to 1 {
   // CHECK-NEXT:   affine.for %{{.*}} = 0 to 1 {
-  //  CHECK-DAG:     {{.*}} = cmpf "oeq"
-  //  CHECK-DAG:     {{.*}} = affine.load
-  //  CHECK-DAG:     {{.*}} = affine.load
-  // CHECK-NEXT:     {{.*}} = select
-  //  CHECK-DAG:     {{.*}} = cmpf "one"
-  //  CHECK-DAG:     {{.*}} = affine.load
-  //  CHECK-DAG:     {{.*}} = affine.load
-  // CHECK-NEXT:     {{.*}} = select
-  //  CHECK-DAG:     {{.*}} = cmpf "oge"
-  //  CHECK-DAG:     {{.*}} = affine.load
-  //  CHECK-DAG:     {{.*}} = affine.load
-  // CHECK-NEXT:     {{.*}} = select
-  //  CHECK-DAG:     {{.*}} = cmpf "ole"
-  //  CHECK-DAG:     {{.*}} = affine.load
-  //  CHECK-DAG:     {{.*}} = affine.load
-  // CHECK-NEXT:     {{.*}} = select
-  //  CHECK-DAG:     {{.*}} = cmpf "olt"
-  //  CHECK-DAG:     {{.*}} = affine.load
-  //  CHECK-DAG:     {{.*}} = affine.load
-  // CHECK-NEXT:     {{.*}} = select
-  //  CHECK-DAG:     {{.*}} = cmpf "ogt"
-  //  CHECK-DAG:     {{.*}} = affine.load
-  //  CHECK-DAG:     {{.*}} = affine.load
-  // CHECK-NEXT:     {{.*}} = select
+  //  CHECK-DAG:     cmpf "oeq"
+  //  CHECK-DAG:     affine.load
+  //  CHECK-DAG:     affine.load
+  // CHECK-NEXT:     select
+  //  CHECK-DAG:     cmpf "one"
+  //  CHECK-DAG:     affine.load
+  //  CHECK-DAG:     affine.load
+  // CHECK-NEXT:     select
+  //  CHECK-DAG:     cmpf "oge"
+  //  CHECK-DAG:     affine.load
+  //  CHECK-DAG:     affine.load
+  // CHECK-NEXT:     select
+  //  CHECK-DAG:     cmpf "ole"
+  //  CHECK-DAG:     affine.load
+  //  CHECK-DAG:     affine.load
+  // CHECK-NEXT:     select
+  //  CHECK-DAG:     cmpf "olt"
+  //  CHECK-DAG:     affine.load
+  //  CHECK-DAG:     affine.load
+  // CHECK-NEXT:     select
+  //  CHECK-DAG:     cmpf "ogt"
+  //  CHECK-DAG:     affine.load
+  //  CHECK-DAG:     affine.load
+  // CHECK-NEXT:     select
   // clang-format on
   f.print(llvm::outs());
   f.erase();

@@ -31,21 +31,3 @@ func @foo(%a : memref<1x1xf32>) -> memref<1x1xf32> {
 }
 // NOMAIN: 2.234000e+03
 // NOMAIN-NEXT: 2.234000e+03
-
-// Set output to 0 if input < 0, else to input
-// RUN: mlir-cpu-runner -e cmp_test -init-value 1000 %s | FileCheck -check-prefix=CMPTEST %s
-// RUN: mlir-cpu-runner -e cmp_test -init-value -1000 %s | FileCheck -check-prefix=CMPTEST2 %s
-
-func @cmp_test(%a : memref<1x1xf32>) -> memref<1x1xf32> {
-  %c0 = constant 0 : index
-  %cf0 = constant 0.0 : f32
-  %3 = load %a[%c0, %c0] : memref<1x1xf32>
-  %5 = cmpf "olt", %3, %cf0 : f32
-  %6 = select %5, %cf0, %3 : f32
-  store %6, %a[%c0, %c0] : memref<1x1xf32>
-  return %a : memref<1x1xf32>
-}
-// CMPTEST: 1.000000e+03 
-// CMPTEST-NEXT: 1.000000e+03 
-// CMPTEST2: 0.000000e+00
-// CMPTEST2-NEXT: 0.000000e+00

@@ -531,7 +531,6 @@ TEST_FUNC(select_op_f32) {
   f.erase();
 }
 
-
 // Inject an EDSC-constructed computation to exercise imperfectly nested 2-d
 // tiling.
 TEST_FUNC(tile_2d) {

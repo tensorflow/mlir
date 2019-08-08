@@ -43,16 +43,16 @@ using namespace mlir::LLVM;
 static void printICmpOp(OpAsmPrinter *p, ICmpOp &op) {
   *p << op.getOperationName() << " \"" << stringifyICmpPredicate(op.predicate())
      << "\" " << *op.getOperand(0) << ", " << *op.getOperand(1);
-   p->printOptionalAttrDict(op.getAttrs(), {"predicate"});
-   *p << " : " << op.lhs()->getType();
- }
+  p->printOptionalAttrDict(op.getAttrs(), {"predicate"});
+  *p << " : " << op.lhs()->getType();
+}
 
 static void printFCmpOp(OpAsmPrinter *p, FCmpOp &op) {
   *p << op.getOperationName() << " \"" << stringifyFCmpPredicate(op.predicate())
      << "\" " << *op.getOperand(0) << ", " << *op.getOperand(1);
-   p->printOptionalAttrDict(op.getAttrs(), {"predicate"});
-   *p << " : " << op.lhs()->getType();
- }
+  p->printOptionalAttrDict(op.getAttrs(), {"predicate"});
+  *p << " : " << op.lhs()->getType();
+}
 
 // <operation> ::= `llvm.icmp` string-literal ssa-use `,` ssa-use
 //                 attribute-dict? `:` type
@@ -101,8 +101,6 @@ static ParseResult parseCmpOp(OpAsmParser *parser, OperationState *result) {
              << "' is an incorrect value of the 'predicate' attribute";
     predicateValue = static_cast<int64_t>(predicate.getValue());
   }
-
-
 
   attrs[0].second = parser->getBuilder().getI64IntegerAttr(predicateValue);
 

@@ -390,7 +390,7 @@ ValueHandle mlir::edsc::op::operator||(ValueHandle lhs, ValueHandle rhs) {
 }
 
 static ValueHandle createIComparisonExpr(CmpIPredicate predicate,
-                                        ValueHandle lhs, ValueHandle rhs) {
+                                         ValueHandle lhs, ValueHandle rhs) {
   auto lhsType = lhs.getType();
   auto rhsType = rhs.getType();
   (void)lhsType;
@@ -421,39 +421,39 @@ static ValueHandle createFComparisonExpr(CmpFPredicate predicate,
 // All floating point comparison are ordered through EDSL
 ValueHandle mlir::edsc::op::operator==(ValueHandle lhs, ValueHandle rhs) {
   auto type = lhs.getType();
-  return type.isa<FloatType>() ? 
-    createFComparisonExpr(CmpFPredicate::OEQ, lhs, rhs) :
-    createIComparisonExpr(CmpIPredicate::EQ, lhs, rhs);
+  return type.isa<FloatType>()
+             ? createFComparisonExpr(CmpFPredicate::OEQ, lhs, rhs)
+             : createIComparisonExpr(CmpIPredicate::EQ, lhs, rhs);
 }
 ValueHandle mlir::edsc::op::operator!=(ValueHandle lhs, ValueHandle rhs) {
   auto type = lhs.getType();
-  return type.isa<FloatType>() ? 
-    createFComparisonExpr(CmpFPredicate::ONE, lhs, rhs) :
-    createIComparisonExpr(CmpIPredicate::NE, lhs, rhs);
-  
+  return type.isa<FloatType>()
+             ? createFComparisonExpr(CmpFPredicate::ONE, lhs, rhs)
+             : createIComparisonExpr(CmpIPredicate::NE, lhs, rhs);
 }
 ValueHandle mlir::edsc::op::operator<(ValueHandle lhs, ValueHandle rhs) {
   auto type = lhs.getType();
-  return type.isa<FloatType>() ? 
-    createFComparisonExpr(CmpFPredicate::OLT, lhs, rhs) :
-    // TODO(ntv,zinenko): signed by default, how about unsigned?
-    createIComparisonExpr(CmpIPredicate::SLT, lhs, rhs);
+  return type.isa<FloatType>()
+             ? createFComparisonExpr(CmpFPredicate::OLT, lhs, rhs)
+             :
+             // TODO(ntv,zinenko): signed by default, how about unsigned?
+             createIComparisonExpr(CmpIPredicate::SLT, lhs, rhs);
 }
 ValueHandle mlir::edsc::op::operator<=(ValueHandle lhs, ValueHandle rhs) {
   auto type = lhs.getType();
-  return type.isa<FloatType>() ? 
-    createFComparisonExpr(CmpFPredicate::OLE, lhs, rhs) :
-    createIComparisonExpr(CmpIPredicate::SLE, lhs, rhs);
+  return type.isa<FloatType>()
+             ? createFComparisonExpr(CmpFPredicate::OLE, lhs, rhs)
+             : createIComparisonExpr(CmpIPredicate::SLE, lhs, rhs);
 }
 ValueHandle mlir::edsc::op::operator>(ValueHandle lhs, ValueHandle rhs) {
   auto type = lhs.getType();
-  return type.isa<FloatType>() ? 
-    createFComparisonExpr(CmpFPredicate::OGT, lhs, rhs) :
-    createIComparisonExpr(CmpIPredicate::SGT, lhs, rhs);
+  return type.isa<FloatType>()
+             ? createFComparisonExpr(CmpFPredicate::OGT, lhs, rhs)
+             : createIComparisonExpr(CmpIPredicate::SGT, lhs, rhs);
 }
 ValueHandle mlir::edsc::op::operator>=(ValueHandle lhs, ValueHandle rhs) {
   auto type = lhs.getType();
-  return type.isa<FloatType>() ? 
-    createFComparisonExpr(CmpFPredicate::OGE, lhs, rhs) :
-    createIComparisonExpr(CmpIPredicate::SGE, lhs, rhs);
+  return type.isa<FloatType>()
+             ? createFComparisonExpr(CmpFPredicate::OGE, lhs, rhs)
+             : createIComparisonExpr(CmpIPredicate::SGE, lhs, rhs);
 }

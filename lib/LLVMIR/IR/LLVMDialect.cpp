@@ -752,6 +752,7 @@ void LLVMFuncOp::build(Builder *builder, OperationState *result, StringRef name,
 // there is more than one output type.
 static Type buildLLVMFunctionType(Builder &b, ArrayRef<Type> inputs,
                                   ArrayRef<Type> outputs,
+                                  impl::VariadicFlag variadicFlag,
                                   std::string &errorMessage) {
   if (outputs.size() > 1) {
     errorMessage = "expected zero or one function result";
@@ -783,7 +784,7 @@ static Type buildLLVMFunctionType(Builder &b, ArrayRef<Type> inputs,
     return {};
   }
   return LLVMType::getFunctionTy(llvmOutput, llvmInputs,
-                                 /*isVarArg=*/false);
+                                 variadicFlag.isVariadic());
 }
 
 // Print the LLVMFuncOp.  Collects argument and result types and passes them
@@ -800,7 +801,7 @@ static void printLLVMFuncOp(OpAsmPrinter *p, LLVMFuncOp op) {
   if (!returnType.getUnderlyingType()->isVoidTy())
     resTypes.push_back(returnType);
 
-  impl::printFunctionLikeOp(p, op, argTypes, resTypes);
+  impl::printFunctionLikeOp(p, op, argTypes, op.isVarArg(), resTypes);
 }
 
 // Hook for OpTrait::FunctionLike, called after verifying that the 'type'
@@ -824,6 +825,9 @@ unsigned LLVMFuncOp::getNumFuncArguments() {
 static LogicalResult verify(LLVMFuncOp op) {
   if (op.isExternal())
     return success();
+
+  if (op.isVarArg())
+    return op.emitOpError("only external functions can be variadic");
 
   auto *funcType = cast<llvm::FunctionType>(op.getType().getUnderlyingType());
   unsigned numArguments = funcType->getNumParams();

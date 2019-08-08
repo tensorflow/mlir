@@ -344,6 +344,11 @@ def LLVM_ReturnOp : LLVM_TerminatorOp<"return", []> {
   let parser = [{ return parseReturnOp(parser, result); }];
   let printer = [{ printReturnOp(p, *this); }];
 }
+def LLVM_UnreachableOp : LLVM_TerminatorOp<"unreachable", []> {
+  string llvmBuilder = [{ builder.CreateUnreachable(); }];
+  let parser = [{ return success(); }];
+  let printer = [{ *p << getOperationName(); }];
+}
 
 // Pseudo-operations (do not appear in LLVM IR but necessary for the dialect to
 // work correctly).
@@ -383,7 +388,8 @@ def LLVM_LLVMFuncOp : LLVM_ZeroResultOp<"func",
   let verifier = [{ return ::verify(*this); }];
   let printer = [{ printLLVMFuncOp(p, *this); }];
   let parser = [{
-    return impl::parseFunctionLikeOp(parser, result, buildLLVMFunctionType);
+    return impl::parseFunctionLikeOp(parser, result, /*allowVariadic=*/true,
+                                     buildLLVMFunctionType);
   }];
 }
 

@@ -3260,6 +3260,11 @@ public:
     return success(parser.consumeIf(Token::comma));
   }
 
+  /// Parses a `...` if present.
+  ParseResult parseOptionalEllipsis() override {
+    return success(parser.consumeIf(Token::ellipsis));
+  }
+
   /// Parse a `=` token.
   ParseResult parseEqual() override {
     return parser.parseToken(Token::equal, "expected '='");
@@ -3985,6 +3990,10 @@ ParseResult ModuleParser::parseTypeAliasDef() {
 /// This is the top-level module parser.
 ParseResult ModuleParser::parseModule(ModuleOp module) {
   OperationParser opParser(getState(), module);
+
+  // Module itself is a name scope.
+  opParser.pushSSANameScope();
+
   while (1) {
     switch (getToken().getKind()) {
     default:
@@ -4016,7 +4025,7 @@ ParseResult ModuleParser::parseModule(ModuleOp module) {
         bodyBlocks.pop_front();
       }
 
-      return success();
+      return opParser.popSSANameScope();
     }
 
     // If we got an error token, then the lexer already emitted an error, just

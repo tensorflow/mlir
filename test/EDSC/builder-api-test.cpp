@@ -507,36 +507,42 @@ TEST_FUNC(select_op_f32) {
   //  CHECK-DAG:     affine.load
   //  CHECK-DAG:     affine.load
   //  CHECK-DAG:     affine.load
+  //  CHECK-DAG:     affine.apply
   // CHECK-NEXT:     select
   //  CHECK-DAG:     cmpf "one"
   //  CHECK-DAG:     affine.load
   //  CHECK-DAG:     affine.load
   //  CHECK-DAG:     affine.load
   //  CHECK-DAG:     affine.load
+  //  CHECK-DAG:     affine.apply
   // CHECK-NEXT:     select
   //  CHECK-DAG:     cmpf "oge"
   //  CHECK-DAG:     affine.load
   //  CHECK-DAG:     affine.load
   //  CHECK-DAG:     affine.load
   //  CHECK-DAG:     affine.load
+  //  CHECK-DAG:     affine.apply
   // CHECK-NEXT:     select
   //  CHECK-DAG:     cmpf "ole"
   //  CHECK-DAG:     affine.load
   //  CHECK-DAG:     affine.load
   //  CHECK-DAG:     affine.load
   //  CHECK-DAG:     affine.load
+  //  CHECK-DAG:     affine.apply
   // CHECK-NEXT:     select
   //  CHECK-DAG:     cmpf "olt"
   //  CHECK-DAG:     affine.load
   //  CHECK-DAG:     affine.load
   //  CHECK-DAG:     affine.load
   //  CHECK-DAG:     affine.load
+  //  CHECK-DAG:     affine.apply
   // CHECK-NEXT:     select
   //  CHECK-DAG:     cmpf "ogt"
   //  CHECK-DAG:     affine.load
   //  CHECK-DAG:     affine.load
   //  CHECK-DAG:     affine.load
   //  CHECK-DAG:     affine.load
+  //  CHECK-DAG:     affine.apply
   // CHECK-NEXT:     select
   // clang-format on
   f.print(llvm::outs());

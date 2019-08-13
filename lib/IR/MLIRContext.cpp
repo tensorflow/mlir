@@ -583,7 +583,7 @@ AffineMap AffineMap::getImpl(unsigned dimCount, unsigned symbolCount,
 
     // Initialize the memory using placement new.
     new (res) detail::AffineMapStorage{dimCount, symbolCount, results};
-    return AffineMap(res);
+    return AffineMap(res, context);
   });
 }
 

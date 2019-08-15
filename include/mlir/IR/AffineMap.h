@@ -47,10 +47,9 @@ class AffineMap {
 public:
   using ImplType = detail::AffineMapStorage;
 
-  AffineMap() : map(nullptr), context(nullptr) {}
-  explicit AffineMap(ImplType *map, MLIRContext *context)
-      : map(map), context(context) {}
-  AffineMap(const AffineMap &other) : map(other.map), context(other.context) {}
+  AffineMap() : map(nullptr) {}
+  explicit AffineMap(ImplType *map) : map(map) {}
+  AffineMap(const AffineMap &other) : map(other.map) {}
   AffineMap &operator=(const AffineMap &other) = default;
 
   /// Returns a zero result affine map with no dimensions or symbols: () -> ().
@@ -68,24 +67,20 @@ public:
 
   MLIRContext *getContext() const;
 
-  explicit operator bool() { return map != nullptr || context != nullptr; }
-  bool operator==(AffineMap other) const {
-    return other.map == map && other.context == context;
-  }
-  bool operator!=(AffineMap other) const {
-    return !(other.map == map && other.context == context);
-  }
+  explicit operator bool() { return map != nullptr; }
+  bool operator==(AffineMap other) const { return other.map == map; }
+  bool operator!=(AffineMap other) const { return !(other.map == map); }
 
   /// Returns true if this affine map is an identity affine map.
   /// An identity affine map corresponds to an identity affine function on the
   /// dimensional identifiers.
   bool isIdentity() const;
 
-  /// Returns true if this affine map is a single result constant function.
-  bool isSingleConstant() const;
-
   /// Returns true if this affine map is an empty map, i.e., () -> ().
   bool isEmpty() const;
+
+  /// Returns true if this affine map is a single result constant function.
+  bool isSingleConstant() const;
 
   /// Returns the constant result of this map. This methods asserts that the map
   /// has a single constant result.
@@ -152,8 +147,6 @@ public:
 
 private:
   ImplType *map;
-
-  MLIRContext *context;
 
   static AffineMap getImpl(unsigned dimCount, unsigned symbolCount,
                            ArrayRef<AffineExpr> results, MLIRContext *context);
@@ -235,21 +228,15 @@ inline raw_ostream &operator<<(raw_ostream &os, AffineMap map) {
 
 namespace llvm {
 
-// AffineExpr hash just like a pair of pointers (ImplType, MLIRContext).
+// AffineExpr hash just like pointers
 template <> struct DenseMapInfo<mlir::AffineMap> {
   static mlir::AffineMap getEmptyKey() {
-    auto pointers =
-        llvm::DenseMapInfo<std::pair<void *, void *>>::getEmptyKey();
-    return mlir::AffineMap(
-        static_cast<mlir::AffineMap::ImplType *>(pointers.first),
-        static_cast<mlir::MLIRContext *>(pointers.second));
+    auto pointer = llvm::DenseMapInfo<void *>::getEmptyKey();
+    return mlir::AffineMap(static_cast<mlir::AffineMap::ImplType *>(pointer));
   }
   static mlir::AffineMap getTombstoneKey() {
-    auto pointers =
-        llvm::DenseMapInfo<std::pair<void *, void *>>::getTombstoneKey();
-    return mlir::AffineMap(
-        static_cast<mlir::AffineMap::ImplType *>(pointers.first),
-        static_cast<mlir::MLIRContext *>(pointers.second));
+    auto pointer = llvm::DenseMapInfo<void *>::getTombstoneKey();
+    return mlir::AffineMap(static_cast<mlir::AffineMap::ImplType *>(pointer));
   }
   static unsigned getHashValue(mlir::AffineMap val) {
     return mlir::hash_value(val);

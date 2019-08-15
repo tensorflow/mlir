@@ -728,12 +728,12 @@ TEST_FUNC(empty_map_load_store) {
   ScopedContext scope(builder, f.getLoc());
   ValueHandle zero = constant_index(0);
   ValueHandle one = constant_index(1);
-  IndexedValue A(f.getArgument(0)), B(f.getArgument(1));
-  IndexHandle i;
+  IndexedValue input(f.getArgument(0)), res(f.getArgument(1));
+  IndexHandle iv;
 
   // clang-format off
-  LoopBuilder(&i, zero, one, 1)([&]{
-      B() = A();
+  LoopBuilder(&iv, zero, one, 1)([&]{
+      res() = input();
   });
   // clang-format on
 

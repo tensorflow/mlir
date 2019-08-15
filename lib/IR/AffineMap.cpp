@@ -115,7 +115,7 @@ AffineMap AffineMap::getMultiDimIdentityMap(unsigned numDims,
   return get(/*dimCount=*/numDims, /*symbolCount=*/0, dimExprs);
 }
 
-MLIRContext *AffineMap::getContext() const { return context; }
+MLIRContext *AffineMap::getContext() const { return map->context; }
 
 bool AffineMap::isIdentity() const {
   if (getNumDims() != getNumResults())
@@ -129,12 +129,12 @@ bool AffineMap::isIdentity() const {
   return true;
 }
 
-bool AffineMap::isSingleConstant() const {
-  return getNumResults() == 1 && getResult(0).isa<AffineConstantExpr>();
-}
-
 bool AffineMap::isEmpty() const {
   return getNumDims() == 0 && getNumSymbols() == 0 && getNumResults() == 0;
+}
+
+bool AffineMap::isSingleConstant() const {
+  return getNumResults() == 1 && getResult(0).isa<AffineConstantExpr>();
 }
 
 int64_t AffineMap::getSingleConstantResult() const {

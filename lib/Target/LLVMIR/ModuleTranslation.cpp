@@ -84,6 +84,8 @@ llvm::Constant *ModuleTranslation::getLLVMConstant(llvm::Type *llvmType,
     return llvm::ConstantFP::get(llvmType, floatAttr.getValue());
   if (auto funcAttr = attr.dyn_cast<SymbolRefAttr>())
     return functionMapping.lookup(funcAttr.getValue());
+  if (auto boolAttr = attr.dyn_cast<BoolAttr>())
+    return llvm::ConstantInt::get(llvmType, boolAttr.getValue() ? 1 : 0);
   if (auto splatAttr = attr.dyn_cast<SplatElementsAttr>()) {
     auto *vectorType = cast<llvm::VectorType>(llvmType);
     auto *child = getLLVMConstant(vectorType->getElementType(),

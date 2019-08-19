@@ -480,14 +480,19 @@ struct AllocOpLowering : public LLVMLegalizationPattern<AllocOp> {
             cumulativeSize,
             createIndexConstant(rewriter, op->getLoc(), elementSize)});
 
-    // Insert the `malloc` declaration if it is not already present.
+    // Insert the alloc callback declaration if it is not already present.
     auto module = op->getParentOfType<ModuleOp>();
-    FuncOp mallocFunc = module.lookupSymbol<FuncOp>("malloc");
+    StringRef allocFuncName = allocOp.getCallbackName();
+
+    if (allocFuncName == "")
+      allocFuncName = "malloc";
+
+    FuncOp mallocFunc = module.lookupSymbol<FuncOp>(allocFuncName);
     if (!mallocFunc) {
       auto mallocType =
           rewriter.getFunctionType(getIndexType(), getVoidPtrType());
       mallocFunc =
-          FuncOp::create(rewriter.getUnknownLoc(), "malloc", mallocType);
+          FuncOp::create(rewriter.getUnknownLoc(), allocFuncName, mallocType);
       module.push_back(mallocFunc);
     }
 
@@ -543,12 +548,18 @@ struct DeallocOpLowering : public LLVMLegalizationPattern<DeallocOp> {
     assert(operands.size() == 1 && "dealloc takes one operand");
     OperandAdaptor<DeallocOp> transformed(operands);
 
-    // Insert the `free` declaration if it is not already present.
+    
+    auto deallocOp = cast<DeallocOp>(op);
+    StringRef callbackName = deallocOp.getCallbackName();
+    if (callbackName == "")
+      callbackName = "free";
+
+      // Insert the free call-back declaration if it is not already present.
     FuncOp freeFunc =
-        op->getParentOfType<ModuleOp>().lookupSymbol<FuncOp>("free");
+        op->getParentOfType<ModuleOp>().lookupSymbol<FuncOp>(callbackName);
     if (!freeFunc) {
       auto freeType = rewriter.getFunctionType(getVoidPtrType(), {});
-      freeFunc = FuncOp::create(rewriter.getUnknownLoc(), "free", freeType);
+      freeFunc = FuncOp::create(rewriter.getUnknownLoc(), callbackName, freeType);
       op->getParentOfType<ModuleOp>().push_back(freeFunc);
     }
 

@@ -1214,6 +1214,7 @@ static ParseResult parseDeallocOp(OpAsmParser *parser, OperationState *result) {
   MemRefType type;
 
   return failure(parser->parseOperand(memrefInfo) ||
+                 parser->parseOptionalAttributeDict(result->attributes) ||
                  parser->parseColonType(type) ||
                  parser->resolveOperand(memrefInfo, type, result->operands));
 }

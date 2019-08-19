@@ -148,14 +148,28 @@ def AllocOp : Std_Op<"alloc"> {
   let arguments = (ins Variadic<Index>:$value);
   let results = (outs AnyMemRef);
 
-  let builders = [OpBuilder<
+  let builders = [
+  OpBuilder<
     "Builder *builder, OperationState *result, MemRefType memrefType", [{
-       result->types.push_back(memrefType);
-     }]
-  >];
+      result->types.push_back(memrefType);
+    }]>,
+  OpBuilder<
+    "Builder *builder, OperationState *result, MemRefType memrefType, "
+    "StringRef callbackName", [{
+      result->types.push_back(memrefType);
+      assert(callbackName != "");
+      result->addAttribute("callbackName", builder->getSymbolRefAttr(callbackName));
+    }]>
+  ];
 
   let extraClassDeclaration = [{
     MemRefType getType() { return getResult()->getType().cast<MemRefType>(); }
+    StringRef getCallbackName() { 
+      Attribute attr = getAttr("callbackName");
+      if (attr == Attribute(nullptr))
+        return "";
+      return attr.cast<mlir::StringAttr>().getValue();
+    }
   }];
 
   let hasCanonicalizer = 1;
@@ -524,6 +538,24 @@ def DeallocOp : Std_Op<"dealloc"> {
   let arguments = (ins AnyMemRef:$memref);
 
   let hasCanonicalizer = 1;
+
+  let builders = [OpBuilder<
+    "Builder *builder, OperationState *result, Value* memref, "
+    "StringRef callbackName", [{
+      result->operands.push_back(memref);
+      assert (callbackName != "");
+      result->addAttribute("callbackName", builder->getSymbolRefAttr(callbackName));
+    }]>
+  ];
+
+  let extraClassDeclaration = [{
+  StringRef getCallbackName() { 
+    Attribute attr = getAttr("callbackName");
+    if (attr == Attribute(nullptr))
+      return "";
+    return attr.cast<mlir::StringAttr>().getValue();
+  }
+  }];
 }
 
 def DimOp : Std_Op<"dim", [NoSideEffect]> {

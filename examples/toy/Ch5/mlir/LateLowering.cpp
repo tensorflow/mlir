@@ -254,16 +254,12 @@ public:
     IndexedValue iOp(result);
     for (uint64_t i = 0, ie = shape[0]; i < ie; ++i) {
       if (shape.size() == 1) {
-        auto value = cstValue.getValue(ArrayRef<uint64_t>{i})
-                         .cast<FloatAttr>()
-                         .getValue();
+        auto value = cstValue.getValue<APFloat>(ArrayRef<uint64_t>{i});
         iOp(constant_index(i)) = constant_float(value, f64Ty);
         continue;
       }
       for (uint64_t j = 0, je = shape[1]; j < je; ++j) {
-        auto value = cstValue.getValue(ArrayRef<uint64_t>{i, j})
-                         .cast<FloatAttr>()
-                         .getValue();
+        auto value = cstValue.getValue<APFloat>(ArrayRef<uint64_t>{i, j});
         iOp(constant_index(i), constant_index(j)) =
             constant_float(value, f64Ty);
       }
@@ -459,6 +455,6 @@ struct LateLoweringPass : public ModulePass<LateLoweringPass> {
 
 namespace toy {
 std::unique_ptr<mlir::Pass> createLateLoweringPass() {
-  return llvm::make_unique<LateLoweringPass>();
+  return std::make_unique<LateLoweringPass>();
 }
 } // namespace toy

@@ -4,6 +4,10 @@
 // RUN: mlir-cpu-runner %s -O3 -loop-distribute -loop-vectorize | FileCheck %s
 // RUN: mlir-cpu-runner %s -loop-distribute -loop-vectorize | FileCheck %s
 
+// RUN: mlir-cpu-runner %s -dump-object-file | FileCheck %s
+// RUN: ls %s.o
+// RUN: rm -f %s.o
+
 func @fabsf(f32) -> f32
 
 func @main(%a : memref<2xf32>, %b : memref<1xf32>) {

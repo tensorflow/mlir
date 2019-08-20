@@ -23,6 +23,7 @@
 #define MLIR_EXECUTIONENGINE_EXECUTIONENGINE_H_
 
 #include "mlir/Support/LLVM.h"
+#include "llvm/ExecutionEngine/ObjectCache.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/Support/Error.h"
 
@@ -32,6 +33,8 @@
 namespace llvm {
 template <typename T> class Expected;
 class Module;
+
+class ObjectCache;
 } // namespace llvm
 
 namespace mlir {
@@ -41,6 +44,28 @@ class ModuleOp;
 namespace impl {
 class OrcJIT;
 } // end namespace impl
+
+/// Object cache for MLIR JIT-compiled objects. We pass an instance of this
+/// class to OrcJit to retrieve the object generated for a single MLIR module.
+/// We only use it to dump JIT-compiled code to object files (see
+/// `dumpObjectFile`).
+class MLIRObjectCache : public llvm::ObjectCache {
+public:
+  void notifyObjectCompiled(const llvm::Module *M,
+                            llvm::MemoryBufferRef ObjBuffer) override;
+
+  std::unique_ptr<llvm::MemoryBuffer>
+  getObject(const llvm::Module *M) override {
+    // Not implemented.
+    return nullptr;
+  }
+
+  /// Dump cached object to output file `filename`.
+  void dumpToObjectFile(llvm::StringRef filename);
+
+private:
+  llvm::StringMap<std::unique_ptr<llvm::MemoryBuffer>> cachedObjects;
+};
 
 /// JIT-backed execution engine for MLIR modules.  Assumes the module can be
 /// converted to LLVM IR.  For each function, creates a wrapper function with
@@ -61,10 +86,13 @@ public:
   /// can be used, e.g., for reporting or optimization.
   /// If `sharedLibPaths` are provided, the underlying JIT-compilation will open
   /// and link the shared libraries for symbol resolution.
+  /// If `objectCache` is provided, JIT compiler will use it to store the object
+  /// generated for the given module.
   static llvm::Expected<std::unique_ptr<ExecutionEngine>>
   create(ModuleOp m,
          std::function<llvm::Error(llvm::Module *)> transformer = {},
-         ArrayRef<StringRef> sharedLibPaths = {});
+         ArrayRef<StringRef> sharedLibPaths = {},
+         MLIRObjectCache *objectCache = nullptr);
 
   /// Looks up a packed-argument function with the given name and returns a
   /// pointer to it.  Propagates errors in case of failure.

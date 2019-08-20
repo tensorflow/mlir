@@ -95,6 +95,11 @@ static llvm::cl::list<std::string>
                  llvm::cl::ZeroOrMore, llvm::cl::MiscFlags::CommaSeparated,
                  llvm::cl::cat(clOptionsCategory));
 
+// CLI variables for debugging.
+static llvm::cl::opt<bool> dumpObjectFile(
+    "dump-object-file",
+    llvm::cl::desc("Dump JITted-compiled object to file <input file>.o"));
+
 static OwningModuleRef parseMLIRInput(StringRef inputFilename,
                                       MLIRContext *context) {
   // Set up the input file.
@@ -166,6 +171,35 @@ static LogicalResult convertAffineStandardToLLVMIR(ModuleOp module) {
   return manager.run(module);
 }
 
+static Error compileAndRunEntryPointFunction(
+    ModuleOp module, StringRef entryPoint,
+    std::function<llvm::Error(llvm::Module *)> transformer, void **data) {
+  // Create the JIT object cache that will be used to retrieve the JIT-compiled
+  // code and dump it to object file.
+  std::unique_ptr<MLIRObjectCache> objectCache;
+  if (dumpObjectFile)
+    objectCache = std::make_unique<MLIRObjectCache>();
+
+  SmallVector<StringRef, 4> libs(clSharedLibs.begin(), clSharedLibs.end());
+  auto expectedEngine = mlir::ExecutionEngine::create(module, transformer, libs,
+                                                      objectCache.get());
+  if (!expectedEngine)
+    return expectedEngine.takeError();
+
+  auto engine = std::move(*expectedEngine);
+  auto expectedFPtr = engine->lookup(entryPoint);
+  if (!expectedFPtr)
+    return expectedFPtr.takeError();
+
+  if (dumpObjectFile)
+    objectCache->dumpToObjectFile(inputFilename + ".o");
+
+  void (*fptr)(void **) = *expectedFPtr;
+  (*fptr)(data);
+
+  return Error::success();
+}
+
 static Error compileAndExecuteFunctionWithMemRefs(
     ModuleOp module, StringRef entryPoint,
     std::function<llvm::Error(llvm::Module *)> transformer) {
@@ -191,18 +225,10 @@ static Error compileAndExecuteFunctionWithMemRefs(
   if (failed(convertAffineStandardToLLVMIR(module)))
     return make_string_error("conversion to the LLVM IR dialect failed");
 
-  SmallVector<StringRef, 4> libs(clSharedLibs.begin(), clSharedLibs.end());
-  auto expectedEngine =
-      mlir::ExecutionEngine::create(module, transformer, libs);
-  if (!expectedEngine)
-    return expectedEngine.takeError();
+  if (auto error = compileAndRunEntryPointFunction(
+          module, entryPoint, transformer, expectedArguments->data()))
+    return error;
 
-  auto engine = std::move(*expectedEngine);
-  auto expectedFPtr = engine->lookup(entryPoint);
-  if (!expectedFPtr)
-    return expectedFPtr.takeError();
-  void (*fptr)(void **) = *expectedFPtr;
-  (*fptr)(expectedArguments->data());
   printMemRefArguments(argTypes, resTypes, *expectedArguments);
   freeMemRefArguments(*expectedArguments);
 
@@ -230,24 +256,14 @@ static Error compileAndExecuteSingleFloatReturnFunction(
   if (llvmTy != llvmTy->getFloatTy(llvmTy->getContext()))
     return make_string_error("only single llvm.f32 function result supported");
 
-  SmallVector<StringRef, 4> libs(clSharedLibs.begin(), clSharedLibs.end());
-  auto expectedEngine =
-      mlir::ExecutionEngine::create(module, transformer, libs);
-  if (!expectedEngine)
-    return expectedEngine.takeError();
-
-  auto engine = std::move(*expectedEngine);
-  auto expectedFPtr = engine->lookup(entryPoint);
-  if (!expectedFPtr)
-    return expectedFPtr.takeError();
-  void (*fptr)(void **) = *expectedFPtr;
-
   float res;
   struct {
     void *data;
   } data;
   data.data = &res;
-  (*fptr)((void **)&data);
+  if (auto error = compileAndRunEntryPointFunction(module, entryPoint,
+                                                   transformer, (void **)&data))
+    return error;
 
   // Intentional printing of the output so we can test.
   llvm::outs() << res;

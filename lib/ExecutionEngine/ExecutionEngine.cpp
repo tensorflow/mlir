@@ -22,6 +22,7 @@
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/IR/Function.h"
 #include "mlir/IR/Module.h"
+#include "mlir/Support/FileUtilities.h"
 #include "mlir/Target/LLVMIR.h"
 
 #include "llvm/ExecutionEngine/Orc/CompileUtils.h"
@@ -34,6 +35,7 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/TargetRegistry.h"
+#include "llvm/Support/ToolOutputFile.h"
 
 using namespace mlir;
 using llvm::Error;
@@ -126,16 +128,18 @@ public:
   // using the data layout provided as `dataLayout`.
   // Setup the object layer to use our custom memory manager in order to
   // resolve calls to library functions present in the process.
+  // If `objectCache` is provided, OrcJIT will use it to store the object file
+  // generated.
   OrcJIT(llvm::orc::JITTargetMachineBuilder machineBuilder,
          llvm::DataLayout layout, IRTransformer transform,
-         ArrayRef<StringRef> sharedLibPaths)
+         ArrayRef<StringRef> sharedLibPaths, MLIRObjectCache *objectCache)
       : irTransformer(transform),
         objectLayer(
             session,
             [this]() { return std::make_unique<MemoryManager>(session); }),
-        compileLayer(
-            session, objectLayer,
-            llvm::orc::ConcurrentIRCompiler(std::move(machineBuilder))),
+        compileLayer(session, objectLayer,
+                     llvm::orc::ConcurrentIRCompiler(std::move(machineBuilder),
+                                                     objectCache)),
         transformLayer(session, compileLayer, makeIRTransformFunction()),
         dataLayout(layout), mangler(session, this->dataLayout),
         threadSafeCtx(std::make_unique<llvm::LLVMContext>()) {
@@ -147,7 +151,8 @@ public:
 
   // Create a JIT engine for the current host.
   static Expected<std::unique_ptr<OrcJIT>>
-  createDefault(IRTransformer transformer, ArrayRef<StringRef> sharedLibPaths) {
+  createDefault(IRTransformer transformer, ArrayRef<StringRef> sharedLibPaths,
+                MLIRObjectCache *objectCache) {
     auto machineBuilder = llvm::orc::JITTargetMachineBuilder::detectHost();
     if (!machineBuilder)
       return machineBuilder.takeError();
@@ -158,7 +163,7 @@ public:
 
     return std::make_unique<OrcJIT>(std::move(*machineBuilder),
                                     std::move(*dataLayout), transformer,
-                                    sharedLibPaths);
+                                    sharedLibPaths, objectCache);
   }
 
   // Add an LLVM module to the main library managed by the JIT engine.
@@ -324,12 +329,12 @@ void packFunctionArguments(llvm::Module *module) {
 // Out of line for PIMPL unique_ptr.
 ExecutionEngine::~ExecutionEngine() = default;
 
-Expected<std::unique_ptr<ExecutionEngine>>
-ExecutionEngine::create(ModuleOp m,
-                        std::function<llvm::Error(llvm::Module *)> transformer,
-                        ArrayRef<StringRef> sharedLibPaths) {
+Expected<std::unique_ptr<ExecutionEngine>> ExecutionEngine::create(
+    ModuleOp m, std::function<llvm::Error(llvm::Module *)> transformer,
+    ArrayRef<StringRef> sharedLibPaths, MLIRObjectCache *objectCache) {
   auto engine = std::make_unique<ExecutionEngine>();
-  auto expectedJIT = impl::OrcJIT::createDefault(transformer, sharedLibPaths);
+  auto expectedJIT =
+      impl::OrcJIT::createDefault(transformer, sharedLibPaths, objectCache);
   if (!expectedJIT)
     return expectedJIT.takeError();
 
@@ -370,4 +375,27 @@ llvm::Error ExecutionEngine::invoke(StringRef name,
   (*fptr)(args.data());
 
   return llvm::Error::success();
+}
+
+void MLIRObjectCache::notifyObjectCompiled(const llvm::Module *module,
+                                           llvm::MemoryBufferRef objBuffer) {
+  cachedObjects[module->getModuleIdentifier()] =
+      llvm::MemoryBuffer::getMemBufferCopy(objBuffer.getBuffer(),
+                                           objBuffer.getBufferIdentifier());
+}
+
+void MLIRObjectCache::dumpToObjectFile(llvm::StringRef outputFilename) {
+  // Set up the output file.
+  std::string errorMessage;
+  auto file = openOutputFile(outputFilename, &errorMessage);
+  if (!file) {
+    llvm::errs() << errorMessage << "\n";
+    return;
+  }
+
+  // Dump the object generated for a single module to the output file. 
+  assert(cachedObjects.size() == 1 && "Expected only one object entry.");
+  auto &cachedObject = cachedObjects.begin()->second;
+  file->os() << cachedObject->getBuffer();
+  file->keep();
 }

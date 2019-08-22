@@ -281,10 +281,81 @@ same operation.
 Traits are operation properties that affect syntax or semantics. MLIR C++
 models various traits in the `mlir::OpTrait` namespace.
 
-Both operation traits and constraints involving multiple
-operands/attributes/results are provided as the second template parameter to the
-`Op` class. They should be deriving from the `OpTrait` class. See
-[Constraints](#constraints) for more information.
+Both operation traits, [interfaces](#operation-interfaces), and constraints
+involving multiple operands/attributes/results are provided as the second
+template parameter to the `Op` class. They should be deriving from the `OpTrait`
+class. See [Constraints](#constraints) for more information.
+
+### Operation interfaces
+
+[Operation interfaces](Interfaces.md#operation-interfaces) are a mechanism by
+which to opaquely call methods and access information on an *Op instance,
+without knowing the exact operation type. Operation interfaces defined in C++
+can be accessed in the ODS framework via the `OpInterfaceTrait` class. Aside
+from using pre-existing interfaces in the C++ API, the ODS framework also
+provides a simplified mechanism for defining such interfaces; that removes much
+of the boilerplate necessary.
+
+Providing a definition of the `OpInterface` class will auto-generate the C++
+classes for the interface. An `OpInterface` includes a name, for the C++ class,
+along with a list of interface methods.
+
+```tablegen
+def MyInterface : OpInterface<"MyInterface"> {
+  let methods = [...];
+}
+```
+
+There are two types of methods that can be used with an interface,
+`InterfaceMethod` and `StaticInterfaceMethod`. They are both comprised of the
+same core components, with the distinction that `StaticInterfaceMethod` models a
+static method on the derived operation.
+
+An `InterfaceMethod` is comprised of the following components:
+
+*   ReturnType
+    -   A string corresponding to the C++ return type of the method.
+*   MethodName
+    -   A string corresponding to the desired name of the method.
+*   Arguments (Optional)
+    -   A dag of strings that correspond to a C++ type and variable name
+        respectively.
+*   MethodBody (Optional)
+    -   An optional explicit implementation of the interface method.
+    -   `ConcreteOp` is an implicitly defined typename that can be used to refer
+        to the type of the derived operation currently being operated on.
+    -   In non-static methods, a variable 'ConcreteOp op' is defined and may be
+        used to refer to an instance of the derived operation.
+
+Examples:
+
+```tablegen
+def MyInterface : OpInterface<"MyInterface"> {
+  let methods = [
+    // A simple non-static method with no inputs.
+    InterfaceMethod<"unsigned", "foo">,
+
+    // A new non-static method accepting an input argument.
+    InterfaceMethod<"Value *", "bar", (ins "unsigned":$i)>,
+
+    // Query a static property of the derived operation.
+    StaticInterfaceMethod<"unsigned", "fooStatic">,
+
+    // Provide the definition of a static interface method.
+    // Note: `ConcreteOp` corresponds to the derived operation typename.
+    StaticInterfaceMethod<"Operation *", "create",
+      (ins "OpBuilder &":$builder, "Location":$loc), [{
+        return builder.create<ConcreteOp>(loc);
+    }]>,
+
+    // Provide a definition of the non-static method.
+    // Note: `op` corresponds to the derived operation variable.
+    InterfaceMethod<"unsigned", "getNumInputsAndOutputs", (ins), [{
+      return op.getNumInputs() + op.getNumOutputs();
+    }]>,
+  ];
+}
+```
 
 ### Custom builder methods
 
@@ -597,7 +668,7 @@ and then define the op as:
 
 ```tablegen
 def HasSomeProperty : AttrConstraint<CPred<"HasSomeProperty($_self)">,
-                                     "has some property>;
+                                     "has some property">;
 
 def MyOp : Op<...> {
   let arguments = (ins
@@ -831,10 +902,10 @@ Initially the shape inference will be declaratively specified using:
     constraining the input type to be tensor/vector elements or that the
     elemental type be of a specific type (e.g., output of sign is of elemental
     type `i1`) or class (e.g., float like).
-*   Constraints on an operands of an operation. For example, enabling specifying
-    equality constraints on type/constituents of a type (shape and elemental
-    type) between operands and results (e.g., the output type of an add is the
-    same as those of the input operands).
+*   Constraints across operands and results of an operation. For example,
+    enabling specifying equality constraints on type/constituents of a type
+    (shape and elemental type) between operands and results (e.g., the output
+    type of an add is the same as those of the input operands).
 
 In general there is an input/output transfer function which maps the inputs to
 the outputs (e.g., given input X and Y [or slices thereof] with these sizes, the

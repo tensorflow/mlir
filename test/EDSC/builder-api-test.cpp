@@ -17,7 +17,8 @@
 
 // RUN: mlir-edsc-builder-api-test | FileCheck %s
 
-#include "mlir/AffineOps/AffineOps.h"
+#include "mlir/Dialect/AffineOps/AffineOps.h"
+#include "mlir/Dialect/StandardOps/Ops.h"
 #include "mlir/EDSC/Builders.h"
 #include "mlir/EDSC/Helpers.h"
 #include "mlir/EDSC/Intrinsics.h"
@@ -28,7 +29,6 @@
 #include "mlir/IR/Types.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
-#include "mlir/StandardOps/Ops.h"
 #include "mlir/Transforms/LoopUtils.h"
 #include "mlir/Transforms/Passes.h"
 
@@ -709,6 +709,38 @@ TEST_FUNC(indirect_access) {
   // CHECK:  [[D:%.*]] = affine.load
   // CHECK:  load %{{.*}}{{\[}}[[B]]{{\]}}
   // CHECK:  store %{{.*}}, %{{.*}}{{\[}}[[D]]{{\]}}
+  // clang-format on
+  f.print(llvm::outs());
+  f.erase();
+}
+
+// Exercise affine loads and stores build with empty maps.
+TEST_FUNC(empty_map_load_store) {
+  using namespace edsc;
+  using namespace edsc::intrinsics;
+  using namespace edsc::op;
+  auto memrefType =
+      MemRefType::get({}, FloatType::getF32(&globalContext()), {}, 0);
+  auto f = makeFunction("empty_map_load_store", {},
+                        {memrefType, memrefType, memrefType, memrefType});
+
+  OpBuilder builder(f.getBody());
+  ScopedContext scope(builder, f.getLoc());
+  ValueHandle zero = constant_index(0);
+  ValueHandle one = constant_index(1);
+  IndexedValue input(f.getArgument(0)), res(f.getArgument(1));
+  IndexHandle iv;
+
+  // clang-format off
+  LoopBuilder(&iv, zero, one, 1)([&]{
+      res() = input();
+  });
+  // clang-format on
+
+  // clang-format off
+  // CHECK-LABEL: func @empty_map_load_store(
+  // CHECK:  [[A:%.*]] = affine.load %{{.*}}[]
+  // CHECK:  affine.store [[A]], %{{.*}}[]
   // clang-format on
   f.print(llvm::outs());
   f.erase();

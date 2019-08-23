@@ -8,6 +8,10 @@
 // RUN: ls %s.o
 // RUN: rm -f %s.o
 
+// RUN: mlir-cpu-runner %s -dump-object-file -object-filename=test.o | FileCheck %s
+// RUN: ls test.o
+// RUN: rm -f test.o
+
 func @fabsf(f32) -> f32
 
 func @main(%a : memref<2xf32>, %b : memref<1xf32>) {

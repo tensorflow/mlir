@@ -23,6 +23,7 @@
 #define MLIR_EXECUTIONENGINE_EXECUTIONENGINE_H_
 
 #include "mlir/Support/LLVM.h"
+#include "llvm/ExecutionEngine/ObjectCache.h"
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/Support/Error.h"
@@ -67,6 +68,8 @@ private:
 /// be used to invoke the JIT-compiled function.
 class ExecutionEngine {
 public:
+  ExecutionEngine(bool enableObjectCache);
+
   /// Creates an execution engine for the given module.  If `transformer` is
   /// provided, it will be called on the LLVM module during JIT-compilation and
   /// can be used, e.g., for reporting or optimization.
@@ -74,11 +77,9 @@ public:
   /// and link the shared libraries for symbol resolution.
   /// If `objectCache` is provided, JIT compiler will use it to store the object
   /// generated for the given module.
-  static llvm::Expected<std::unique_ptr<ExecutionEngine>>
-  create(ModuleOp m,
-         std::function<llvm::Error(llvm::Module *)> transformer = {},
-         ArrayRef<StringRef> sharedLibPaths = {},
-         MLIRObjectCache *objectCache = nullptr);
+  static llvm::Expected<std::unique_ptr<ExecutionEngine>> create(
+      ModuleOp m, std::function<llvm::Error(llvm::Module *)> transformer = {},
+      ArrayRef<StringRef> sharedLibPaths = {}, bool enableObjectCache = false);
 
   /// Looks up a packed-argument function with the given name and returns a
   /// pointer to it.  Propagates errors in case of failure.
@@ -98,6 +99,9 @@ public:
   /// Set the target triple on the module. This is implicitly done when creating
   /// the engine.
   static bool setupTargetTriple(llvm::Module *llvmModule);
+
+  /// Dump object code to output file `filename`.
+  void dumpToObjectFile(llvm::StringRef filename);
 
 private:
   // Ordering of llvmContext and jit is important for destruction purposes: the

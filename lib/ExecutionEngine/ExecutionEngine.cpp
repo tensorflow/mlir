@@ -86,7 +86,7 @@ std::unique_ptr<MemoryBuffer> SimpleObjectCache::getObject(const Module *M) {
   return MemoryBuffer::getMemBuffer(I->second->getMemBufferRef());
 }
 
-void MLIRObjectCache::dumpToObjectFile(llvm::StringRef outputFilename) {
+void SimpleObjectCache::dumpToObjectFile(llvm::StringRef outputFilename) {
   // Set up the output file.
   std::string errorMessage;
   auto file = openOutputFile(outputFilename, &errorMessage);
@@ -95,11 +95,15 @@ void MLIRObjectCache::dumpToObjectFile(llvm::StringRef outputFilename) {
     return;
   }
 
-  // Dump the object generated for a single module to the output file. 
-  assert(cachedObjects.size() == 1 && "Expected only one object entry.");
-  auto &cachedObject = cachedObjects.begin()->second;
+  // Dump the object generated for a single module to the output file.
+  assert(CachedObjects.size() == 1 && "Expected only one object entry.");
+  auto &cachedObject = CachedObjects.begin()->second;
   file->os() << cachedObject->getBuffer();
   file->keep();
+}
+
+void ExecutionEngine::dumpToObjectFile(llvm::StringRef filename) {
+  cache->dumpToObjectFile(filename);
 }
 
 // Setup LLVM target triple from the current machine.
@@ -186,11 +190,13 @@ void packFunctionArguments(Module *module) {
   }
 }
 
-Expected<std::unique_ptr<ExecutionEngine>>
-ExecutionEngine::create(ModuleOp m,
-                        std::function<Error(llvm::Module *)> transformer,
-                        ArrayRef<StringRef> sharedLibPaths) {
-  auto engine = std::make_unique<ExecutionEngine>();
+ExecutionEngine::ExecutionEngine(bool enableObjectCache)
+    : cache(enableObjectCache ? nullptr : new SimpleObjectCache()) {}
+
+Expected<std::unique_ptr<ExecutionEngine>> ExecutionEngine::create(
+    ModuleOp m, std::function<Error(llvm::Module *)> transformer,
+    ArrayRef<StringRef> sharedLibPaths, bool enableObjectCache) {
+  auto engine = std::make_unique<ExecutionEngine>(enableObjectCache);
 
   std::unique_ptr<llvm::LLVMContext> ctx(new llvm::LLVMContext);
   auto llvmModule = translateModuleToLLVMIR(m);

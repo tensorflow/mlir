@@ -98,6 +98,11 @@ static llvm::cl::list<std::string>
 // CLI variables for debugging.
 static llvm::cl::opt<bool> dumpObjectFile(
     "dump-object-file",
+    llvm::cl::desc("Dump JITted-compiled object to file specified with "
+                   "-object-filename (<input file>.o by default)."));
+
+static llvm::cl::opt<std::string> objectFilename(
+    "object-filename",
     llvm::cl::desc("Dump JITted-compiled object to file <input file>.o"));
 
 static OwningModuleRef parseMLIRInput(StringRef inputFilename,
@@ -188,7 +193,8 @@ compileAndExecute(ModuleOp module, StringRef entryPoint,
     return expectedFPtr.takeError();
 
   if (dumpObjectFile)
-    objectCache->dumpToObjectFile(inputFilename + ".o");
+    engine->dumpToObjectFile(objectFilename.size() ? objectFilename
+                                                   : inputFilename + ".o");
 
   void (*fptr)(void **) = *expectedFPtr;
   (*fptr)(args);

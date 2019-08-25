@@ -2,6 +2,8 @@
 // RUN: mlir-cpu-runner -e foo -init-value 1000 %s | FileCheck -check-prefix=NOMAIN %s
 // RUN: mlir-cpu-runner %s -O3 | FileCheck %s
 // RUN: mlir-cpu-runner -e affine -init-value 2.0 %s | FileCheck -check-prefix=AFFINE %s
+// RUN: mlir-cpu-runner -e bar -init-value 2.0 %s | FileCheck -check-prefix=BAR %s
+// RUN: mlir-cpu-runner -e large_vec_memref -init-value 2.0 %s | FileCheck -check-prefix=LARGE-VEC %s
 
 // RUN: cp %s %t
 // RUN: mlir-cpu-runner %t -dump-object-file | FileCheck %t
@@ -49,3 +51,27 @@ func @affine(%a : memref<32xf32>) -> memref<32xf32> {
   return %a : memref<32xf32>
 }
 // AFFINE: 4.2{{0+}}e+01
+
+func @bar(%a : memref<16xvector<4xf32>>) -> memref<16xvector<4xf32>> {
+  %c0 = constant 0 : index
+  %c1 = constant 1 : index
+
+  %u = load %a[%c0] : memref<16xvector<4xf32>>
+  %v = load %a[%c1] : memref<16xvector<4xf32>>
+  %w = addf %u, %v : vector<4xf32>
+  store %w, %a[%c0] : memref<16xvector<4xf32>>
+
+  return %a : memref<16xvector<4xf32>>
+}
+// BAR: 4.{{0+}}e+00 4.{{0+}}e+00 4.{{0+}}e+00 4.{{0+}}e+00 2.{{0+}}e+00
+// BAR-NEXT: 4.{{0+}}e+00 4.{{0+}}e+00 4.{{0+}}e+00 4.{{0+}}e+00 2.{{0+}}e+00
+
+func @large_vec_memref(%arg2: memref<128x128xvector<8xf32>>) -> memref<128x128xvector<8xf32>> {
+  %c0 = constant 0 : index
+  %c127 = constant 127 : index
+  %v  = constant dense<42.0> : vector<8xf32>
+  store %v, %arg2[%c0, %c0] : memref<128x128xvector<8xf32>>
+  store %v, %arg2[%c127, %c127] : memref<128x128xvector<8xf32>>
+  return %arg2 : memref<128x128xvector<8xf32>>
+}
+// LARGE-VEC: 4.200000e+01

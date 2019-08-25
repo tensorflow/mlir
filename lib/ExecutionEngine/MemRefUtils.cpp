@@ -27,6 +27,7 @@
 
 #include "llvm/Support/Error.h"
 #include <numeric>
+#include <stdlib.h>
 
 using namespace mlir;
 
@@ -45,12 +46,14 @@ allocMemRefDescriptor(Type type, bool allocateData = true,
     return make_string_error("memref with dynamic shapes not supported");
 
   auto elementType = memRefType.getElementType();
-  if (!elementType.isF32())
+  VectorType vectorType = elementType.dyn_cast<VectorType>();
+  if (!elementType.isF32() &&
+      !(vectorType && vectorType.getElementType().isF32()))
     return make_string_error(
-        "memref with element other than f32 not supported");
+        "memref with element other than f32 or vector of f32 not supported");
 
   auto *descriptor =
-      reinterpret_cast<StaticFloatMemRef *>(malloc(sizeof(StaticFloatMemRef)));
+      static_cast<StaticFloatMemRef *>(malloc(sizeof(StaticFloatMemRef)));
   if (!allocateData) {
     descriptor->data = nullptr;
     return descriptor;
@@ -59,7 +62,18 @@ allocMemRefDescriptor(Type type, bool allocateData = true,
   auto shape = memRefType.getShape();
   int64_t size = std::accumulate(shape.begin(), shape.end(), 1,
                                  std::multiplies<int64_t>());
-  descriptor->data = reinterpret_cast<float *>(malloc(sizeof(float) * size));
+  // Align vector of f32 to the vector size boundary (to the closest greater
+  // power of two if the former isn't a power of two).
+  if (vectorType) {
+    int64_t numElements = vectorType.getNumElements();
+    size *=  numElements;
+    size_t alignment = llvm::PowerOf2Ceil(numElements * sizeof(float));
+    posix_memalign(reinterpret_cast<void **>(&descriptor->data), alignment,
+                   size * sizeof(float));
+  } else {
+    descriptor->data = static_cast<float *>(malloc(sizeof(float) * size));
+  }
+
   for (int64_t i = 0; i < size; ++i) {
     descriptor->data[i] = initialValue;
   }

@@ -141,6 +141,10 @@ static void printOneMemRef(Type t, void *val) {
   auto shape = memRefType.getShape();
   int64_t size = std::accumulate(shape.begin(), shape.end(), 1,
                                  std::multiplies<int64_t>());
+  if (auto vectorType = memRefType.getElementType().dyn_cast<VectorType>()) {
+    size *= vectorType.getNumElements();
+  }
+
   for (int64_t i = 0; i < size; ++i) {
     llvm::outs() << reinterpret_cast<StaticFloatMemRef *>(val)->data[i] << ' ';
   }

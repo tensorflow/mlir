@@ -464,8 +464,7 @@ private:
     return mlir::success();
   }
 
-  /// Build a type from a list of shape dimensions. Types are `tensor` followed
-  /// by an optional dimension list, example: tensor<2, 2>
+  /// Build a tensor type from a list of shape dimensions.
   mlir::Type getType(llvm::ArrayRef<int64_t> shape) {
     // If the shape is empty, then this type is unranked.
     if (shape.empty())

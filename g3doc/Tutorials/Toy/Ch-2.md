@@ -23,30 +23,21 @@ addresses this issue by being designed for extensibility. As such, there are
 little to no pre-defined instructions (*operations* in MLIR terminology) or
 types.
 
-## MLIR Dialects, Regions, Blocks, and Operations
+## MLIR Dialects and Operations
 
 [Language reference](../../LangRef.md#dialects)
 
 In MLIR, the core unit of abstraction and computation is an `Operation`, similar
-in many ways to LLVM instructions. Operations may also hold a number
-[`Region`s](../../LangRef.md#regions), of which contain a list of
-[`Blocks`](../../LangRef.md#blocks) forming a CFG(Control Flow Graph). `Blocks`
-are similar to LLVM `BasicBlocks` in that they contain a sequential list of
-`Operations`. Operations can be used to represent all of the core IR structures
-in LLVM: instructions, globals(like functions), modules, etc; however MLIR does
-not have a closed set of operations. Instead, the MLIR operation set is fully
-extensible and operations can have application-specific semantics.
+in many ways to LLVM instructions. Operations can be used to represent all of
+the core IR structures in LLVM: instructions, globals(like functions), modules,
+etc; however MLIR does not have a closed set of operations. Instead, the MLIR
+operation set is fully extensible and operations can have application-specific
+semantics.
 
 MLIR supports this extensibility with the concept of
 [Dialects](../../LangRef.md#dialects). Among other things, Dialects provide a
 grouping mechanism for operations under a unique `namespace`. Dialects will be a
 discussed a bit more in the [next chapter](Ch-3.md).
-
-The top level structure in MLIR (like in LLVM) is a
-[Module](../../LangRef.md#module) (equivalent to a translation unit in C/C++). A
-module is an operation that contains a single region composed of a single block.
-This block may contain any nature of operations, including
-[functions](../../LangRef.md#functions).
 
 Here is the MLIR assembly for the Toy 'transpose' operations:
 
@@ -228,3 +219,4 @@ it should take an operand, and it shouldn't return any values.
 
 In the [next chapter](Ch-3.md) we will register our dialect and operations with
 MLIR, plug into the verifier, and add nicer APIs to manipulate our operations.
+

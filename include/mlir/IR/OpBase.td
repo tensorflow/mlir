@@ -888,6 +888,18 @@ class IntElementsAttr<int width> : ElementsAttrBase<
 def I32ElementsAttr : IntElementsAttr<32>;
 def I64ElementsAttr : IntElementsAttr<64>;
 
+def F64ElementsAttr : Attr<
+  CPred<"$_self.isa<DenseFPElementsAttr>() &&"
+      "$_self.cast<DenseFPElementsAttr>().getType()."
+      "getElementType().isF64()">,
+  "64-bit floating-point elements attribute"> {
+  let storageType = [{ DenseElementsAttr }];
+  let returnType = [{ DenseElementsAttr }];
+  let constBuilderCall = "DenseElementsAttr::get("
+    "$_builder.getTensorType({}, $_builder.getF64Type()), {double($0)})";
+  let convertFromStorage = "$_self";
+}
+
 // Base class for array attributes.
 class ArrayAttrBase<Pred condition, string description> :
     Attr<condition, description> {

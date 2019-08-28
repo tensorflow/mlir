@@ -59,7 +59,7 @@ inline Dst bitwiseCast(Src source) noexcept {
 
 static LogicalResult extractValueFromConstOp(Operation *op,
                                              int32_t &indexValue) {
-  auto constOp = llvm::dyn_cast<spirv::ConstantOp>(op);
+  auto constOp = dyn_cast<spirv::ConstantOp>(op);
   if (!constOp) {
     return failure();
   }
@@ -316,7 +316,7 @@ static void printVariableDecorations(Operation *op, OpAsmPrinter *printer,
 
 static Type getElementPtrType(Type type, ArrayRef<Value *> indices,
                               Location baseLoc) {
-  if (!indices.size()) {
+  if (indices.empty()) {
     emitError(baseLoc, "'spv.AccessChain' op expected at least "
                        "one index ");
     return nullptr;
@@ -370,6 +370,13 @@ static Type getElementPtrType(Type type, ArrayRef<Value *> indices,
     resultType = cType.getElementType(index);
   }
   return spirv::PointerType::get(resultType, resultStorageClass);
+}
+
+void spirv::AccessChainOp::build(Builder *builder, OperationState *state,
+                                 Value *basePtr, ArrayRef<Value *> indices) {
+  auto type = getElementPtrType(basePtr->getType(), indices, state->location);
+  assert(type && "Unable to deduce return type based on basePtr and indices");
+  build(builder, state, type, basePtr, indices);
 }
 
 static ParseResult parseAccessChainOp(OpAsmParser *parser,
@@ -971,7 +978,7 @@ static LogicalResult verify(spirv::ModuleOp moduleOp) {
       // For EntryPoint op, check that the function and execution model is not
       // duplicated in EntryPointOps. Also verify that the interface specified
       // comes from globalVariables here to make this check cheaper.
-      if (auto entryPointOp = llvm::dyn_cast<spirv::EntryPointOp>(op)) {
+      if (auto entryPointOp = dyn_cast<spirv::EntryPointOp>(op)) {
         auto funcOp = table.lookup<FuncOp>(entryPointOp.fn());
         if (!funcOp) {
           return entryPointOp.emitError("function '")
@@ -1007,7 +1014,7 @@ static LogicalResult verify(spirv::ModuleOp moduleOp) {
       continue;
     }
 
-    auto funcOp = llvm::dyn_cast<FuncOp>(op);
+    auto funcOp = dyn_cast<FuncOp>(op);
     if (!funcOp)
       return op.emitError("'spv.module' can only contain func and spv.* ops");
 
@@ -1019,7 +1026,7 @@ static LogicalResult verify(spirv::ModuleOp moduleOp) {
         if (op.getDialect() == dialect)
           continue;
 
-        if (llvm::isa<FuncOp>(op))
+        if (isa<FuncOp>(op))
           return op.emitError("'spv.module' cannot contain nested functions");
 
         return op.emitError(
@@ -1034,6 +1041,16 @@ static LogicalResult verify(spirv::ModuleOp moduleOp) {
       auto capStr = cap.cast<StringAttr>().getValue();
       if (!spirv::symbolizeCapability(capStr))
         return moduleOp.emitOpError("uses unknown capability: ") << capStr;
+    }
+  }
+
+  // Verify extensions. ODS already guarantees that we have an array of
+  // string attributes.
+  if (auto exts = moduleOp.getAttrOfType<ArrayAttr>("extensions")) {
+    for (auto ext : exts.getValue()) {
+      auto extStr = ext.cast<StringAttr>().getValue();
+      if (!spirv::symbolizeExtension(extStr))
+        return moduleOp.emitOpError("uses unknown extension: ") << extStr;
     }
   }
 
@@ -1080,8 +1097,8 @@ static LogicalResult verify(spirv::ReferenceOfOp referenceOfOp) {
 // spv.Return
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyReturn(spirv::ReturnOp returnOp) {
-  auto funcOp = llvm::cast<FuncOp>(returnOp.getParentOp());
+static LogicalResult verify(spirv::ReturnOp returnOp) {
+  auto funcOp = cast<FuncOp>(returnOp.getParentOp());
   auto numOutputs = funcOp.getType().getNumResults();
   if (numOutputs != 0)
     return returnOp.emitOpError("cannot be used in functions returning value")
@@ -1110,7 +1127,7 @@ static void print(spirv::ReturnValueOp retValOp, OpAsmPrinter *printer) {
 }
 
 static LogicalResult verify(spirv::ReturnValueOp retValOp) {
-  auto funcOp = llvm::cast<FuncOp>(retValOp.getParentOp());
+  auto funcOp = cast<FuncOp>(retValOp.getParentOp());
   auto numFnResults = funcOp.getType().getNumResults();
   if (numFnResults != 1)
     return retValOp.emitOpError(

@@ -44,6 +44,11 @@ static inline StringRef decodeStringLiteral(ArrayRef<uint32_t> words,
   return str;
 }
 
+// Extracts the opcode from the given first word of a SPIR-V instruction.
+static inline spirv::Opcode extractOpcode(uint32_t word) {
+  return static_cast<spirv::Opcode>(word & 0xffff);
+}
+
 namespace {
 /// A SPIR-V module serializer.
 ///
@@ -83,6 +88,13 @@ private:
 
   /// Attaches all collected capabilites to `module` as an attribute.
   void attachCapabilities();
+
+  /// Processes the SPIR-V OpExtension with `operands` and updates bookkeeping
+  /// in the deserializer.
+  LogicalResult processExtension(ArrayRef<uint32_t> operands);
+
+  /// Attaches all collected extensions to `module` as an attribute.
+  void attachExtensions();
 
   /// Processes the SPIR-V OpMemoryModel with `operands` and updates `module`.
   LogicalResult processMemoryModel(ArrayRef<uint32_t> operands);
@@ -171,6 +183,13 @@ private:
   LogicalResult processConstantNull(ArrayRef<uint32_t> operands);
 
   //===--------------------------------------------------------------------===//
+  // Control flow
+  //===--------------------------------------------------------------------===//
+
+  /// Processes a SPIR-V OpLabel instruction with the given `operands`.
+  LogicalResult processLabel(ArrayRef<uint32_t> operands);
+
+  //===--------------------------------------------------------------------===//
   // Instruction
   //===--------------------------------------------------------------------===//
 
@@ -188,6 +207,9 @@ private:
   LogicalResult
   sliceInstruction(spirv::Opcode &opcode, ArrayRef<uint32_t> &operands,
                    Optional<spirv::Opcode> expectedOpcode = llvm::None);
+
+  /// Returns the next instruction's opcode if exists.
+  Optional<spirv::Opcode> peekOpcode();
 
   /// Processes a SPIR-V instruction with the given `opcode` and `operands`.
   /// This method is the main entrance for handling SPIR-V instruction; it
@@ -235,6 +257,9 @@ private:
 
   /// The list of capabilities used by the module.
   llvm::SmallSetVector<spirv::Capability, 4> capabilities;
+
+  /// The list of extensions used by the module.
+  llvm::SmallSetVector<StringRef, 2> extensions;
 
   // Result <id> to type mapping.
   DenseMap<uint32_t, Type> typeMap;
@@ -316,8 +341,9 @@ LogicalResult Deserializer::deserialize() {
     }
   }
 
-  // Attaches the capabilities as an attribute to the module.
+  // Attaches the capabilities/extensions as an attribute to the module.
   attachCapabilities();
+  attachExtensions();
 
   return success();
 }
@@ -377,6 +403,32 @@ void Deserializer::attachCapabilities() {
   module->setAttr("capabilities", opBuilder.getStrArrayAttr(caps));
 }
 
+LogicalResult Deserializer::processExtension(ArrayRef<uint32_t> operands) {
+  if (operands.empty()) {
+    return emitError(
+        unknownLoc,
+        "OpExtension must have a literal string for the extension name");
+  }
+
+  unsigned wordIndex = 0;
+  StringRef extName = decodeStringLiteral(operands, wordIndex);
+  if (wordIndex != operands.size()) {
+    return emitError(unknownLoc,
+                     "unexpected trailing words in OpExtension instruction");
+  }
+
+  extensions.insert(extName);
+  return success();
+}
+
+void Deserializer::attachExtensions() {
+  if (extensions.empty())
+    return;
+
+  module->setAttr("extensions",
+                  opBuilder.getStrArrayAttr(extensions.getArrayRef()));
+}
+
 LogicalResult Deserializer::processMemoryModel(ArrayRef<uint32_t> operands) {
   if (operands.size() != 2)
     return emitError(unknownLoc, "OpMemoryModel must have two operands");
@@ -431,6 +483,13 @@ LogicalResult Deserializer::processDecoration(ArrayRef<uint32_t> words) {
              << decorationName << " needs a single integer literal";
     }
     typeDecorations[words[0]] = static_cast<uint32_t>(words[2]);
+    break;
+  case spirv::Decoration::Block:
+    if (words.size() != 2) {
+      return emitError(unknownLoc, "OpDecoration with ")
+             << decorationName << "needs a single target <id>";
+    }
+    // Block decoration does not affect spv.struct type.
     break;
   default:
     return emitError(unknownLoc, "unhandled Decoration : '") << decorationName;
@@ -538,9 +597,17 @@ LogicalResult Deserializer::processFunction(ArrayRef<uint32_t> operands) {
     }
   }
 
-  // Create a new builder for building the body
+  // Create a new builder for building the body.
   OpBuilder funcBody(funcOp.getBody());
   std::swap(funcBody, opBuilder);
+
+  // Make sure the first basic block, if exists, starts with an OpLabel
+  // instruction.
+  if (auto nextOpcode = peekOpcode()) {
+    if (*nextOpcode != spirv::Opcode::OpFunctionEnd &&
+        *nextOpcode != spirv::Opcode::OpLabel)
+      return emitError(unknownLoc, "a basic block must start with OpLabel");
+  }
 
   spirv::Opcode opcode = spirv::Opcode::OpNop;
   ArrayRef<uint32_t> instOperands;
@@ -554,9 +621,12 @@ LogicalResult Deserializer::processFunction(ArrayRef<uint32_t> operands) {
   if (opcode != spirv::Opcode::OpFunctionEnd) {
     return failure();
   }
+
+  // Process OpFunctionEnd.
   if (!instOperands.empty()) {
     return emitError(unknownLoc, "unexpected operands for OpFunctionEnd");
   }
+
   std::swap(funcBody, opBuilder);
   return success();
 }
@@ -1082,6 +1152,18 @@ LogicalResult Deserializer::processConstantNull(ArrayRef<uint32_t> operands) {
 }
 
 //===----------------------------------------------------------------------===//
+// Control flow
+//===----------------------------------------------------------------------===//
+
+LogicalResult Deserializer::processLabel(ArrayRef<uint32_t> operands) {
+  if (operands.size() != 1) {
+    return emitError(unknownLoc, "OpLabel should only have result <id>");
+  }
+  // TODO(antiagainst): support basic blocks and control flow properly.
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Instruction
 //===----------------------------------------------------------------------===//
 
@@ -1130,10 +1212,16 @@ Deserializer::sliceInstruction(spirv::Opcode &opcode,
   if (nextOffset > binarySize)
     return emitError(unknownLoc, "insufficient words for the last instruction");
 
-  opcode = static_cast<spirv::Opcode>(binary[curOffset] & 0xffff);
+  opcode = extractOpcode(binary[curOffset]);
   operands = binary.slice(curOffset + 1, wordCount - 1);
   curOffset = nextOffset;
   return success();
+}
+
+Optional<spirv::Opcode> Deserializer::peekOpcode() {
+  if (curOffset >= binary.size())
+    return llvm::None;
+  return extractOpcode(binary[curOffset]);
 }
 
 LogicalResult Deserializer::processInstruction(spirv::Opcode opcode,
@@ -1144,6 +1232,8 @@ LogicalResult Deserializer::processInstruction(spirv::Opcode opcode,
   switch (opcode) {
   case spirv::Opcode::OpCapability:
     return processCapability(operands);
+  case spirv::Opcode::OpExtension:
+    return processExtension(operands);
   case spirv::Opcode::OpMemoryModel:
     return processMemoryModel(operands);
   case spirv::Opcode::OpEntryPoint:
@@ -1192,6 +1282,8 @@ LogicalResult Deserializer::processInstruction(spirv::Opcode opcode,
     return processMemberDecoration(operands);
   case spirv::Opcode::OpFunction:
     return processFunction(operands);
+  case spirv::Opcode::OpLabel:
+    return processLabel(operands);
   default:
     break;
   }

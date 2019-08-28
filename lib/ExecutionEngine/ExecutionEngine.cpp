@@ -70,13 +70,13 @@ namespace mlir {
 
 void SimpleObjectCache::notifyObjectCompiled(const Module *M,
                                              MemoryBufferRef ObjBuffer) {
-  CachedObjects[M->getModuleIdentifier()] = MemoryBuffer::getMemBufferCopy(
+  cachedObjects[M->getModuleIdentifier()] = MemoryBuffer::getMemBufferCopy(
       ObjBuffer.getBuffer(), ObjBuffer.getBufferIdentifier());
 }
 
 std::unique_ptr<MemoryBuffer> SimpleObjectCache::getObject(const Module *M) {
-  auto I = CachedObjects.find(M->getModuleIdentifier());
-  if (I == CachedObjects.end()) {
+  auto I = cachedObjects.find(M->getModuleIdentifier());
+  if (I == cachedObjects.end()) {
     dbgs() << "No object for " << M->getModuleIdentifier()
            << " in cache. Compiling.\n";
     return nullptr;
@@ -96,8 +96,8 @@ void SimpleObjectCache::dumpToObjectFile(llvm::StringRef outputFilename) {
   }
 
   // Dump the object generated for a single module to the output file.
-  assert(CachedObjects.size() == 1 && "Expected only one object entry.");
-  auto &cachedObject = CachedObjects.begin()->second;
+  assert(cachedObjects.size() == 1 && "Expected only one object entry.");
+  auto &cachedObject = cachedObjects.begin()->second;
   file->os() << cachedObject->getBuffer();
   file->keep();
 }

@@ -53,7 +53,7 @@ public:
   void dumpToObjectFile(llvm::StringRef filename);
 
 private:
-  llvm::StringMap<std::unique_ptr<llvm::MemoryBuffer>> CachedObjects;
+  llvm::StringMap<std::unique_ptr<llvm::MemoryBuffer>> cachedObjects;
 };
 
 /// JIT-backed execution engine for MLIR modules.  Assumes the module can be

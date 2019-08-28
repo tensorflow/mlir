@@ -769,13 +769,11 @@ TEST_FUNC(affine_if_op) {
   IndexedValue A(f.getArgument(0));
   IndexHandle i, j;
 
-
   SmallVector<bool, 4> isEq = {false, false};
   SmallVector<AffineExpr, 4> affineExprs = {
     builder.getAffineDimExpr(0) + builder.getAffineSymbolExpr(0), // d0 + s0 >= 0
     builder.getAffineDimExpr(1) - builder.getAffineSymbolExpr(1), // d1 - s1 >= 0
   };
-       
   auto intSet = builder.getIntegerSet(2, 2, affineExprs, isEq);
 
   LoopNestBuilder({&i, &j}, {zero, zero}, {ten, ten}, {1, 1})([&]{

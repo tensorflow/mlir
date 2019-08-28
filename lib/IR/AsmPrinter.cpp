@@ -545,7 +545,7 @@ static bool isDialectSymbolSimpleEnoughForPrettyForm(StringRef symName) {
       nestedPunctuation.push_back(c);
       continue;
     case '-':
-      if (symName.front() == '>') {
+      if (!symName.empty() && symName.front() == '>') {
 	symName = symName.drop_front();
 	continue;
       }

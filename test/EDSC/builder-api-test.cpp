@@ -765,8 +765,6 @@ TEST_FUNC(affine_if_op) {
   ScopedContext scope(builder, f.getLoc());
   // clang-format off
   ValueHandle zero = constant_index(0), ten = constant_index(10);
-  MemRefView vA(f.getArgument(0));
-  IndexedValue A(f.getArgument(0));
   IndexHandle i, j;
 
   SmallVector<bool, 4> isEq = {false, false};

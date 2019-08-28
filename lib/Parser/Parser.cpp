@@ -383,7 +383,7 @@ ParseResult Parser::parsePrettyDialectSymbolName(StringRef &prettyName) {
       // the sequence `->` is treated as special token, not a match
       if (*curPtr == '>')
 	++curPtr;
-      break;
+      continue;
 
     case '>':
       if (nestedPunctuation.pop_back_val() != '<')

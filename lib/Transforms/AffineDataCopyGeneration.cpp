@@ -562,11 +562,12 @@ LogicalResult AffineDataCopyGeneration::generateCopy(
     prev = std::prev(begin);
 
   // *Only* those uses within the range [begin, end) of 'block' are replaced.
-  replaceAllMemRefUsesWith(memref, fastMemRef,
-                           /*extraIndices=*/{}, indexRemap,
-                           /*extraOperands=*/regionSymbols,
-                           /*domInstFilter=*/&*begin,
-                           /*postDomInstFilter=*/&*postDomFilter);
+  if (failed(replaceAllMemRefUsesWith(memref, fastMemRef,
+                                      /*extraIndices=*/{}, indexRemap,
+                                      /*extraOperands=*/regionSymbols,
+                                      /*domInstFilter=*/&*begin,
+                                      /*postDomInstFilter=*/&*postDomFilter)))
+    llvm_unreachable("memref replacement guaranteed to succeed here");
 
   *nBegin = wasAtStartOfBlock ? block->begin() : std::next(prev);
 

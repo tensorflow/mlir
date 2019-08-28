@@ -1573,6 +1573,16 @@ void AffineIfOp::setIntegerSet(IntegerSet newSet) {
   setAttr(getConditionAttrName(), IntegerSetAttr::get(newSet));
 }
 
+void AffineIfOp::build(Builder *builder, OperationState *result, ArrayRef<Value *> args, bool withElseRegion)
+{
+  result->addOperands(args);
+  Region *thenRegion = result->addRegion();
+  Region *elseRegion = result->addRegion();
+  AffineIfOp::ensureTerminator(*thenRegion, *builder, result->location);
+  if (withElseRegion)
+    AffineIfOp::ensureTerminator(*elseRegion, *builder, result->location);
+}
+
 //===----------------------------------------------------------------------===//
 // AffineLoadOp
 //===----------------------------------------------------------------------===//

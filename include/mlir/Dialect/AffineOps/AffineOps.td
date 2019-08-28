@@ -215,7 +215,7 @@ def AffineIfOp : Affine_Op<"if", [ImplicitAffineTerminator]> {
   
   let builders = [
     OpBuilder<"Builder *builder, OperationState *result, "
-              "ArrayRef<Value *> args, bool withElseRegion">
+              "ArrayRef<Value *> args, IntegerSet set, bool withElseRegion">
   ];
 
   let extraClassDeclaration = [{

@@ -198,10 +198,11 @@ template <typename Op> struct OperationBuilder : public OperationHandle {
   OperationBuilder() : OperationHandle(OperationHandle::create<Op>()) {}
 };
 
-using alloc = ValueBuilder<AllocOp>;
 using affine_apply = ValueBuilder<AffineApplyOp>;
+using affine_if = OperationBuilder<AffineIfOp>;
 using affine_load = ValueBuilder<AffineLoadOp>;
 using affine_store = OperationBuilder<AffineStoreOp>;
+using alloc = ValueBuilder<AllocOp>;
 using call = OperationBuilder<mlir::CallOp>;
 using constant_float = ValueBuilder<ConstantFloatOp>;
 using constant_index = ValueBuilder<ConstantIndexOp>;
@@ -215,7 +216,7 @@ using std_load = ValueBuilder<LoadOp>;
 using std_store = OperationBuilder<StoreOp>;
 using subi = ValueBuilder<SubIOp>;
 using vector_type_cast = ValueBuilder<vector::VectorTypeCastOp>;
-using affine_if = OperationBuilder<AffineIfOp>;
+
 /// Branches into the mlir::Block* captured by BlockHandle `b` with `operands`.
 ///
 /// Prerequisites:

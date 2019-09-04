@@ -762,7 +762,7 @@ TEST_FUNC(affine_if_op) {
 
   OpBuilder builder(f.getBody());
   ScopedContext scope(builder, f.getLoc());
-  // clang-format off
+
   ValueHandle zero = constant_index(0), ten = constant_index(10);
   
   SmallVector<bool, 4> isEq = {false, false, false, false};

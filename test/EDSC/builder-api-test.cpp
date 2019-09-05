@@ -775,8 +775,8 @@ TEST_FUNC(affine_if_op) {
   auto intSet = builder.getIntegerSet(2, 2, affineExprs, isEq);
   
   SmallVector<Value*, 4> affineIfArgs = {zero, zero, ten, ten};
-  intrinsics::affine_if(intSet, affineIfArgs, /* withElseRegion */ false);
-  intrinsics::affine_if(intSet, affineIfArgs, /* withElseRegion */ true);
+  intrinsics::affine_if(intSet, affineIfArgs, /*withElseRegion=*/ false);
+  intrinsics::affine_if(intSet, affineIfArgs, /*withElseRegion=*/ true);
   
   f.print(llvm::outs());
   f.erase();

@@ -749,7 +749,7 @@ TEST_FUNC(empty_map_load_store) {
 
 // CHECK-LABEL: func @affine_if_op
 // CHECK:       affine.if ([[d0:.*]], [[d1:.*]]){{\[}}[[s0:.*]], [[s1:.*]]{{\]}}
-// CHECK-NEXT:  }
+// CHECK-NOT:   else
 // CHECK:       affine.if ([[d0:.*]], [[d1:.*]]){{\[}}[[s0:.*]], [[s1:.*]]{{\]}}
 // CHECK-NEXT:  } else {
 TEST_FUNC(affine_if_op) {

@@ -212,7 +212,7 @@ def AffineIfOp : Affine_Op<"if", [ImplicitAffineTerminator]> {
   let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
 
   let skipDefaultBuilders = 1;
-  
+
   let builders = [
     OpBuilder<"Builder *builder, OperationState *result, "
               "IntegerSet set, ArrayRef<Value *> args, bool withElseRegion">

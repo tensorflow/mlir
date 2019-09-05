@@ -764,20 +764,20 @@ TEST_FUNC(affine_if_op) {
   ScopedContext scope(builder, f.getLoc());
 
   ValueHandle zero = constant_index(0), ten = constant_index(10);
-  
+
   SmallVector<bool, 4> isEq = {false, false, false, false};
   SmallVector<AffineExpr, 4> affineExprs = {
-    builder.getAffineDimExpr(0),    // d0 >= 0
-    builder.getAffineDimExpr(1),    // d1 >= 0
-    builder.getAffineSymbolExpr(0), // s0 >= 0
-    builder.getAffineSymbolExpr(1)  // s1 >= 0
+      builder.getAffineDimExpr(0),    // d0 >= 0
+      builder.getAffineDimExpr(1),    // d1 >= 0
+      builder.getAffineSymbolExpr(0), // s0 >= 0
+      builder.getAffineSymbolExpr(1)  // s1 >= 0
   };
   auto intSet = builder.getIntegerSet(2, 2, affineExprs, isEq);
-  
-  SmallVector<Value*, 4> affineIfArgs = {zero, zero, ten, ten};
-  intrinsics::affine_if(intSet, affineIfArgs, /*withElseRegion=*/ false);
-  intrinsics::affine_if(intSet, affineIfArgs, /*withElseRegion=*/ true);
-  
+
+  SmallVector<Value *, 4> affineIfArgs = {zero, zero, ten, ten};
+  intrinsics::affine_if(intSet, affineIfArgs, /*withElseRegion=*/false);
+  intrinsics::affine_if(intSet, affineIfArgs, /*withElseRegion=*/true);
+
   f.print(llvm::outs());
   f.erase();
 }

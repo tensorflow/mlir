@@ -1,8 +1,16 @@
 // RUN: mlir-cpu-runner %s | FileCheck %s
 // RUN: mlir-cpu-runner -e foo -init-value 1000 %s | FileCheck -check-prefix=NOMAIN %s
 // RUN: mlir-cpu-runner %s -O3 | FileCheck %s
-// RUN: mlir-cpu-runner %s -O3 -loop-distribute -loop-vectorize | FileCheck %s
-// RUN: mlir-cpu-runner %s -loop-distribute -loop-vectorize | FileCheck %s
+// RUN: mlir-cpu-runner -e affine -init-value 2.0 %s | FileCheck -check-prefix=AFFINE %s
+
+// RUN: cp %s %t
+// RUN: mlir-cpu-runner %t -dump-object-file | FileCheck %t
+// RUN: ls %t.o
+// RUN: rm %t.o
+
+// RUN: mlir-cpu-runner %s -dump-object-file -object-filename=%T/test.o | FileCheck %s
+// RUN: ls %T/test.o
+// RUN: rm %T/test.o
 
 func @fabsf(f32) -> f32
 
@@ -31,3 +39,13 @@ func @foo(%a : memref<1x1xf32>) -> memref<1x1xf32> {
 }
 // NOMAIN: 2.234000e+03
 // NOMAIN-NEXT: 2.234000e+03
+
+func @affine(%a : memref<32xf32>) -> memref<32xf32> {
+  %cf1 = constant 42.0 : f32
+  %N = dim %a, 0 : memref<32xf32>
+  affine.for %i = 0 to %N {
+    affine.store %cf1, %a[%i] : memref<32xf32>
+  }
+  return %a : memref<32xf32>
+}
+// AFFINE: 4.2{{0+}}e+01

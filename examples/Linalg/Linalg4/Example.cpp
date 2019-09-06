@@ -67,7 +67,7 @@ TEST_FUNC(matmul_tiled_loops) {
   OwningModuleRef module = ModuleOp::create(UnknownLoc::get(&context));
   mlir::FuncOp f = makeFunctionWithAMatmulOp(*module, "matmul_tiled_loops");
   lowerToTiledLoops(f, {8, 9});
-  PassManager pm;
+  PassManager pm(&context);
   pm.addPass(createLowerLinalgLoadStorePass());
   if (succeeded(pm.run(f.getParentOfType<mlir::ModuleOp>())))
     cleanupAndPrintFunction(f);
@@ -80,8 +80,8 @@ TEST_FUNC(matmul_tiled_loops) {
   //       CHECK: affine.for %{{.*}} = 0 to (d0) -> (d0)(%[[M]]) step 8 {
   //       CHECK:   affine.for %{{.*}} = 0 to (d0) -> (d0)(%[[N]]) step 9 {
   //       CHECK:     affine.for %{{.*}} = 0 to (d0) -> (d0)(%[[K]]) {
-  //       CHECK:       affine.for %{{.*}} = max (d0)[s0] -> (s0, d0)(%{{.*}})[%{{.*}}] to min (d0)[s0] -> (s0, d0 + 8)(%{{.*}})[%[[M]]] {
-  //       CHECK:         affine.for %{{.*}} = max (d0)[s0] -> (s0, d0)(%{{.*}})[%{{.*}}] to min (d0)[s0] -> (s0, d0 + 9)(%{{.*}})[%[[N]]] {
+  //       CHECK:       affine.for %{{.*}} = max (d0) -> (0, d0)(%{{.*}}) to min (d0)[s0] -> (s0, d0 + 8)(%{{.*}})[%[[M]]] {
+  //       CHECK:         affine.for %{{.*}} = max (d0) -> (0, d0)(%{{.*}}) to min (d0)[s0] -> (s0, d0 + 9)(%{{.*}})[%[[N]]] {
   //  CHECK-NEXT:           %{{.*}} = cmpi "eq", %{{.*}}, %{{.*}} : index
   //  CHECK-NEXT:           %{{.*}} = load %{{.*}}[%{{.*}}, %{{.*}}] : memref<?x?xf32>
   //  CHECK-NEXT:           %{{.*}} = select %{{.*}}, %{{.*}}, %{{.*}} : f32

@@ -1,4 +1,4 @@
-add_llvm_library(MLIRAffineOps
+add_llvm_library(MLIRAffineOps STATIC
   AffineOps.cpp
   DialectRegistration.cpp
 
@@ -7,4 +7,3 @@ add_llvm_library(MLIRAffineOps
   )
 add_dependencies(MLIRAffineOps MLIRAffineOpsIncGen MLIRIR MLIRStandardOps)
 target_link_libraries(MLIRAffineOps MLIRIR MLIRStandardOps)
-

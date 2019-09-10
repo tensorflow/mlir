@@ -1,9 +1,9 @@
 file(GLOB globbed *.c *.cpp)
-add_llvm_library(MLIRPass
+add_llvm_library(MLIRPass STATIC
   ${globbed}
 
   ADDITIONAL_HEADER_DIRS
   ${MLIR_MAIN_INCLUDE_DIR}/mlir/Pass
   )
-add_dependencies(MLIRPass MLIRAnalysis MLIRIR LLVMSupport)
+add_dependencies(MLIRPass MLIRIR LLVMSupport)
 target_link_libraries(MLIRPass MLIRAnalysis MLIRIR LLVMSupport)

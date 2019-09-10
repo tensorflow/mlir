@@ -11,11 +11,19 @@ target_link_libraries(MLIRExecutionEngine
 
   MLIRLLVMIR
   MLIRTargetLLVMIR
+  Linalg1LLVMConversion
+  LLVMAggressiveInstCombine
+  LLVMAnalysis
   LLVMBitReader
   LLVMBitWriter
   LLVMExecutionEngine
+  LLVMInstCombine
   LLVMOrcJIT
+  LLVMMC
+  LLVMScalarOpts
   LLVMSupport
+  LLVMTarget
   LLVMTransformUtils
+  LLVMVectorize
 
   ${outlibs})

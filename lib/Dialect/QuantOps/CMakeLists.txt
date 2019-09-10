@@ -19,3 +19,5 @@ add_dependencies(MLIRQuantOps
                  MLIRQuantOpsIncGen
                  MLIRSupport
                  MLIRStandardOps)
+
+target_link_libraries(MLIRQuantOps MLIRIR MLIRPass MLIRParser MLIRSupport MLIRTransforms MLIRAnalysis MLIRStandardOps LLVMSupport)

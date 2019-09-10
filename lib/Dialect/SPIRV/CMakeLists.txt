@@ -16,6 +16,7 @@ add_dependencies(MLIRSPIRV
 target_link_libraries(MLIRSPIRV
   MLIRIR
   MLIRParser
-  MLIRSupport)
+  MLIRSupport
+  MLIRTranslation)
 
 add_subdirectory(Serialization)

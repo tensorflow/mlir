@@ -1,4 +1,4 @@
-add_llvm_library(MLIRLinalg
+add_llvm_library(MLIRLinalg STATIC
   LinalgRegistration.cpp
   Analysis/DependenceAnalysis.cpp
   IR/LinalgOps.cpp
@@ -17,8 +17,12 @@ add_llvm_library(MLIRLinalg
 
 add_dependencies(MLIRLinalg
 
-  MLIRAffineOps
   MLIRLinalgOpsIncGen
   MLIRLinalgLibraryOpsIncGen
+  )
+target_link_libraries(MLIRLinalg
+
+  MLIRAffineOps
+  MLIRIR
   MLIRStandardToLLVM
   )

@@ -6,5 +6,7 @@ target_link_libraries(MLIRGPUtoNVVMTransforms
   MLIRGPU
   MLIRLLVMIR
   MLIRNVVMIR
+  MLIRStandardToLLVM
+  MLIRTransforms
   MLIRPass
   )

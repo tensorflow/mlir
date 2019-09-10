@@ -3,17 +3,21 @@ set(LLVM_OPTIONAL_SOURCES
 )
 
 set(LIB_LIBS
+  Linalg1LLVMConversion
   MLIRAnalysis
+  MLIRIR
   MLIRLLVMIR
+  MLIROptMain
   MLIRParser
   MLIRPass
-  MLIRTransforms
+  MLIRQuantizerSupport
   MLIRSupport
+  MLIRTransforms
 )
 add_llvm_library(MLIRMlirOptLib
   mlir-opt.cpp
 )
-target_link_libraries(MLIRMlirOptLib ${LIB_LIBS})
+target_link_libraries(MLIRMlirOptLib ${LIB_LIBS} MLIRIR)
 
 set(LIBS
   MLIRAffineOps
@@ -40,7 +44,6 @@ set(LIBS
   MLIRStandardToLLVM
   MLIRTransforms
   MLIRTestDialect
-  MLIRTestPass
   MLIRTestTransforms
   MLIRSupport
   MLIRVectorOps

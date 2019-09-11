@@ -8,8 +8,8 @@ mlir_tablegen(include/toy/Ops.cpp.inc -gen-op-defs)
 add_public_tablegen_target(ToyCh4OpsIncGen)
 
 set(LLVM_TARGET_DEFINITIONS mlir/ToyCombine.td)
-mlir_tablegen(ToyCombine.h.inc -gen-op-decls)
-mlir_tablegen(ToyCombine.cpp.inc -gen-op-defs)
+mlir_tablegen(ToyCombine.h.inc -gen-rewriters)
+mlir_tablegen(ToyCombine.cpp.inc -gen-rewriters)
 mlir_tablegen(ToyCombine.inc -gen-rewriters)
 add_public_tablegen_target(MLIRToyCombineIncGen)
 

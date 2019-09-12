@@ -30,6 +30,7 @@ class Pass;
 
 namespace toy {
 std::unique_ptr<mlir::Pass> createShapeInferencePass();
+std::unique_ptr<mlir::Pass> createTransposeOptPass();
 } // namespace toy
 
 #endif // MLIR_TUTORIAL_TOY_PASSES_H

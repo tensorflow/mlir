@@ -9,6 +9,6 @@ include "mlir/IR/OpBase.td"
 include "include/toy/Ops.td"
 #endif // OP_BASE
 
-def:Pat<(TransposeOp(TransposeOp $arg)), (replaceWithValue $arg)>;
+def TransposeOptPattern : Pat<(TransposeOp(TransposeOp $arg)), (replaceWithValue $arg)>;
 
 #endif // TOY_COMBINE

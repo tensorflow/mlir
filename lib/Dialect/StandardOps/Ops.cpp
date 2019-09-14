@@ -2022,6 +2022,24 @@ OpFoldResult SelectOp::fold(ArrayRef<Attribute> operands) {
 }
 
 //===----------------------------------------------------------------------===//
+// SignExtendIOp
+//===----------------------------------------------------------------------===//
+
+static LogicalResult verify(SignExtendIOp op) {
+  auto opType = op.getOperand()->getType().dyn_cast_or_null<IntegerType>();
+  if (!opType)
+    return op.emitError("operand type ") << opType << " is not an integer ";
+  auto resType = op.getType().dyn_cast_or_null<IntegerType>();
+  if (!resType)
+    return op.emitError("result type ") << resType << " is not an integer ";
+  if (opType.getWidth() >= resType.getWidth())
+    return op.emitError("result type ")
+           << resType << " must be wider than operand type " << opType;
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // StoreOp
 //===----------------------------------------------------------------------===//
 
@@ -2241,6 +2259,42 @@ static ParseResult parseTensorStoreOp(OpAsmParser *parser,
       parser->resolveOperands(
           ops, {getTensorTypeFromMemRefType(parser->getBuilder(), type), type},
           loc, result->operands));
+}
+
+//===----------------------------------------------------------------------===//
+// TruncateIOp
+//===----------------------------------------------------------------------===//
+
+static LogicalResult verify(TruncateIOp op) {
+  auto opType = op.getOperand()->getType().dyn_cast_or_null<IntegerType>();
+  if (!opType)
+    return op.emitError("operand type ") << opType << " is not an integer ";
+  auto resType = op.getType().dyn_cast_or_null<IntegerType>();
+  if (!resType)
+    return op.emitError("result type ") << resType << " is not an integer ";
+  if (opType.getWidth() <= resType.getWidth())
+    return op.emitError("operand type ")
+           << opType << " must be wider than result type " << resType;
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ZeroExtendIOp
+//===----------------------------------------------------------------------===//
+
+static LogicalResult verify(ZeroExtendIOp op) {
+  auto opType = op.getOperand()->getType().dyn_cast_or_null<IntegerType>();
+  if (!opType)
+    return op.emitError("operand type ") << opType << " is not an integer ";
+  auto resType = op.getType().dyn_cast_or_null<IntegerType>();
+  if (!resType)
+    return op.emitError("result type ") << resType << " is not an integer ";
+  if (opType.getWidth() >= resType.getWidth())
+    return op.emitError("result type ")
+           << resType << " must be wider than operand type " << opType;
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

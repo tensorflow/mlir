@@ -820,6 +820,45 @@ def SelectOp : Std_Op<"select", [NoSideEffect, SameOperandsAndResultShape]> {
 
   let hasFolder = 1;
 }
+
+def SignExtendIOp : Std_Op<"sexti", [NoSideEffect]> {
+  let summary = "integer sign extension operation";
+  let description = [{
+    The integer sign extension operation takes an integer input of
+    width M and an integer destination type of width N. The destination
+    bit-width must be larger than the input bit-width (N > M).
+    The top-most (N - M) bits of the output are filled with copies
+    of the most-significant bit of the input.
+
+      %1 = constant 5 : i3            // %1 is 0b101
+      %2 = sexti %1 : i3 to i6        // %2 is 0b111101
+      %3 = constant 2 : i3            // %3 is 0b010
+      %4 = sexti %3 : i3 to i6        // %4 is 0b000010
+  }];
+
+  let arguments = (ins IntegerLike:$value);
+
+  let results = (outs IntegerLike);
+
+  let builders = [OpBuilder<
+    "Builder *builder, OperationState *result, Value *value, Type destType", [{
+      result->addOperands(value);
+      result->addTypes(destType);
+  }]>];
+
+  let extraClassDeclaration = [{
+    /// Returns the result type of the sign extension operation.
+    IntegerType getType() { return getResult()->getType().cast<IntegerType>(); }
+  }];
+
+  let parser = [{
+    return impl::parseCastOp(parser, result);
+  }];
+  let printer = [{
+    return printStandardCastOp(this->getOperation(), p);
+  }];
+}
+
 def ShlISOp : IntArithmeticOp<"shlis"> {
   let summary = "signed integer shift left";
 }
@@ -951,10 +990,82 @@ def TensorStoreOp : Std_Op<"tensor_store",
   let verifier = ?;
 }
 
+def TruncateIOp : Std_Op<"trunci", [NoSideEffect]> {
+  let summary = "integer truncation operation";
+  let description = [{
+    The integer truncation operation takes an integer input of
+    width M and an integer destination type of width N. The destination
+    bit-width must be smaller than the input bit-width (N < M).
+    The top-most (N - M) bits of the input are discareded.
+
+      %1 = constant 21 : i5           // %1 is 0b10101
+      %2 = trunci %1 : i5 to i4       // %2 is 0b0101
+      %3 = trunci %1 : i5 to i3       // %3 is 0b101
+  }];
+
+  let arguments = (ins IntegerLike:$value);
+
+  let results = (outs IntegerLike);
+
+  let builders = [OpBuilder<
+    "Builder *builder, OperationState *result, Value *value, Type destType", [{
+      result->addOperands(value);
+      result->addTypes(destType);
+  }]>];
+
+  let extraClassDeclaration = [{
+    /// Returns the result type of the truncation operation.
+    IntegerType getType() { return getResult()->getType().cast<IntegerType>(); }
+  }];
+
+  let parser = [{
+    return impl::parseCastOp(parser, result);
+  }];
+  let printer = [{
+    return printStandardCastOp(this->getOperation(), p);
+  }];
+}
 
 def XOrOp : IntArithmeticOp<"xor", [Commutative]> {
   let summary = "integer binary xor";
   let hasFolder = 1;
+}
+
+def ZeroExtendIOp : Std_Op<"zexti", [NoSideEffect]> {
+  let summary = "integer zero extension operation";
+  let description = [{
+    The integer zero extension operation takes an integer input of
+    width M and an integer destination type of width N. The destination
+    bit-width must be larger than the input bit-width (N > M).
+    The top-most (N - M) bits of the output are filled with zeros.
+
+      %1 = constant 5 : i3            // %1 is 0b101
+      %2 = zexti %1 : i3 to i6        // %2 is 0b000101
+      %3 = constant 2 : i3            // %3 is 0b010
+      %4 = zexti %3 : i3 to i6        // %4 is 0b000010
+  }];
+
+  let arguments = (ins IntegerLike:$value);
+
+  let results = (outs IntegerLike);
+
+  let builders = [OpBuilder<
+    "Builder *builder, OperationState *result, Value *value, Type destType", [{
+      result->addOperands(value);
+      result->addTypes(destType);
+  }]>];
+
+  let extraClassDeclaration = [{
+    /// Returns the result type of the zero extension operation.
+    IntegerType getType() { return getResult()->getType().cast<IntegerType>(); }
+  }];
+
+  let parser = [{
+    return impl::parseCastOp(parser, result);
+  }];
+  let printer = [{
+    return printStandardCastOp(this->getOperation(), p);
+  }];
 }
 
 #endif // STANDARD_OPS

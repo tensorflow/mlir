@@ -128,8 +128,8 @@ def GenericCallOp : Toy_Op<"generic_call"> {
   }];
 
   // The generic call operation takes a symbol reference attribute as the
-  // callee, and two operands for the call.
-  let arguments = (ins SymbolRefAttr:$callee, F64Tensor:$lhs, F64Tensor:$rhs);
+  // callee, and inputs for the call.
+  let arguments = (ins SymbolRefAttr:$callee, Variadic<F64Tensor>:$inputs);
 
   // The generic call operation returns a single value of TensorType.
   let results = (outs F64Tensor);
@@ -176,11 +176,11 @@ def PrintOp : Toy_Op<"print"> {
 def ReshapeOp : Toy_Op<"reshape", [NoSideEffect]> {
   let summary = "tensor reshape operation";
   let description = [{
-    Reshape operation is transforming its input array into a new array with the
-    same number of elements but different shapes. For example:
+    Reshape operation is transforming its input tensor into a new tensor with
+    the same number of elements but different shapes. For example:
 
     ```mlir
-       %0 = "toy.reshape"(%arg1) : (!toy.array<10>) -> !toy.array<5, 2>
+       %0 = "toy.reshape"(%arg1) : (tensor<10xf64>) -> tensor<5x2xf64>
     ```
   }];
 

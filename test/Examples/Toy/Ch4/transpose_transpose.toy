@@ -15,5 +15,5 @@ def main() {
 
 
 #OPT-LABEL: func @transpose_transpose
-#OPT-NOT: transpose
+#OPT-NOT: toy.transpose
 

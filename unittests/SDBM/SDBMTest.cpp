@@ -112,7 +112,7 @@ TEST(SDBMOperators, Stripe) {
 }
 
 TEST(SDBM, RoundTripEqs) {
-  // Build and SDBM defined by
+  // Build an SDBM defined by
   //
   //   d0 = s0 # 3 # 5
   //   s0 # 3 # 5 - d1 + 42 = 0
@@ -138,7 +138,7 @@ TEST(SDBM, RoundTripEqs) {
   sdbm2.getSDBMExpressions(dialect(), ineqs2, eqs2);
   ASSERT_EQ(eqs.size(), eqs2.size());
 
-  // Convert that the sets of equalities are equal, their order is not relevant.
+  // Check that the sets of equalities are equal, their order is not relevant.
   llvm::DenseSet<SDBMExpr> eqSet, eq2Set;
   eqSet.insert(eqs.begin(), eqs.end());
   eq2Set.insert(eqs2.begin(), eqs2.end());
@@ -173,7 +173,7 @@ TEST(SDBMExpr, Dim) {
   auto generic = static_cast<SDBMExpr>(expr);
   EXPECT_TRUE(generic.isa<SDBMDimExpr>());
   EXPECT_TRUE(generic.isa<SDBMInputExpr>());
-  EXPECT_TRUE(generic.isa<SDBMPositiveExpr>());
+  EXPECT_TRUE(generic.isa<SDBMTermExpr>());
   EXPECT_TRUE(generic.isa<SDBMVaryingExpr>());
 
   // Dimensions are not Symbols.
@@ -195,7 +195,7 @@ TEST(SDBMExpr, Symbol) {
   auto generic = static_cast<SDBMExpr>(expr);
   EXPECT_TRUE(generic.isa<SDBMSymbolExpr>());
   EXPECT_TRUE(generic.isa<SDBMInputExpr>());
-  EXPECT_TRUE(generic.isa<SDBMPositiveExpr>());
+  EXPECT_TRUE(generic.isa<SDBMTermExpr>());
   EXPECT_TRUE(generic.isa<SDBMVaryingExpr>());
 
   // Dimensions are not Symbols.
@@ -228,7 +228,7 @@ TEST(SDBMExpr, Stripe) {
   // Hierarchy is okay.
   auto generic = static_cast<SDBMExpr>(expr);
   EXPECT_TRUE(generic.isa<SDBMStripeExpr>());
-  EXPECT_TRUE(generic.isa<SDBMPositiveExpr>());
+  EXPECT_TRUE(generic.isa<SDBMTermExpr>());
   EXPECT_TRUE(generic.isa<SDBMVaryingExpr>());
 }
 

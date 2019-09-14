@@ -1,25 +1,21 @@
 # Chapter 4: High-level Language-Specific Analysis and Transformation
 
 Creating a dialect that closely represents the semantics of an input language
-enables analyses and transformations in MLIR that are generally performed on the
-language AST. For example, `clang` has a fairly
+enables analyses, transformations and optimizations in MLIR that require high level language 
+information and are generally performed on the language AST. For example, `clang` has a fairly
 [heavy mechanism](https://clang.llvm.org/doxygen/classclang_1_1TreeTransform.html)
 for performing template instantiation in C++.
 
-Another aspect is optimization. While some previous language specific
-optimizations have been implemented in LLVM (like the
-[ARC optimizer](http://llvm.org/doxygen/ObjCARCOpts_8cpp_source.html#l00468)),
-it has been at the cost of relying on either adding enough concepts in LLVM, to
-be able to embed the high-level semantics of the input, or using fragile
-"best-effort" metadata to decorate the IR with the information needed for these
-custom optimizations.
+We divide compiler transformations into two: local and global. In this chapter, we 
+focus on how to leverage the Toy Dialect and its high-level semantics to perform 
+local pattern-match transformations that would be difficult in LLVM. For this, we use 
+MLIR's [Generic DAG Rewriter](https://github.com/tensorflow/mlir/blob/master/g3doc/GenericDAGRewriter.md).
 
-We show in this chapter how to leverage the Toy Dialect and its high-level
-semantics to perform transformations that would be difficult in LLVM: first a
-simple combine of two redundant operations, and second a full interprocedural
-shape inference with function specialization.
+There are two methods that can be used to implement pattern-match transformations:
+1. Declarative, rule-based pattern-match and rewrite using TableGen
+2. Imperative, C++ pattern-match and rewrite
 
-# Basic Optimization: Eliminate Redundant Transpose
+# Eliminate Redundant Transpose
 
 Let's start with a simple pattern and try to eliminate a sequence of two
 transpose that cancel out: `transpose(transpose(X)) -> X`. Here is the
@@ -68,7 +64,7 @@ void double_transpose(int A[N][M]) {
 }
 ```
 
-For simple rewrite involving matching a tree-like pattern in the IR and
+For a simple C++ approach to rewrite involving matching a tree-like pattern in the IR and
 replacing it with a different set of operations, we can plug into the MLIR
 `Canonicalizer` pass by implementing a `RewritePattern`:
 
@@ -98,22 +94,16 @@ struct SimplifyRedundantTranspose : public mlir::RewritePattern {
     auto transposeInputOp =
         transposeInput->getDefiningOp()->cast<TransposeOp>();
     // Use the rewriter to perform the replacement
-    rewriter.replaceOp(op, {transposeInputOp.getOperand()}, {transposeInputOp});
+    rewriter.replaceOp(op, {transposeInputOp.getOperand()});
     return matchSuccess();
   }
 };
 ```
 
-Let's see how to improve our `TransposeOp` by extending it with a new static
-method:
+This match and rewrite can be expressed more simply using TableGen:
 
-```c++
-  /// This hook returns any canonicalization pattern rewrites that the operation
-  /// supports, for use by the canonicalization pass.
-  static void getCanonicalizationPatterns(mlir::OwningRewritePatternList &results,
-                                          mlir::MLIRContext *context) {
-    results.push_back(std::make_unique<SimplifyRedundantTranspose>(context));
-  }
+```TableGen(.td):
+def TransposeOptPattern : Pat<(TransposeOp(TransposeOp $arg)), (replaceWithValue $arg)>;
 ```
 
 The implementation of this rewriter is in `ToyCombine.cpp`. We also need to
@@ -122,7 +112,7 @@ optimizations are ran through a `PassManager` in a similar way to LLVM:
 
 ```c++
 mlir::PassManager pm(ctx);
-pm.addPass(mlir::createCanonicalizerPass());
+pm.addPass(createTransposeOptPass());
 pm.run(&module);
 ```
 
@@ -162,81 +152,62 @@ func @transpose_transpose(%arg0: !toy<"array">)
 
 Perfect! No `transpose` operation is left, the code is optimal.
 
-The code in `mlir/ToyCombine.cpp` implements a few more patterns that eliminate
-trivial reshapes, or fold them into constants.
 
-# Shape Inference and Generic Function Specialization
+# Optimize Reshapes
 
-Our IR operates on generic arrays, we don't know the shape of the arrays other
-than during initialization of constants. However we can propagate the shapes
-through the computation until they are all known. The issue is how to handle
-calls to user-defined generic functions: every call site could deduce different
-shapes. One possibility would be to perform symbolic inference based on the
-argument types, but this would be hard to generalize if we were to introduce
-more control flow in the language. Instead we will proceed by function
-specialization: for every call site with new argument shapes we duplicate the
-function and specialize it. This is akin to C++ template instantiation:
+TableGen also provides a method for adding argument constraints when the transformation 
+is conditional on some properties of the arguments and results. An example is a transformation 
+that eliminates reshapes when they are redundant, i.e. when the input and output shapes are identical.
 
+```TableGen(.td):
+def TypesAreIdentical : Constraint<CPred<"$0->getType() == $1->getType()">>;
+def RedundantReshapeOptPattern : Pat<(ReshapeOp:$res $arg), (replaceWithValue $arg), [(TypesAreIdentical $res, $arg)]>;
 ```
-template<int M1, int N1, int M2, int N2>
-auto multiply_add(array<M1, N1> a, array<M1, N1> b) {
-  auto prod = mul(a, b);
-  auto sum = add(prod, a);
-  return sum;
+
+Finally, some optimizations may require additional transformations on instruction 
+arguments. This is achieved using NativeCodeCall, which allows for more 
+complex transformations by calling into a C++ helper function. An example of 
+such an optimization is FoldConstantReshape, where we optimize Reshape of a constant value 
+by reshaping the constant in place and eliminating the reshape operation.
+
+```TableGen(.td):
+def ReshapeConstant : NativeCodeCall<"reshapeConstant($_builder, $0)">;
+def FoldConstantReshapeOptPattern : Pat<(ReshapeOp:$res (ConstantOp $arg)), (ReshapeConstant $res)>;
+```
+A helper C++ function "reshapeConstant" performs the actual in place transformation of the constant:
+
+```c++
+// Helper function to fold reshape(constant) in place
+Value *reshapeConstant(Builder &builder, Value* arg) {
+    ReshapeOp reshape = llvm::dyn_cast_or_null<ReshapeOp>(arg->getDefiningOp());
+    mlir::OpBuilder builder2(reshape.getOperation());
+    ConstantOp constantOp = llvm::dyn_cast_or_null<ConstantOp>(
+        reshape.getOperand()->getDefiningOp());
+    auto reshapeType = reshape.getType().cast<TensorType>();
+    if (auto valueAttr =
+            constantOp.getAttrOfType<mlir::DenseElementsAttr>("value")) {
+      // FIXME Check matching of element count!
+      //      auto oldType = constantOp.getType();
+      auto newType = builder.getTensorType(
+          reshapeType.getShape(), valueAttr.getType().getElementType());
+      auto newAttr = valueAttr.reshape(newType);
+      return builder2.create<ConstantOp>(reshape.getLoc(), newType, newAttr);
+    } else if (auto valueAttr =
+                   constantOp.getAttrOfType<mlir::FloatAttr>("value")) {
+      // Broadcast
+      auto dataSize = std::accumulate(reshapeType.getShape().begin(),
+                                      reshapeType.getShape().end(), 1,
+                                      std::multiplies<int>());
+      std::vector<mlir::Attribute> data(dataSize, valueAttr);
+      auto tensorTy = builder.getTensorType(reshapeType.getShape(),
+                                             reshapeType.getElementType());
+      auto newAttr = mlir::DenseElementsAttr::get(tensorTy, data);
+      return builder2.create<ConstantOp>(reshape.getLoc(), tensorTy, newAttr);
+    } else {
+      llvm_unreachable("Unsupported Constant format");
+    }
+    return reshape;
 }
 ```
+Further details on the declarative rewrite method can be found at [Table-driven Declarative Rewrite Rule (DRR)](https://github.com/tensorflow/mlir/blob/master/g3doc/DeclarativeRewrites.md).
 
-Every new call to `multiply_add` would instantiate the template and emit code
-for the specific shape and deduce the return type. Clang implements this
-transformation on its AST, but we will implement it in an MLIR pass here.
-
-The ShapeInferencePass is a `ModulePass`: it will run on the Module as a whole.
-MLIR also supports `FunctionPass`es which are restricted to modify a single
-function at a time. This pass couldn't be a function pass due the nature of its
-interprocedural transformations.
-
-Implementing such a pass is done by creating a class inheriting from
-`mlir::ModulePass` and overriding the `runOnModule()` method:
-
-```
-class ShapeInferencePass : public mlir::ModulePass<ShapeInferencePass> {
-
-  void runOnModule() override {
-    auto &module = getModule();
-    ...
-```
-
-The algorithm has two levels, first intra-procedurally:
-
-1.  Build a worklist containing all the operations that are returning a generic
-    Toy array: these are the operations that need shape inference.
-2.  Iterate on the worklist:
-    -   find an operation to process: the next ready operation in the worklist
-        has all of its arguments non-generic,
-    -   if no operation is found, break out of the loop,
-    -   remove the operation from the worklist,
-    -   infer the shape of its output from the arguments type.
-3.  If the worklist is empty, the algorithm succeeded and we infer the return
-    type for the function from the return operation.
-
-There is a twist though: when a call to a generic function is encountered, shape
-inference requires the return type of the callee to be inferred first. At this
-point we need to specialize the callee by cloning it. Here is the
-inter-procedural flow that wraps the intra-procedural inference:
-
-1.  Keep a worklist of function to process. Start with function "main".
-2.  While the worklist isn't empty:
-    -   Take the last inserted function in the worklist.
-    -   Run the intra-procedural shape inference on this function.
-    -   If the intra-procedural shape inference can't complete, it returns a
-        FuncOp that needs to be inferred first. In this case, queue this new
-        function and continue. Otherwise the inference succeeded and we can pop
-        from the queue.
-
-The full code is in `mlir/ShapeInferencePass.cpp`.
-
-# Future Work: Optimizing Buffer Allocation?
-
-Toy is value-based. Naively this is a lot of allocation, what if we want to
-statically optimize placement? What is the right abstraction level to perform
-buffer assignment?

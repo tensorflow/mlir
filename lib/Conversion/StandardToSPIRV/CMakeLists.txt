@@ -19,6 +19,7 @@ target_link_libraries(MLIRSPIRVConversion
   MLIRPass
   MLIRSPIRV
   MLIRSupport
+  MLIRTransforms
   MLIRTransformUtils
   MLIRSPIRV
   MLIRStandardOps

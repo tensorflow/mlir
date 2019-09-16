@@ -1,4 +1,4 @@
-add_llvm_library(MLIRParser
+add_llvm_library(MLIRParser STATIC
   Lexer.cpp
   Parser.cpp
   Token.cpp

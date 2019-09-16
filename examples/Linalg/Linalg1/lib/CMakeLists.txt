@@ -17,6 +17,7 @@ set(LIBS
   MLIRAnalysis
   MLIRControlFlowToCFG
   MLIREDSC
+  MLIRLinalg
   MLIRLLVMIR
   MLIRParser
   MLIRPass
@@ -26,13 +27,13 @@ set(LIBS
   MLIRTransforms
 )
 
-add_llvm_library(Linalg1LLVMConversion
+add_llvm_library(Linalg1LLVMConversion STATIC
   ConvertToLLVMDialect.cpp
   )
 target_link_libraries(Linalg1LLVMConversion PUBLIC MLIRLLVMIR
-  MLIRControlFlowToCFG MLIRStandardOps)
+  Linalg1 MLIRControlFlowToCFG MLIRStandardOps MLIRStandardToLLVM MLIRLinalg)
 
-add_llvm_library(Linalg1
+add_llvm_library(Linalg1 STATIC
   Analysis.cpp
   SliceOp.cpp
   ViewOp.cpp

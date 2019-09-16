@@ -12,7 +12,7 @@ local pattern-match transformations that would be difficult in LLVM. For this, w
 MLIR's [Generic DAG Rewriter](https://github.com/tensorflow/mlir/blob/master/g3doc/GenericDAGRewriter.md).
 
 There are two methods that can be used to implement pattern-match transformations:
-1. Declarative, rule-based pattern-match and rewrite using ODS
+1. Declarative, rule-based pattern-match and rewrite using DRR
 2. Imperative, C++ pattern-match and rewrite
 
 # Eliminate Redundant Transpose

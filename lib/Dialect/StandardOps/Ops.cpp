@@ -26,6 +26,7 @@
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/StandardTypes.h"
+#include "mlir/IR/TypeUtilities.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Support/MathExtras.h"
 #include "mlir/Support/STLExtras.h"
@@ -155,7 +156,8 @@ static void printStandardCastOp(Operation *op, OpAsmPrinter *p) {
 }
 
 /// A custom cast operation verifier.
-template <typename T> static LogicalResult verifyCastOp(T op) {
+template <typename T>
+static LogicalResult verifyCastOp(T op) {
   auto opType = op.getOperand()->getType();
   auto resType = op.getType();
   if (!T::areCastCompatible(opType, resType))
@@ -2026,15 +2028,21 @@ OpFoldResult SelectOp::fold(ArrayRef<Attribute> operands) {
 //===----------------------------------------------------------------------===//
 
 static LogicalResult verify(SignExtendIOp op) {
-  auto opType = op.getOperand()->getType().dyn_cast_or_null<IntegerType>();
-  if (!opType)
-    return op.emitError("operand type ") << opType << " is not an integer ";
-  auto resType = op.getType().dyn_cast_or_null<IntegerType>();
-  if (!resType)
-    return op.emitError("result type ") << resType << " is not an integer ";
-  if (opType.getWidth() >= resType.getWidth())
+  // Get the scalar type (which is either directly the type of the operand
+  // or the vector's/tensor's element type.
+  auto srcType = getElementTypeOrSelf(op.getOperand()->getType());
+  auto dstType = getElementTypeOrSelf(op.getType());
+
+  // For now, index is forbidden for the source and the destination type.
+  if (srcType.isa<IndexType>())
+    return op.emitError() << srcType << " is not a valid operand type";
+  if (dstType.isa<IndexType>())
+    return op.emitError() << dstType << " is not a valid result type";
+
+  if (srcType.cast<IntegerType>().getWidth() >=
+      dstType.cast<IntegerType>().getWidth())
     return op.emitError("result type ")
-           << resType << " must be wider than operand type " << opType;
+           << dstType << " must be wider than operand type " << srcType;
 
   return success();
 }
@@ -2266,15 +2274,18 @@ static ParseResult parseTensorStoreOp(OpAsmParser *parser,
 //===----------------------------------------------------------------------===//
 
 static LogicalResult verify(TruncateIOp op) {
-  auto opType = op.getOperand()->getType().dyn_cast_or_null<IntegerType>();
-  if (!opType)
-    return op.emitError("operand type ") << opType << " is not an integer ";
-  auto resType = op.getType().dyn_cast_or_null<IntegerType>();
-  if (!resType)
-    return op.emitError("result type ") << resType << " is not an integer ";
-  if (opType.getWidth() <= resType.getWidth())
+  auto srcType = getElementTypeOrSelf(op.getOperand()->getType());
+  auto dstType = getElementTypeOrSelf(op.getType());
+
+  if (srcType.isa<IndexType>())
+    return op.emitError() << srcType << " is not a valid operand type";
+  if (dstType.isa<IndexType>())
+    return op.emitError() << dstType << " is not a valid result type";
+
+  if (srcType.cast<IntegerType>().getWidth() <=
+      dstType.cast<IntegerType>().getWidth())
     return op.emitError("operand type ")
-           << opType << " must be wider than result type " << resType;
+           << srcType << " must be wider than result type " << dstType;
 
   return success();
 }
@@ -2284,15 +2295,18 @@ static LogicalResult verify(TruncateIOp op) {
 //===----------------------------------------------------------------------===//
 
 static LogicalResult verify(ZeroExtendIOp op) {
-  auto opType = op.getOperand()->getType().dyn_cast_or_null<IntegerType>();
-  if (!opType)
-    return op.emitError("operand type ") << opType << " is not an integer ";
-  auto resType = op.getType().dyn_cast_or_null<IntegerType>();
-  if (!resType)
-    return op.emitError("result type ") << resType << " is not an integer ";
-  if (opType.getWidth() >= resType.getWidth())
+  auto srcType = getElementTypeOrSelf(op.getOperand()->getType());
+  auto dstType = getElementTypeOrSelf(op.getType());
+
+  if (srcType.isa<IndexType>())
+    return op.emitError() << srcType << " is not a valid operand type";
+  if (dstType.isa<IndexType>())
+    return op.emitError() << dstType << " is not a valid result type";
+
+  if (srcType.cast<IntegerType>().getWidth() >=
+      dstType.cast<IntegerType>().getWidth())
     return op.emitError("result type ")
-           << resType << " must be wider than operand type " << opType;
+           << dstType << " must be wider than operand type " << srcType;
 
   return success();
 }

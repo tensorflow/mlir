@@ -846,11 +846,6 @@ def SignExtendIOp : Std_Op<"sexti", [NoSideEffect, SameOperandsAndResultShape]> 
       result->addTypes(destType);
   }]>];
 
-  let extraClassDeclaration = [{
-    /// Returns the result type of the sign extension operation.
-    IntegerType getType() { return getResult()->getType().cast<IntegerType>(); }
-  }];
-
   let parser = [{
     return impl::parseCastOp(parser, result);
   }];
@@ -1013,11 +1008,6 @@ def TruncateIOp : Std_Op<"trunci", [NoSideEffect, SameOperandsAndResultShape]> {
       result->addTypes(destType);
   }]>];
 
-  let extraClassDeclaration = [{
-    /// Returns the result type of the truncation operation.
-    IntegerType getType() { return getResult()->getType().cast<IntegerType>(); }
-  }];
-
   let parser = [{
     return impl::parseCastOp(parser, result);
   }];
@@ -1054,11 +1044,6 @@ def ZeroExtendIOp : Std_Op<"zexti", [NoSideEffect, SameOperandsAndResultShape]> 
       result->addOperands(value);
       result->addTypes(destType);
   }]>];
-
-  let extraClassDeclaration = [{
-    /// Returns the result type of the zero extension operation.
-    IntegerType getType() { return getResult()->getType().cast<IntegerType>(); }
-  }];
 
   let parser = [{
     return impl::parseCastOp(parser, result);

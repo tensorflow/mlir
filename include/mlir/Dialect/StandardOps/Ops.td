@@ -834,6 +834,8 @@ def SignExtendIOp : Std_Op<"sexti", [NoSideEffect, SameOperandsAndResultShape]> 
       %2 = sexti %1 : i3 to i6        // %2 is 0b111101
       %3 = constant 2 : i3            // %3 is 0b010
       %4 = sexti %3 : i3 to i6        // %4 is 0b000010
+
+      %5 = sexti %0 : vector<2 x i32> to vector<2 x i64>
   }];
 
   let arguments = (ins IntegerLike:$value);
@@ -996,6 +998,8 @@ def TruncateIOp : Std_Op<"trunci", [NoSideEffect, SameOperandsAndResultShape]> {
       %1 = constant 21 : i5           // %1 is 0b10101
       %2 = trunci %1 : i5 to i4       // %2 is 0b0101
       %3 = trunci %1 : i5 to i3       // %3 is 0b101
+
+      %5 = trunci %0 : vector<2 x i32> to vector<2 x i16>
   }];
 
   let arguments = (ins IntegerLike:$value);
@@ -1033,6 +1037,8 @@ def ZeroExtendIOp : Std_Op<"zexti", [NoSideEffect, SameOperandsAndResultShape]> 
       %2 = zexti %1 : i3 to i6        // %2 is 0b000101
       %3 = constant 2 : i3            // %3 is 0b010
       %4 = zexti %3 : i3 to i6        // %4 is 0b000010
+
+      %5 = zexti %0 : vector<2 x i32> to vector<2 x i64>
   }];
 
   let arguments = (ins IntegerLike:$value);

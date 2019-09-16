@@ -821,7 +821,7 @@ def SelectOp : Std_Op<"select", [NoSideEffect, SameOperandsAndResultShape]> {
   let hasFolder = 1;
 }
 
-def SignExtendIOp : Std_Op<"sexti", [NoSideEffect]> {
+def SignExtendIOp : Std_Op<"sexti", [NoSideEffect, SameOperandsAndResultShape]> {
   let summary = "integer sign extension operation";
   let description = [{
     The integer sign extension operation takes an integer input of
@@ -990,7 +990,7 @@ def TensorStoreOp : Std_Op<"tensor_store",
   let verifier = ?;
 }
 
-def TruncateIOp : Std_Op<"trunci", [NoSideEffect]> {
+def TruncateIOp : Std_Op<"trunci", [NoSideEffect, SameOperandsAndResultShape]> {
   let summary = "integer truncation operation";
   let description = [{
     The integer truncation operation takes an integer input of
@@ -1031,7 +1031,7 @@ def XOrOp : IntArithmeticOp<"xor", [Commutative]> {
   let hasFolder = 1;
 }
 
-def ZeroExtendIOp : Std_Op<"zexti", [NoSideEffect]> {
+def ZeroExtendIOp : Std_Op<"zexti", [NoSideEffect, SameOperandsAndResultShape]> {
   let summary = "integer zero extension operation";
   let description = [{
     The integer zero extension operation takes an integer input of

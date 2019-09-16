@@ -309,6 +309,24 @@ func @standard_instrs(tensor<4x4x?xf32>, f32, i32, index, i64) {
   // CHECK: = sitofp {{.*}} : i64 to f64
   %81 = sitofp %j : i64 to f64
 
+  // CHECK: = sexti %arg2 : i32 to i64
+  %82 = "std.sexti"(%i) : (i32) -> i64
+
+  // CHECK: = sexti %arg2 : i32 to i64
+  %83 = sexti %i : i32 to i64
+
+  // CHECK: = zexti %arg2 : i32 to i64
+  %84 = "std.zexti"(%i) : (i32) -> i64
+
+  // CHECK: = zexti %arg2 : i32 to i64
+  %85 = zexti %i : i32 to i64
+
+  // CHECK: = trunci %arg2 : i32 to i16
+  %86 = "std.trunci"(%i) : (i32) -> i16
+
+  // CHECK: = trunci %arg2 : i32 to i16
+  %87 = trunci %i : i32 to i16
+
   return
 }
 

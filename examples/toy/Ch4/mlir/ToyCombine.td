@@ -1,3 +1,24 @@
+//===- ToyCombine.td - Pattern Match Optimizations for Toy ----------*- tablegen -*-===//
+//
+// Copyright 2019 The MLIR Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+// =============================================================================
+//
+// Defines language-specific pattern match optimizations for Toy using 
+// Declarative Re-write Rules (DRR) specified using TableGen records.
+//
+//===----------------------------------------------------------------------===//
 
 #ifdef TOY_COMBINE
 #else
@@ -9,15 +30,28 @@ include "mlir/IR/OpBase.td"
 include "include/toy/Ops.td"
 #endif // OP_BASE
 
+/* Pattern-Match and Rewrite using DRR:
+class Pattern<
+    dag sourcePattern, list<dag> resultPatterns,
+    list<dag> additionalConstraints = [],
+    dag benefitsAdded = (addBenefit 0)>;
+*/
+
+/******************** Basic Pattern-Match and Rewrite *******************/
+
 // Transpose(Transpose(x)) = x
 def TransposeOptPattern : Pat<(TransposeOp(TransposeOp $arg)), (replaceWithValue $arg)>;
 
 // Reshape(Reshape(x)) = x
 def ReshapeReshapeOptPattern : Pat<(ReshapeOp(ReshapeOp $arg)), (ReshapeOp $arg)>;
 
+/******************** Pattern-Match and Rewrite using Native Code Call *******************/
+
 // Reshape(Constant(x)) = x'
 def ReshapeConstant : NativeCodeCall<"reshapeConstant($_builder, $0)">;
 def FoldConstantReshapeOptPattern : Pat<(ReshapeOp:$res (ConstantOp $arg)), (ReshapeConstant $res)>;
+
+/******************** Pattern-Match and Rewrite with Constraints *******************/
 
 // Reshape(x) = x, where input and output shapes are identical
 def TypesAreIdentical : Constraint<CPred<"$0->getType() == $1->getType()">>;

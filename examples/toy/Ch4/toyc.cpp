@@ -83,9 +83,6 @@ std::unique_ptr<toy::ModuleAST> parseInputFile(llvm::StringRef filename) {
 mlir::LogicalResult optimize(mlir::ModuleOp module) {
   mlir::PassManager pm(module.getContext());
   pm.addPass(mlir::createCanonicalizerPass());
-  pm.addPass(createTransposeOptPass());
-  pm.addPass(createReshapeOptPass());
-  //pm.addPass(mlir::createCanonicalizerPass());
   // Apply any generic pass manager command line options.
   applyPassManagerCLOptions(pm);
 

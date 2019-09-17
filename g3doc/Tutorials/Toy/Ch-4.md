@@ -100,20 +100,30 @@ struct SimplifyRedundantTranspose : public mlir::RewritePattern {
 };
 ```
 
-This match and rewrite can be expressed more simply using TableGen:
+This match and rewrite can be expressed more simply using DRR:
 
 ```TableGen(.td):
 def TransposeOptPattern : Pat<(TransposeOp(TransposeOp $arg)), (replaceWithValue $arg)>;
 ```
 
-The implementation of this rewriter is in `ToyCombine.cpp`. We also need to
-update our main file, `toyc.cpp`, to add an optimization pipeline. In MLIR, the
+The implementation of this rewriter is in `ToyCombine.cpp`. To ensure that the canonicalization 
+pass applies the new transform, we set hasCanonicalizer = 1 and register the pattern with 
+the canonicalization framework.
+
+```c++
+// Register our patterns for rewrite by the Canonicalization framework.
+void TransposeOp::getCanonicalizationPatterns(
+    OwningRewritePatternList &results, MLIRContext *context) {
+  results.insert<TransposeOptPattern>(context);
+}
+```
+
+We also need to update our main file, `toyc.cpp`, to add an optimization pipeline. In MLIR, the
 optimizations are ran through a `PassManager` in a similar way to LLVM:
 
 ```c++
-mlir::PassManager pm(ctx);
-pm.addPass(createTransposeOptPass());
-pm.run(&module);
+  mlir::PassManager pm(module.getContext());
+  pm.addPass(mlir::createCanonicalizerPass());
 ```
 
 Finally, we can try to run `toyc test/transpose_transpose.toy -emit=mlir -opt`
@@ -133,12 +143,10 @@ is not ideal! What happened is that our pattern replaced the last transform with
 the function input and left behind the now dead transpose input. The
 Canonicalizer knows to cleanup dead operations, however MLIR conservatively
 assumes that operations may have side-effects. We can fix it by adding a new
-trait, `HasNoSideEffect`, to our `TransposeOp`:
+trait, `NoSideEffect`, to our `TransposeOp`:
 
-```c++
-class TransposeOp : public mlir::Op<TransposeOp, mlir::OpTrait::OneOperand,
-                                    mlir::OpTrait::OneResult,
-                                    mlir::OpTrait::HasNoSideEffect> {
+```TableGen(.td):
+def TransposeOp : Toy_Op<"transpose", [NoSideEffect]> {...}
 ```
 
 Let's retry now `toyc test/transpose_transpose.toy -emit=mlir -opt`:
@@ -155,7 +163,7 @@ Perfect! No `transpose` operation is left, the code is optimal.
 
 # Optimize Reshapes
 
-TableGen also provides a method for adding argument constraints when the transformation 
+DRR also provides a method for adding argument constraints when the transformation 
 is conditional on some properties of the arguments and results. An example is a transformation 
 that eliminates reshapes when they are redundant, i.e. when the input and output shapes are identical.
 
@@ -164,50 +172,54 @@ def TypesAreIdentical : Constraint<CPred<"$0->getType() == $1->getType()">>;
 def RedundantReshapeOptPattern : Pat<(ReshapeOp:$res $arg), (replaceWithValue $arg), [(TypesAreIdentical $res, $arg)]>;
 ```
 
-Finally, some optimizations may require additional transformations on instruction 
+Some optimizations may require additional transformations on instruction 
 arguments. This is achieved using NativeCodeCall, which allows for more 
-complex transformations by calling into a C++ helper function. An example of 
-such an optimization is FoldConstantReshape, where we optimize Reshape of a constant value 
-by reshaping the constant in place and eliminating the reshape operation.
+complex transformations either by calling into a C++ helper function or by using 
+inline C++. An example of such an optimization is FoldConstantReshape, where we 
+optimize Reshape of a constant value by reshaping the constant in place and 
+eliminating the reshape operation.
 
 ```TableGen(.td):
-def ReshapeConstant : NativeCodeCall<"reshapeConstant($_builder, $0)">;
-def FoldConstantReshapeOptPattern : Pat<(ReshapeOp:$res (ConstantOp $arg)), (ReshapeConstant $res)>;
+def ReshapeConstant : NativeCodeCall<"$0.reshape(($1->getType()).cast<ShapedType>())">;
+def FoldConstantReshapeOptPattern : Pat<(ReshapeOp:$res (ConstantOp $arg)), (ConstantOp (ReshapeConstant $arg, $res))>;
 ```
-A helper C++ function "reshapeConstant" performs the actual in place transformation of the constant:
+
+We demonstrate these reshape optimizations using the following trivialReshape.toy program:
 
 ```c++
-// Helper function to fold reshape(constant) in place
-Value *reshapeConstant(Builder &builder, Value* arg) {
-    ReshapeOp reshape = llvm::dyn_cast_or_null<ReshapeOp>(arg->getDefiningOp());
-    mlir::OpBuilder builder2(reshape.getOperation());
-    ConstantOp constantOp = llvm::dyn_cast_or_null<ConstantOp>(
-        reshape.getOperand()->getDefiningOp());
-    auto reshapeType = reshape.getType().cast<TensorType>();
-    if (auto valueAttr =
-            constantOp.getAttrOfType<mlir::DenseElementsAttr>("value")) {
-      // FIXME Check matching of element count!
-      //      auto oldType = constantOp.getType();
-      auto newType = builder.getTensorType(
-          reshapeType.getShape(), valueAttr.getType().getElementType());
-      auto newAttr = valueAttr.reshape(newType);
-      return builder2.create<ConstantOp>(reshape.getLoc(), newType, newAttr);
-    } else if (auto valueAttr =
-                   constantOp.getAttrOfType<mlir::FloatAttr>("value")) {
-      // Broadcast
-      auto dataSize = std::accumulate(reshapeType.getShape().begin(),
-                                      reshapeType.getShape().end(), 1,
-                                      std::multiplies<int>());
-      std::vector<mlir::Attribute> data(dataSize, valueAttr);
-      auto tensorTy = builder.getTensorType(reshapeType.getShape(),
-                                             reshapeType.getElementType());
-      auto newAttr = mlir::DenseElementsAttr::get(tensorTy, data);
-      return builder2.create<ConstantOp>(reshape.getLoc(), tensorTy, newAttr);
-    } else {
-      llvm_unreachable("Unsupported Constant format");
-    }
-    return reshape;
+def main() {
+  var a<2,1> = [1, 2];
+  var b<2,1> = a;
+  var c<2,1> = b;
+  print(c);
 }
 ```
-Further details on the declarative rewrite method can be found at [Table-driven Declarative Rewrite Rule (DRR)](https://github.com/tensorflow/mlir/blob/master/g3doc/DeclarativeRewrites.md).
 
+```MLIR(.mlir)
+module {
+  func @main() {
+    %0 = "toy.constant"() {value = dense<[1.000000e+00, 2.000000e+00]> : tensor<2xf64>} : () -> tensor<2xf64>
+    %1 = "toy.reshape"(%0) : (tensor<2xf64>) -> tensor<2x1xf64>
+    %2 = "toy.reshape"(%1) : (tensor<2x1xf64>) -> tensor<2x1xf64>
+    %3 = "toy.reshape"(%2) : (tensor<2x1xf64>) -> tensor<2x1xf64>
+    "toy.print"(%3) : (tensor<2x1xf64>) -> ()
+    "toy.return"() : () -> ()
+  }
+}
+```
+We can try to run `toyc test/trivialReshape.toy -emit=mlir -opt`
+and observe our pattern in action:
+
+```MLIR(.mlir)
+module {
+  func @main() {
+    %0 = "toy.constant"() {value = dense<[[1.000000e+00], [2.000000e+00]]> : tensor<2x1xf64>} : () -> tensor<2x1xf64>
+    "toy.print"(%0) : (tensor<2x1xf64>) -> ()
+    "toy.return"() : () -> ()
+  }
+}
+```
+
+As expected, no reshape operations remain after canonicalization.
+
+Further details on the declarative rewrite method can be found at [Table-driven Declarative Rewrite Rule (DRR)](https://github.com/tensorflow/mlir/blob/master/g3doc/DeclarativeRewrites.md).

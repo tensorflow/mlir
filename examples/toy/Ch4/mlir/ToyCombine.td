@@ -48,8 +48,8 @@ def ReshapeReshapeOptPattern : Pat<(ReshapeOp(ReshapeOp $arg)), (ReshapeOp $arg)
 /******************** Pattern-Match and Rewrite using Native Code Call *******************/
 
 // Reshape(Constant(x)) = x'
-def ReshapeConstant : NativeCodeCall<"reshapeConstant($_builder, $0)">;
-def FoldConstantReshapeOptPattern : Pat<(ReshapeOp:$res (ConstantOp $arg)), (ReshapeConstant $res)>;
+def ReshapeConstant : NativeCodeCall<"$0.reshape(($1->getType()).cast<ShapedType>())">;
+def FoldConstantReshapeOptPattern : Pat<(ReshapeOp:$res (ConstantOp $arg)), (ConstantOp (ReshapeConstant $arg, $res))>;
 
 /******************** Pattern-Match and Rewrite with Constraints *******************/
 

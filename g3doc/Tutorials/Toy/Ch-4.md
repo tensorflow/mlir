@@ -6,13 +6,13 @@ information and are generally performed on the language AST. For example, `clang
 [heavy mechanism](https://clang.llvm.org/doxygen/classclang_1_1TreeTransform.html)
 for performing template instantiation in C++.
 
-We divide compiler transformations into two: local and global. In this chapter, we 
+We divide compiler transformations into two categories: local and global. In this chapter, we 
 focus on how to leverage the Toy Dialect and its high-level semantics to perform 
 local pattern-match transformations that would be difficult in LLVM. For this, we use 
-MLIR's [Generic DAG Rewriter](https://github.com/tensorflow/mlir/blob/master/g3doc/GenericDAGRewriter.md).
+MLIR's [Generic DAG Rewriter](../../GenericDAGRewriter.md).
 
 There are two methods that can be used to implement pattern-match transformations:
-1. Declarative, rule-based pattern-match and rewrite using DRR
+1. Declarative, rule-based pattern-match and rewrite using Table-driven Declarative Rewrite Rule (DRR)
 2. Imperative, C++ pattern-match and rewrite
 
 # Eliminate Redundant Transpose
@@ -30,11 +30,11 @@ def transpose_transpose(x) {
 Which corresponds to the following IR:
 
 ```MLIR(.mlir)
-func @transpose_transpose(%arg0: !toy<"array">)
-  attributes  {toy.generic: true} {
-  %0 = "toy.transpose"(%arg0) : (!toy<"array">) -> !toy<"array">
-  %1 = "toy.transpose"(%0) : (!toy<"array">) -> !toy<"array">
-  "toy.return"(%1) : (!toy<"array">) -> ()
+func @transpose_transpose(%arg0: tensor<*xf64>) -> tensor<*xf64>
+attributes  {toy.generic} {
+  %0 = "toy.transpose"(%arg0) : (tensor<*xf64>) -> tensor<*xf64>
+  %1 = "toy.transpose"(%0) : (tensor<*xf64>) -> tensor<*xf64>
+  "toy.return"(%1) : (tensor<*xf64>) -> ()
 }
 ```
 
@@ -69,46 +69,56 @@ replacing it with a different set of operations, we can plug into the MLIR
 `Canonicalizer` pass by implementing a `RewritePattern`:
 
 ```c++
-/// Fold transpose(transpose(x)) -> x
-struct SimplifyRedundantTranspose : public mlir::RewritePattern {
+/// Fold transpose(transpose(x) -> transpose(x)
+struct SimplifyRedundantTranspose : public mlir::OpRewritePattern<TransposeOp> {
   /// We register this pattern to match every toy.transpose in the IR.
   /// The "benefit" is used by the framework to order the patterns and process
   /// them in order of profitability.
   SimplifyRedundantTranspose(mlir::MLIRContext *context)
-      : RewritePattern(TransposeOp::getOperationName(), /* benefit = */ 1, context) {}
+      : OpRewritePattern<TransposeOp>(context, /*benefit=*/1) {}
 
   /// This method is attempting to match a pattern and rewrite it. The rewriter
   /// argument is the orchestrator of the sequence of rewrites. It is expected
   /// to interact with it to perform any changes to the IR from here.
-  mlir::PatternMatchResult matchAndRewrite(
-      mlir::Operation *op, mlir::PatternRewriter &rewriter) const override {
-    // We can directly cast the current operation as this will only get invoked
-    // on TransposeOp.
-    TransposeOp transpose = op->cast<TransposeOp>();
-    // look through the input to the current transpose
-    mlir::Value *transposeInput = transpose.getOperand();
+  mlir::PatternMatchResult
+  matchAndRewrite(TransposeOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    // Look through the input of the current transpose.
+    mlir::Value *transposeInput = op.getOperand();
+    TransposeOp transposeInputOp =
+        llvm::dyn_cast_or_null<TransposeOp>(transposeInput->getDefiningOp());
     // If the input is defined by another Transpose, bingo!
-    if (!matchPattern(transposeInput, mlir::m_Op<TransposeOp>()))
+    if (!transposeInputOp)
       return matchFailure();
 
-    auto transposeInputOp =
-        transposeInput->getDefiningOp()->cast<TransposeOp>();
     // Use the rewriter to perform the replacement
-    rewriter.replaceOp(op, {transposeInputOp.getOperand()});
+    rewriter.replaceOp(op, {transposeInputOp.getOperand()}, {transposeInputOp});
     return matchSuccess();
   }
 };
 ```
 
-This match and rewrite can be expressed more simply using DRR:
+DRR is an operation DAG-based declarative rewriter that provides the following syntax for pattern-match and rewrite rules:
+
+```TableGen(.td):
+class Pattern<
+    dag sourcePattern, list<dag> resultPatterns,
+    list<dag> additionalConstraints = [],
+    dag benefitsAdded = (addBenefit 0)>;
+```
+
+Our SimplifyRedundantTranspose optimization can now be expressed more simply using DRR as follows:
 
 ```TableGen(.td):
 def TransposeOptPattern : Pat<(TransposeOp(TransposeOp $arg)), (replaceWithValue $arg)>;
 ```
 
-The implementation of this rewriter is in `ToyCombine.cpp`. To ensure that the canonicalization 
-pass applies the new transform, we set hasCanonicalizer = 1 and register the pattern with 
-the canonicalization framework.
+The implementation of this rewriter is in `ToyCombine.cpp`. The 
+[canonicalization pass](../../Canonicalization.md) applies transformations 
+defined by operations in a greedy, iterative manner. To ensure that the 
+canonicalization pass applies our new transform, we set 
+[hasCanonicalizer = 1](../../OpDefinitions.md#hascanonicalizer) and register 
+the pattern with the canonicalization framework.
 
 ```c++
 // Register our patterns for rewrite by the Canonicalization framework.
@@ -222,4 +232,4 @@ module {
 
 As expected, no reshape operations remain after canonicalization.
 
-Further details on the declarative rewrite method can be found at [Table-driven Declarative Rewrite Rule (DRR)](https://github.com/tensorflow/mlir/blob/master/g3doc/DeclarativeRewrites.md).
+Further details on the declarative rewrite method can be found at [Table-driven Declarative Rewrite Rule (DRR)](../../DeclarativeRewrites.md).

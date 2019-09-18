@@ -21,23 +21,20 @@
 //===----------------------------------------------------------------------===//
 
 #include "toy/Dialect.h"
-#include "mlir/Transforms/DialectConversion.h"
-#include "mlir/Pass/Pass.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
-#include "mlir/IR/StandardTypes.h"
-#include "mlir/IR/TypeSupport.h"
-#include "mlir/IR/Types.h"
-#include "../../../../include/mlir/IR/Attributes.h"
 #include <numeric>
 using namespace mlir;
 using namespace toy;
 
+namespace {
 #include "ToyCombine.inc"
+} // end anonymous namespace
 
 // Register our patterns for rewrite by the Canonicalization framework.
 void TransposeOp::getCanonicalizationPatterns(
     OwningRewritePatternList &results, MLIRContext *context) {
+  // Pattern "TransposeOptPattern" defined in ToyCombine.inc
   results.insert<TransposeOptPattern>(context);
 }
 

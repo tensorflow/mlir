@@ -22,7 +22,6 @@
 #include "toy/Dialect.h"
 #include "toy/MLIRGen.h"
 #include "toy/Parser.h"
-#include "toy/Passes.h"
 
 #include "mlir/Analysis/Verifier.h"
 #include "mlir/IR/MLIRContext.h"

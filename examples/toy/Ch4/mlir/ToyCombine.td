@@ -20,12 +20,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifdef TOY_COMBINE
-#else
+#ifndef TOY_COMBINE
 #define TOY_COMBINE
 
-#ifdef OP_BASE
-#else
+#ifndef OP_BASE
 include "mlir/IR/OpBase.td"
 include "include/toy/Ops.td"
 #endif // OP_BASE

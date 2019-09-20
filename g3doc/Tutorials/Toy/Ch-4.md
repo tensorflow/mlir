@@ -1,4 +1,4 @@
-# Chapter 3: High-level Language-Specific Analysis and Transformation
+# Chapter 4: High-level Language-Specific Analysis and Transformation
 
 Creating a dialect that closely represents the semantics of an input language
 enables analyses, transformations and optimizations in MLIR that require high level language 
@@ -234,4 +234,3 @@ module {
 As expected, no reshape operations remain after canonicalization.
 
 Further details on the declarative rewrite method can be found at [Table-driven Declarative Rewrite Rule (DRR)](../../DeclarativeRewrites.md).
-

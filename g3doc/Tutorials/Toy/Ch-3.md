@@ -183,7 +183,8 @@ that eliminates reshapes when they are redundant, i.e. when the input and output
 
 ```TableGen(.td):
 def TypesAreIdentical : Constraint<CPred<"$0->getType() == $1->getType()">>;
-def RedundantReshapeOptPattern : Pat<(ReshapeOp:$res $arg), (replaceWithValue $arg), [(TypesAreIdentical $res, $arg)]>;
+def RedundantReshapeOptPattern : Pat<(ReshapeOp:$res $arg), (replaceWithValue $arg), \
+                                 [(TypesAreIdentical $res, $arg)]>;
 ```
 
 Some optimizations may require additional transformations on instruction 
@@ -195,7 +196,8 @@ eliminating the reshape operation.
 
 ```TableGen(.td):
 def ReshapeConstant : NativeCodeCall<"$0.reshape(($1->getType()).cast<ShapedType>())">;
-def FoldConstantReshapeOptPattern : Pat<(ReshapeOp:$res (ConstantOp $arg)), (ConstantOp (ReshapeConstant $arg, $res))>;
+def FoldConstantReshapeOptPattern : Pat<(ReshapeOp:$res (ConstantOp $arg)), \
+                                    (ConstantOp (ReshapeConstant $arg, $res))>;
 ```
 
 We demonstrate these reshape optimizations using the following trivialReshape.toy program:
@@ -212,7 +214,8 @@ def main() {
 ```MLIR(.mlir)
 module {
   func @main() {
-    %0 = "toy.constant"() {value = dense<[1.000000e+00, 2.000000e+00]> : tensor<2xf64>} : () -> tensor<2xf64>
+    %0 = "toy.constant"() {value = dense<[1.000000e+00, 2.000000e+00]> : tensor<2xf64>}\
+                           : () -> tensor<2xf64>
     %1 = "toy.reshape"(%0) : (tensor<2xf64>) -> tensor<2x1xf64>
     %2 = "toy.reshape"(%1) : (tensor<2x1xf64>) -> tensor<2x1xf64>
     %3 = "toy.reshape"(%2) : (tensor<2x1xf64>) -> tensor<2x1xf64>
@@ -227,7 +230,8 @@ and observe our pattern in action:
 ```MLIR(.mlir)
 module {
   func @main() {
-    %0 = "toy.constant"() {value = dense<[[1.000000e+00], [2.000000e+00]]> : tensor<2x1xf64>} : () -> tensor<2x1xf64>
+    %0 = "toy.constant"() {value = dense<[[1.000000e+00], [2.000000e+00]]> \
+                           : tensor<2x1xf64>} : () -> tensor<2x1xf64>
     "toy.print"(%0) : (tensor<2x1xf64>) -> ()
     "toy.return"() : () -> ()
   }
@@ -236,5 +240,6 @@ module {
 
 As expected, no reshape operations remain after canonicalization.
 
-Further details on the declarative rewrite method can be found at [Table-driven Declarative Rewrite Rule (DRR)](../../DeclarativeRewrites.md).
+Further details on the declarative rewrite method can be found at 
+[Table-driven Declarative Rewrite Rule (DRR)](../../DeclarativeRewrites.md).
 

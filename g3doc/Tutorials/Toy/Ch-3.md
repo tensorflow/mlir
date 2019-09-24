@@ -12,13 +12,13 @@ local pattern-match transformations that would be difficult in LLVM. For this, w
 MLIR's [Generic DAG Rewriter](../../GenericDAGRewriter.md).
 
 There are two methods that can be used to implement pattern-match transformations:
-1. Declarative, rule-based pattern-match and rewrite using
+1. Imperative, C++ pattern-match and rewrite
+2. Declarative, rule-based pattern-match and rewrite using
    [Table-driven Declarative Rewrite Rule](../../DeclarativeRewrites.md) (DRR). Note that the
    use of DRR requires that the operations be defined using ODS as described in
    [Chapter 2](../Ch-2.md).
-2. Imperative, C++ pattern-match and rewrite
 
-# Eliminate Redundant Transpose
+# Optimize Transpose using C++ style pattern-match and rewrite
 
 Let's start with a simple pattern and try to eliminate a sequence of two
 transpose that cancel out: `transpose(transpose(X)) -> X`. Here is the
@@ -101,21 +101,6 @@ struct SimplifyRedundantTranspose : public mlir::OpRewritePattern<TransposeOp> {
 };
 ```
 
-DRR is an operation DAG-based declarative rewriter that provides the following syntax for pattern-match and rewrite rules:
-
-```TableGen(.td):
-class Pattern<
-    dag sourcePattern, list<dag> resultPatterns,
-    list<dag> additionalConstraints = [],
-    dag benefitsAdded = (addBenefit 0)>;
-```
-
-Our SimplifyRedundantTranspose optimization can now be expressed more simply using DRR as follows:
-
-```TableGen(.td):
-def TransposeOptPattern : Pat<(TransposeOp(TransposeOp $arg)), (replaceWithValue $arg)>;
-```
-
 The implementation of this rewriter is in `ToyCombine.cpp`. The 
 [canonicalization pass](../../Canonicalization.md) applies transformations 
 defined by operations in a greedy, iterative manner. To ensure that the 
@@ -129,7 +114,7 @@ $BUILD_DIR/projects/mlir/examples/toy/Ch3/ToyCombine.inc.
 // Register our patterns for rewrite by the Canonicalization framework.
 void TransposeOp::getCanonicalizationPatterns(
     OwningRewritePatternList &results, MLIRContext *context) {
-  results.insert<TransposeOptPattern>(context);
+  results.insert<SimplifyRedundantTranspose>(context);
 }
 ```
 
@@ -176,8 +161,26 @@ attributes  {toy.generic} {
 
 Perfect! No `transpose` operation is left, the code is optimal.
 
+In the next section, we use DRR for pattern match optimizations associated with the Reshape op.
 
-# Optimize Reshapes
+# Optimize Reshapes using DRR
+
+Declarative, rule-based pattern-match and rewrite or DRR is an operation DAG-based declarative rewriter that 
+provides a table-based syntax for pattern-match and rewrite rules:
+
+```TableGen(.td):
+class Pattern<
+    dag sourcePattern, list<dag> resultPatterns,
+    list<dag> additionalConstraints = [],
+    dag benefitsAdded = (addBenefit 0)>;
+```
+
+A redundant reshape optimization similar to SimplifyRedundantTranspose can be expressed more simply using DRR as follows:
+
+```TableGen(.td):
+// Reshape(Reshape(x)) = x
+def ReshapeReshapeOptPattern : Pat<(ReshapeOp(ReshapeOp $arg)), (ReshapeOp $arg)>;
+```
 
 DRR also provides a method for adding argument constraints when the transformation 
 is conditional on some properties of the arguments and results. An example is a transformation 

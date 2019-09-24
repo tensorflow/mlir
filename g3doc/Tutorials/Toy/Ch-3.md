@@ -12,8 +12,10 @@ local pattern-match transformations that would be difficult in LLVM. For this, w
 MLIR's [Generic DAG Rewriter](../../GenericDAGRewriter.md).
 
 There are two methods that can be used to implement pattern-match transformations:
-1. Declarative, rule-based pattern-match and rewrite using Table-driven Declarative Rewrite Rule (DRR).
-Note that the use of DRR requires that the operations be defined using ODS as described in [Chapter 2](../Ch-2.md).
+1. Declarative, rule-based pattern-match and rewrite using
+   [Table-driven Declarative Rewrite Rule](../../DeclarativeRewrites.md) (DRR). Note that the
+   use of DRR requires that the operations be defined using ODS as described in
+   [Chapter 2](../Ch-2.md).
 2. Imperative, C++ pattern-match and rewrite
 
 # Eliminate Redundant Transpose

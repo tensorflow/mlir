@@ -37,9 +37,6 @@ class Pattern<
 
 /******************** Basic Pattern-Match and Rewrite *******************/
 
-// Transpose(Transpose(x)) = x
-def TransposeOptPattern : Pat<(TransposeOp(TransposeOp $arg)), (replaceWithValue $arg)>;
-
 // Reshape(Reshape(x)) = x
 def ReshapeReshapeOptPattern : Pat<(ReshapeOp(ReshapeOp $arg)), (ReshapeOp $arg)>;
 

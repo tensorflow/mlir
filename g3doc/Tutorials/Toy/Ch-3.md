@@ -121,7 +121,9 @@ The implementation of this rewriter is in `ToyCombine.cpp`. The
 defined by operations in a greedy, iterative manner. To ensure that the 
 canonicalization pass applies our new transform, we set 
 [hasCanonicalizer = 1](../../OpDefinitions.md#hascanonicalizer) and register 
-the pattern with the canonicalization framework.
+the pattern with the canonicalization framework. The automatically generated 
+C++ code corresponding to each of the DRR patterns can be found under 
+$BUILD_DIR/projects/mlir/examples/toy/Ch3/ToyCombine.inc.
 
 ```c++
 // Register our patterns for rewrite by the Canonicalization framework.

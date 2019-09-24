@@ -106,9 +106,7 @@ The implementation of this rewriter is in `ToyCombine.cpp`. The
 defined by operations in a greedy, iterative manner. To ensure that the 
 canonicalization pass applies our new transform, we set 
 [hasCanonicalizer = 1](../../OpDefinitions.md#hascanonicalizer) and register 
-the pattern with the canonicalization framework. The automatically generated 
-C++ code corresponding to each of the DRR patterns can be found under 
-$BUILD_DIR/projects/mlir/examples/toy/Ch3/ToyCombine.inc.
+the pattern with the canonicalization framework.
 
 ```c++
 // Register our patterns for rewrite by the Canonicalization framework.
@@ -181,6 +179,8 @@ A redundant reshape optimization similar to SimplifyRedundantTranspose can be ex
 // Reshape(Reshape(x)) = x
 def ReshapeReshapeOptPattern : Pat<(ReshapeOp(ReshapeOp $arg)), (ReshapeOp $arg)>;
 ```
+The automatically generated C++ code corresponding to each of the DRR patterns can be found under 
+$BUILD_DIR/projects/mlir/examples/toy/Ch3/ToyCombine.inc.
 
 DRR also provides a method for adding argument constraints when the transformation 
 is conditional on some properties of the arguments and results. An example is a transformation 

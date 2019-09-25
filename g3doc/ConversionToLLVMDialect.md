@@ -88,7 +88,7 @@ type will be a wrapped LLVM IR structure type where each element of the
 structure corresponds to one of the results of the original function, converted
 using these rules. In high-order functions, function-typed arguments and results
 are converted to a wrapped LLVM IR function pointer type (since LLVM IR does not
-allow passing functions to functions without indirection) with the pointee type
+allow passing functions to functions without indirection) with the pointer type
 converted using these rules.
 
 Examples:

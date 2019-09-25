@@ -18,7 +18,7 @@ best practices. They are rendered as quoted bullet points.
 ## Motivation
 
 MLIR allows pluggable dialects, and dialects contain, among others, a list of
-operations. This open and extensible ecosystem leads to the "strongly" type IR
+operations. This open and extensible ecosystem leads to the "stringly" type IR
 problem, e.g., repetitive string comparisons during optimization and analysis
 passes, unintuitive accessor methods (e.g., generic/error prone `getOperand(3)`
 vs self-documenting `getStride()`) with more generic return types, verbose and

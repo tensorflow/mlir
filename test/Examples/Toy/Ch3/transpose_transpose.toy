@@ -1,5 +1,5 @@
-# RUN: toyc-ch4 %s -emit=mlir 2>&1 | FileCheck %s
-# RUN: toyc-ch4 %s -emit=mlir -opt 2>&1 | FileCheck %s --check-prefix=OPT
+# RUN: toyc-ch3 %s -emit=mlir 2>&1 | FileCheck %s
+# RUN: toyc-ch3 %s -emit=mlir -opt 2>&1 | FileCheck %s --check-prefix=OPT
 
 def transpose_transpose(x) {
   return transpose(transpose(x));
@@ -15,5 +15,5 @@ def main() {
 
 
 #OPT-LABEL: func @transpose_transpose
-#OPT-NOT: transpose
+#OPT-NOT: toy.transpose
 

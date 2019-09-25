@@ -2,16 +2,35 @@ set(LLVM_LINK_COMPONENTS
   Support
   )
 
+set(LLVM_TARGET_DEFINITIONS include/toy/Ops.td)
+mlir_tablegen(include/toy/Ops.h.inc -gen-op-decls)
+mlir_tablegen(include/toy/Ops.cpp.inc -gen-op-defs)
+add_public_tablegen_target(ToyCh3OpsIncGen)
+
+set(LLVM_TARGET_DEFINITIONS mlir/ToyCombine.td)
+mlir_tablegen(ToyCombine.h.inc -gen-rewriters)
+mlir_tablegen(ToyCombine.cpp.inc -gen-rewriters)
+mlir_tablegen(ToyCombine.inc -gen-rewriters)
+add_public_tablegen_target(MLIRToyCombineIncGen)
+
 add_toy_chapter(toyc-ch3
   toyc.cpp
   parser/AST.cpp
   mlir/MLIRGen.cpp
-  mlir/ToyDialect.cpp
+  mlir/Dialect.cpp
+  mlir/ToyCombine.cpp
   )
+
+add_dependencies(toyc-ch3 ToyCh3OpsIncGen)
+add_dependencies(toyc-ch3 MLIRToyCombineIncGen)
 include_directories(include/)
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/include/)
 target_link_libraries(toyc-ch3
   PRIVATE
     MLIRAnalysis
     MLIRIR
     MLIRParser
+    MLIRPass
     MLIRTransforms)
+

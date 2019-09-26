@@ -513,6 +513,9 @@ struct ConstLLVMOpLowering
     : public OneToOneLLVMOpLowering<ConstantOp, LLVM::ConstantOp> {
   using Super::Super;
 };
+struct ShlISOpLowering : public BinaryOpLLVMOpLowering<ShlISOp, LLVM::ShlOp> {
+  using Super::Super;
+};
 
 // Check if the MemRefType `type` is supported by the lowering. We currently
 // only support memrefs with identity maps.
@@ -1111,9 +1114,10 @@ void mlir::populateStdToLLVMConversionPatterns(
       DivFOpLowering, FuncOpConversion, IndexCastOpLowering, LoadOpLowering,
       MemRefCastOpLowering, MulFOpLowering, MulIOpLowering, OrOpLowering,
       RemISOpLowering, RemIUOpLowering, RemFOpLowering, ReturnOpLowering,
-      SelectOpLowering, SIToFPLowering, SignExtendIOpLowering, SplatOpLowering,
-      StoreOpLowering, SubFOpLowering, SubIOpLowering, TruncateIOpLowering,
-      XOrOpLowering, ZeroExtendIOpLowering>(*converter.getDialect(), converter);
+      SelectOpLowering, ShlISOpLowering, SIToFPLowering, SignExtendIOpLowering,
+      SplatOpLowering, StoreOpLowering, SubFOpLowering, SubIOpLowering,
+      TruncateIOpLowering, XOrOpLowering, ZeroExtendIOpLowering>(
+      *converter.getDialect(), converter);
 }
 
 // Convert types using the stored LLVM IR module.

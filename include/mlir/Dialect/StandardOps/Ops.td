@@ -881,6 +881,14 @@ def ShlISOp : IntArithmeticOp<"shlis"> {
   let summary = "signed integer shift left";
 }
 
+def ShrISOp : IntArithmeticOp<"shris"> {
+  let summary = "signed integer shift right";
+}
+
+def ShrIUOp : IntArithmeticOp<"shriu"> {
+  let summary = "unsigned integer shift right";
+}
+
 def SplatOp : Std_Op<"splat", [NoSideEffect]> {
   let summary = "splat or broadcast operation";
   let description = [{

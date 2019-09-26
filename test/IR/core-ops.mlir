@@ -360,6 +360,36 @@ func @standard_instrs(tensor<4x4x?xf32>, f32, i32, index, i64) {
   // CHECK: %{{[0-9]+}} = shlis %cst_4, %cst_4 : tensor<42xi32>
   %98 = shlis %tci32, %tci32 : tensor<42 x i32>
 
+  // CHECK: %{{[0-9]+}} = shris %arg2, %arg2 : i32
+  %99 = "std.shris"(%i, %i) : (i32, i32) -> i32
+
+  // CHECK:%{{[0-9]+}} = shris %4, %4 : i32
+  %100 = shris %i2, %i2 : i32
+
+  // CHECK: %{{[0-9]+}} = shris %arg3, %arg3 : index
+  %101 = shris %idx, %idx : index
+
+  // CHECK: %{{[0-9]+}} = shris %cst_5, %cst_5 : vector<42xi32>
+  %102 = shris %vci32, %vci32 : vector<42 x i32>
+
+  // CHECK: %{{[0-9]+}} = shris %cst_4, %cst_4 : tensor<42xi32>
+  %103 = shris %tci32, %tci32 : tensor<42 x i32>
+
+  // CHECK: %{{[0-9]+}} = shriu %arg2, %arg2 : i32
+  %104 = "std.shriu"(%i, %i) : (i32, i32) -> i32
+
+  // CHECK:%{{[0-9]+}} = shriu %4, %4 : i32
+  %105 = shriu %i2, %i2 : i32
+
+  // CHECK: %{{[0-9]+}} = shriu %arg3, %arg3 : index
+  %106 = shriu %idx, %idx : index
+
+  // CHECK: %{{[0-9]+}} = shriu %cst_5, %cst_5 : vector<42xi32>
+  %107 = shriu %vci32, %vci32 : vector<42 x i32>
+
+  // CHECK: %{{[0-9]+}} = shriu %cst_4, %cst_4 : tensor<42xi32>
+  %108 = shriu %tci32, %tci32 : tensor<42 x i32>
+
   return
 }
 

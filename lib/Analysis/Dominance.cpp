@@ -142,6 +142,18 @@ bool DominanceInfo::properlyDominates(Value *a, Operation *b) {
   return dominates(cast<BlockArgument>(a)->getOwner(), b->getBlock());
 }
 
+llvm::DomTreeNodeBase<Block> *DominanceInfo::getNode(Block *a) {
+  auto region = a->getParent();
+  assert(dominanceInfos.count(region) != 0);
+  return dominanceInfos[region]->getNode(a);
+}
+
+void DominanceInfo::updateDFSNumbers() {
+  for (auto &iter : dominanceInfos) {
+    iter.second->updateDFSNumbers();
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // PostDominanceInfo
 //===----------------------------------------------------------------------===//

@@ -90,6 +90,9 @@ public:
   bool properlyDominates(Block *a, Block *b) {
     return super::properlyDominates(a, b);
   }
+
+  llvm::DomTreeNodeBase<Block> *getNode(Block *a);
+  void updateDFSNumbers();
 };
 
 /// A class for computing basic postdominance information.

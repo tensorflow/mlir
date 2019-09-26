@@ -345,6 +345,21 @@ func @standard_instrs(tensor<4x4x?xf32>, f32, i32, index, i64) {
   // CHECK: %{{[0-9]+}} = trunci %cst_4 : tensor<42xi32>
   %93 = trunci %tci32 : tensor<42 x i32> to tensor<42 x i16>
 
+  // CHECK: %{{[0-9]+}} = shlis %arg2, %arg2 : i32
+  %94 = "std.shlis"(%i, %i) : (i32, i32) -> i32
+
+  // CHECK:%{{[0-9]+}} = shlis %4, %4 : i32
+  %95 = shlis %i2, %i2 : i32
+
+  // CHECK: %{{[0-9]+}} = shlis %arg3, %arg3 : index
+  %96 = shlis %idx, %idx : index
+
+  // CHECK: %{{[0-9]+}} = shlis %cst_5, %cst_5 : vector<42xi32>
+  %97 = shlis %vci32, %vci32 : vector<42 x i32>
+
+  // CHECK: %{{[0-9]+}} = shlis %cst_4, %cst_4 : tensor<42xi32>
+  %98 = shlis %tci32, %tci32 : tensor<42 x i32>
+
   return
 }
 

@@ -20,7 +20,7 @@ non-trivial lowering from their AST to generate LLVM IR.
 As a consequence, multiple frontends end up reimplementing significant pieces of
 infrastructure to support the need for these analyses and transformation. MLIR
 addresses this issue by being designed for extensibility. As such, there are
-little to do on pre-defined instructions (*operations* in MLIR terminology) or
+little to none pre-defined instructions (*operations* in MLIR terminology) or
 types.
 
 ## MLIR Dialects and Operations

@@ -29,6 +29,9 @@ namespace spirv {
 
 std::unique_ptr<OpPassBase<mlir::ModuleOp>> createConvertStandardToSPIRVPass();
 
+std::unique_ptr<OpPassBase<mlir::ModuleOp>>
+createDecorateSPIRVCompositeTypeLayoutPass();
+
 } // namespace spirv
 } // namespace mlir
 

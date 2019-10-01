@@ -143,7 +143,7 @@ bool DominanceInfo::properlyDominates(Value *a, Operation *b) {
 }
 
 DominanceInfoNode *DominanceInfo::getNode(Block *a) {
-  auto region = a->getParent();
+  auto *region = a->getParent();
   assert(dominanceInfos.count(region) != 0);
   return dominanceInfos[region]->getNode(a);
 }

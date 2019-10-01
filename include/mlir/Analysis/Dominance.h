@@ -91,10 +91,10 @@ public:
     return super::properlyDominates(a, b);
   }
 
-  /// Return the dominanceInfos from the Region containing block A.
-  llvm::DomTreeNodeBase<Block> *getNode(Block *a);
+  /// Return the dominance node from the Region containing block A.
+  DominanceInfoNode *getNode(Block *a);
 
-  /// Update the DFS numbers on all the dominanceInfos.
+  /// Update the internal DFS numbers for the dominance nodes.
   void updateDFSNumbers();
 };
 

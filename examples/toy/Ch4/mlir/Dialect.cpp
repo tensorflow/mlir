@@ -74,7 +74,11 @@ struct ToyShapeInferenceInterface : public DialectShapeInferenceInterface {
   }
 
   virtual bool returnsGenericArray(Operation *op) const final {
-      return true;
+      if (op->getNumResults() == 1) {
+        auto arrayTy = op->getResult(0)->getType().cast<RankedTensorType>();
+        return arrayTy.getShape().empty();
+      }
+      return false;
   }
 
   void inferShape(Operation *op) {

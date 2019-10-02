@@ -2285,11 +2285,11 @@ func @should_fuse_self_dependence_multi_store_producer() {
   affine.for %i1 = 0 to 10 {
     %v1 = affine.load %m[%i1] : memref<10xf32>
   }
-  // CHECK:      affine.for [[i0:%.*]] = 0 to 10 {
-  // CHECK-NEXT:   affine.store {{%.*}}, [[LOCAL_M:%.*]]{{\[}}[[i0]]{{\]}} : memref<10xf32>
-  // CHECK-NEXT:   [[v0:%.*]] = affine.load [[LOCAL_M]]{{\[}}[[i0]]{{\]}} : memref<10xf32>
+  // CHECK:      affine.for %[[i0:.*]] = 0 to 10 {
+  // CHECK-NEXT:   affine.store %{{.*}}, [[LOCAL_M:%.*]][%[[i0]]] : memref<10xf32>
+  // CHECK-NEXT:   [[v0:%.*]] = affine.load [[LOCAL_M]][%[[i0]]] : memref<10xf32>
   // CHECK-NEXT:   affine.store [[v0]], %{{.*}}[0] : memref<1xf32>
-  // CHECK-NEXT:   %{{.*}} = affine.load %{{.*}}[0] : memref<1xf32>
+  // CHECK-NEXT:   affine.load %{{.*}}[0] : memref<1xf32>
   // CHECK-NEXT: }
   // CHECK-NEXT: return
   return
@@ -2310,10 +2310,10 @@ func @should_fuse_dead_multi_store_producer() {
   affine.for %i1 = 0 to 10 {
     %v0 = affine.load %m[%i1] : memref<10xf32>
   }
-  // CHECK:      affine.for [[i0:%.*]] = 0 to 10 {
-  // CHECK-NEXT:   affine.store {{%.*}}, {{%.*\[}}[[i0]]{{\]}} : memref<10xf32>
-  // CHECK-NEXT:   affine.store {{%.*}}, %{{.*}}[0] : memref<1xf32>
-  // CHECK-NEXT:   %{{.*}} = affine.load %{{.*}}[0] : memref<1xf32>
+  // CHECK:      affine.for %[[i0:.*]] = 0 to 10 {
+  // CHECK-NEXT:   affine.store %{{.*}}, %{{.*}}[%[[i0]]] : memref<10xf32>
+  // CHECK-NEXT:   affine.store %{{.*}}, %{{.*}}[0] : memref<1xf32>
+  // CHECK-NEXT:   affine.load %{{.*}}[0] : memref<1xf32>
   // CHECK-NEXT: }
   // CHECK-NEXT: return
   return
@@ -2333,10 +2333,10 @@ func @should_fuse_function_live_out_multi_store_producer(%live_out_m : memref<10
   affine.for %i1 = 0 to 10 {
     %v0 = affine.load %m[%i1] : memref<10xf32>
   }
-  // CHECK:      affine.for [[i0:%.*]] = 0 to 10 {
-  // CHECK-NEXT:   affine.store {{%.*}}, {{%.*\[}}[[i0]]{{\]}} : memref<10xf32>
-  // CHECK-NEXT:   affine.store {{%.*}}, {{%.*\[}}[[i0]]{{\]}} : memref<10xf32>
-  // CHECK-NEXT:   %{{.*}} = affine.load {{%.*\[}}[[i0]]{{\]}} : memref<10xf32>
+  // CHECK:      affine.for %[[i0:.*]] = 0 to 10 {
+  // CHECK-NEXT:   affine.store %{{.*}}, %{{.*}}[%[[i0]]] : memref<10xf32>
+  // CHECK-NEXT:   affine.store %{{.*}}, %{{.*}}[%[[i0]]] : memref<10xf32>
+  // CHECK-NEXT:   affine.load %{{.*}}[%[[i0]]] : memref<10xf32>
   // CHECK-NEXT: }
   // CHECK-NEXT: return
   return

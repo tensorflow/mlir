@@ -324,13 +324,13 @@ public:
 
   // Returns the unique AffineStoreOp in `node` that meets all the following:
   //   *) store is the only one that writes to a function-local live out memref,
-  //   *) store is not the source of a `node` self-dependence.
+  //   *) store is not the source of a self-dependence on `node`.
   // Otherwise, returns a null AffineStoreOp.
   AffineStoreOp getUniqueStoreToLiveOut(Node *node) {
     AffineStoreOp uniqueStore;
     for (auto *op : node->stores) {
-      auto storeOpInst = cast<AffineStoreOp>(op);
-      auto *memref = storeOpInst.getMemRef();
+      auto storeOp = cast<AffineStoreOp>(op);
+      auto *memref = storeOp.getMemRef();
       auto outEdgeIt = outEdges.find(node->id);
       // Skip this store if there are no dependences on its memref. This means
       // that store either:
@@ -348,7 +348,7 @@ public:
         // Found multiple stores to function-local live-out memrefs.
         return nullptr;
       // Found first store to function-local live-out memref.
-      uniqueStore = storeOpInst;
+      uniqueStore = storeOp;
     }
 
     return uniqueStore;
@@ -1004,25 +1004,25 @@ static Value *createPrivateMemRef(AffineForOp forOp, Operation *srcStoreOpInst,
 // TODO(andydavis) Generalize this to handle more live in/out cases.
 static bool canFuseSrcWhichWritesToLiveOut(unsigned srcId, unsigned dstId,
                                            Value *memref,
-                                           AffineStoreOp srcStoreOpInst,
+                                           AffineStoreOp srcStoreOp,
                                            MemRefDependenceGraph *mdg) {
-  assert(srcStoreOpInst && "Expected a valid store op");
+  assert(srcStoreOp && "Expected a valid store op");
   auto *srcNode = mdg->getNode(srcId);
   auto *dstNode = mdg->getNode(dstId);
 
   // Return false if 'srcNode' has more than one output edge on 'memref'.
   if (mdg->getOutEdgeCount(srcNode->id, memref) != 1)
     return false;
-  // Compute MemRefRegion 'srcWriteRegion' for 'srcStoreOpInst' on 'memref'.
-  MemRefRegion srcWriteRegion(srcStoreOpInst.getLoc());
-  if (failed(srcWriteRegion.compute(srcStoreOpInst, /*loopDepth=*/0))) {
+  // Compute MemRefRegion 'srcWriteRegion' for 'srcStoreOp' on 'memref'.
+  MemRefRegion srcWriteRegion(srcStoreOp.getLoc());
+  if (failed(srcWriteRegion.compute(srcStoreOp, /*loopDepth=*/0))) {
     LLVM_DEBUG(llvm::dbgs()
                << "Unable to compute MemRefRegion for source operation\n.");
     return false;
   }
   SmallVector<int64_t, 4> srcShape;
   // Query 'srcWriteRegion' for 'srcShape' and 'srcNumElements'.
-  // by 'srcStoreOpInst' at depth 'dstLoopDepth'.
+  // by 'srcStoreOp' at depth 'dstLoopDepth'.
   Optional<int64_t> srcNumElements =
       srcWriteRegion.getConstantBoundingSizeAndShape(&srcShape);
   if (!srcNumElements.hasValue())
@@ -1519,17 +1519,16 @@ public:
           // live-out.
           // TODO(andydavis) Support more generic multi-output src loop nests
           // fusion.
-          auto srcStoreOpInst = mdg->getUniqueStoreToLiveOut(srcNode);
-          if (!srcStoreOpInst)
+          auto srcStoreOp = mdg->getUniqueStoreToLiveOut(srcNode);
+          if (!srcStoreOp)
             continue;
 
           // Skip if 'srcNode' writes to any live in or escaping memrefs,
           // and cannot be fused.
           bool writesToLiveInOrOut =
               mdg->writesToLiveInOrEscapingMemrefs(srcNode->id);
-          if (writesToLiveInOrOut &&
-              !canFuseSrcWhichWritesToLiveOut(srcId, dstId, memref,
-                                              srcStoreOpInst, mdg))
+          if (writesToLiveInOrOut && !canFuseSrcWhichWritesToLiveOut(
+                                         srcId, dstId, memref, srcStoreOp, mdg))
             continue;
 
           // Skip if 'srcNode' out edge count on 'memref' > 'maxSrcUserCount'.
@@ -1552,8 +1551,8 @@ public:
           unsigned bestDstLoopDepth;
           mlir::ComputationSliceState sliceState;
           // Check if fusion would be profitable.
-          if (!isFusionProfitable(srcStoreOpInst, srcStoreOpInst,
-                                  dstLoadOpInsts, dstStoreOpInsts, &sliceState,
+          if (!isFusionProfitable(srcStoreOp, srcStoreOp, dstLoadOpInsts,
+                                  dstStoreOpInsts, &sliceState,
                                   &bestDstLoopDepth, maximalFusion))
             continue;
           // TODO(andydavis) Remove the following test code when canFuseLoops
@@ -1568,7 +1567,7 @@ public:
           }
           // Fuse computation slice of 'srcLoopNest' into 'dstLoopNest'.
           auto sliceLoopNest = mlir::insertBackwardComputationSlice(
-              srcStoreOpInst, dstLoadOpInsts[0], bestDstLoopDepth, &sliceState);
+              srcStoreOp, dstLoadOpInsts[0], bestDstLoopDepth, &sliceState);
           if (sliceLoopNest) {
             LLVM_DEBUG(llvm::dbgs() << "\tslice loop nest:\n"
                                     << *sliceLoopNest.getOperation() << "\n");

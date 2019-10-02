@@ -56,4 +56,9 @@ struct Inliner : public ModulePass<Inliner> {
 };
 } // end anonymous namespace
 
+/// Create an Inliner pass.
+std::unique_ptr<OpPassBase<ModuleOp>> mlir::createInlinerPass() {
+  return std::make_unique<Inliner>();
+}
+
 static PassRegistration<Inliner> pass("inline", "Inline function calls");

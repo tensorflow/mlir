@@ -2322,12 +2322,12 @@ func @should_fuse_dead_multi_store_producer() {
 // -----
 
 // CHECK-LABEL: func @should_fuse_function_live_out_multi_store_producer
-func @should_fuse_function_live_out_multi_store_producer(%live_out_m : memref<10xf32>) {
+func @should_fuse_function_live_out_multi_store_producer(%live_in_out_m : memref<10xf32>) {
   %m = alloc() : memref<10xf32>
   %cf7 = constant 7.0 : f32
 
   affine.for %i0 = 0 to 10 {
-    affine.store %cf7, %live_out_m[%i0] : memref<10xf32>
+    affine.store %cf7, %live_in_out_m[%i0] : memref<10xf32>
     affine.store %cf7, %m[%i0] : memref<10xf32>
   }
   affine.for %i1 = 0 to 10 {

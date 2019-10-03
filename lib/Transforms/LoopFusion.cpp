@@ -323,23 +323,29 @@ public:
   }
 
   // Returns the unique AffineStoreOp in `node` that meets all the following:
-  //   *) store is the only one that writes to a function-local live out memref,
+  //   *) store is the only one that writes to a function-local memref live out
+  //      of `node`,
   //   *) store is not the source of a self-dependence on `node`.
   // Otherwise, returns a null AffineStoreOp.
-  AffineStoreOp getUniqueStoreToLiveOut(Node *node) {
+  AffineStoreOp getUniqueOutgoingStore(Node *node) {
     AffineStoreOp uniqueStore;
+
+    // Return null if `node` doesn't have any outgoing edges.
+    auto outEdgeIt = outEdges.find(node->id);
+    if (outEdgeIt == outEdges.end())
+      return nullptr;
+
+    const auto &nodeOutEdges = outEdgeIt->second;
     for (auto *op : node->stores) {
       auto storeOp = cast<AffineStoreOp>(op);
       auto *memref = storeOp.getMemRef();
-      auto outEdgeIt = outEdges.find(node->id);
       // Skip this store if there are no dependences on its memref. This means
       // that store either:
       // *) writes to a memref that is only read within the same loop nest
       //    (self-dependence edges are not represented in graph at the moment),
       // *) writes to a function live out memref (function parameter), or
       // *) is dead.
-      if (outEdgeIt == outEdges.end() ||
-          llvm::all_of(outEdgeIt->second, [=](const Edge &edge) {
+      if (llvm::all_of(nodeOutEdges, [=](const Edge &edge) {
             return (edge.value != memref);
           }))
         continue;
@@ -995,27 +1001,24 @@ static Value *createPrivateMemRef(AffineForOp forOp, Operation *srcStoreOpInst,
   return newMemRef;
 }
 
-// Checks if node 'srcId' (which writes to a live out memref), can be safely
-// fused into node 'dstId'. Returns true if the following conditions are met:
-// *) 'srcNode' only writes to live out 'memref'.
-// *) 'srcNode' has exactly one output edge on 'memref' (which is to 'dstId').
-// *) 'dstNode's read/write region to 'memref' is a super set of 'srcNode's
-//    write region to 'memref'.
+// Checks if node 'srcId' can be safely fused into node 'dstId'. Node 'srcId'
+// may write to multiple memrefs but it is required that only one of them,
+// 'srcLiveOutStoreOp', have an output edge.
+// Returns true if 'dstNode's read/write region to 'memref' is a super set of
+// 'srcNode's write region to 'memref'.
 // TODO(andydavis) Generalize this to handle more live in/out cases.
 static bool canFuseSrcWhichWritesToLiveOut(unsigned srcId, unsigned dstId,
-                                           Value *memref,
-                                           AffineStoreOp srcStoreOp,
+                                           AffineStoreOp srcLiveOutStoreOp,
                                            MemRefDependenceGraph *mdg) {
-  assert(srcStoreOp && "Expected a valid store op");
+  assert(srcLiveOutStoreOp && "Expected a valid store op");
+  assert(mdg->getOutEdgeCount(srcId) == 1 && "Expected only one output edge");
   auto *srcNode = mdg->getNode(srcId);
   auto *dstNode = mdg->getNode(dstId);
+  Value *memref = srcLiveOutStoreOp.getMemRef();
 
-  // Return false if 'srcNode' has more than one output edge on 'memref'.
-  if (mdg->getOutEdgeCount(srcNode->id, memref) != 1)
-    return false;
   // Compute MemRefRegion 'srcWriteRegion' for 'srcStoreOp' on 'memref'.
-  MemRefRegion srcWriteRegion(srcStoreOp.getLoc());
-  if (failed(srcWriteRegion.compute(srcStoreOp, /*loopDepth=*/0))) {
+  MemRefRegion srcWriteRegion(srcLiveOutStoreOp.getLoc());
+  if (failed(srcWriteRegion.compute(srcLiveOutStoreOp, /*loopDepth=*/0))) {
     LLVM_DEBUG(llvm::dbgs()
                << "Unable to compute MemRefRegion for source operation\n.");
     return false;
@@ -1515,20 +1518,25 @@ public:
           // Skip if 'srcNode' is not a loop nest.
           if (!isa<AffineForOp>(srcNode->op))
             continue;
-          // Skip if 'srcNode' has more than one store to a function-local
-          // live-out.
+          // Skip if 'srcNode' has more than one live-out store to a
+          // function-local memref.
           // TODO(andydavis) Support more generic multi-output src loop nests
           // fusion.
-          auto srcStoreOp = mdg->getUniqueStoreToLiveOut(srcNode);
+          auto srcStoreOp = mdg->getUniqueOutgoingStore(srcNode);
           if (!srcStoreOp)
             continue;
+          // Unique outgoing store found must write to 'memref' since 'memref'
+          // is the one that established the producer-consumer relationship
+          // between 'srcNode' and 'dstNode'.
+          assert(srcStoreOp.getMemRef() == memref &&
+                 "Found store to unexpected memref");
 
           // Skip if 'srcNode' writes to any live in or escaping memrefs,
           // and cannot be fused.
           bool writesToLiveInOrOut =
               mdg->writesToLiveInOrEscapingMemrefs(srcNode->id);
-          if (writesToLiveInOrOut && !canFuseSrcWhichWritesToLiveOut(
-                                         srcId, dstId, memref, srcStoreOp, mdg))
+          if (writesToLiveInOrOut &&
+              !canFuseSrcWhichWritesToLiveOut(srcId, dstId, srcStoreOp, mdg))
             continue;
 
           // Skip if 'srcNode' out edge count on 'memref' > 'maxSrcUserCount'.

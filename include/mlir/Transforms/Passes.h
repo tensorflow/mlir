@@ -34,6 +34,8 @@ class FuncOp;
 class ModuleOp;
 template <typename T> class OpPassBase;
 
+std::unique_ptr<OpPassBase<ModuleOp>> createInlinerPass();
+
 /// Creates a constant folding pass. Note that this pass solely provides simple
 /// top-down constant folding functionality; it is intended to be used for
 /// testing purpose. Use Canonicalizer pass, which exploits more simplification
@@ -45,9 +47,6 @@ std::unique_ptr<OpPassBase<FuncOp>> createCanonicalizerPass();
 
 /// Creates a pass to perform common sub expression elimination.
 std::unique_ptr<OpPassBase<FuncOp>> createCSEPass();
-
-/// Creates a pass to perform Inlining.
-std::unique_ptr<OpPassBase<ModuleOp>> createInlinerPass();
 
 /// Creates a pass to vectorize loops, operations and data types using a
 /// target-independent, n-D super-vector abstraction.

@@ -3,6 +3,7 @@ if(MLIR_ROCM_CONVERSIONS_ENABLED)
 
   add_llvm_library(MLIRGPUtoROCMTransforms
     ConvertKernelFuncToHSACO.cpp
+    ConvertLaunchFuncToHIPCalls.cpp
     GenerateHSACOAccessors.cpp
   )
   target_link_libraries(MLIRGPUtoROCMTransforms

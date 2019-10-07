@@ -84,6 +84,15 @@ class OpPassBase;
 std::unique_ptr<OpPassBase<ModuleOp>> createConvertGPUKernelToHSACOPass(
     rocm::HSACOGeneratorConfig hsacoGeneratorConfig);
 
+/// Creates a pass to convert a gpu.launch_func operation into a sequence of
+/// HIP Runtime API calls.
+///
+/// This pass does not generate code to call HIP Runtime API directly, but
+/// instead uses a small wrapper library that exports a stable and conveniently
+/// typed ABI ontop of HIP.
+std::unique_ptr<OpPassBase<ModuleOp>>
+createConvertGpuLaunchFuncToHIPCallsPass();
+
 /// Creates a pass to augment a module with getter functions for all contained
 /// HSA code objects as encoded via the 'amdgpu.hsaco' attribute.
 std::unique_ptr<OpPassBase<ModuleOp>> createGenerateHSACOAccessorPass();

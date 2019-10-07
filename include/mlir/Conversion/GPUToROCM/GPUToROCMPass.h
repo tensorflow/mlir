@@ -84,6 +84,10 @@ class OpPassBase;
 std::unique_ptr<OpPassBase<ModuleOp>> createConvertGPUKernelToHSACOPass(
     rocm::HSACOGeneratorConfig hsacoGeneratorConfig);
 
+/// Creates a pass to augment a module with getter functions for all contained
+/// HSA code objects as encoded via the 'amdgpu.hsaco' attribute.
+std::unique_ptr<OpPassBase<ModuleOp>> createGenerateHSACOAccessorPass();
+
 } // namespace mlir
 
 #endif // MLIR_CONVERSION_GPUTOROCM_GPUTOROCMPASS_H_

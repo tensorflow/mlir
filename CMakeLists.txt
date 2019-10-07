@@ -44,6 +44,13 @@ endif()
 
 set(MLIR_CUDA_RUNNER_ENABLED 0 CACHE BOOL "Enable building the mlir CUDA runner")
 
+# Build the ROCM conversions if the AMDGPU backend is available
+if ("AMDGPU" IN_LIST LLVM_TARGETS_TO_BUILD)
+  set(MLIR_ROCM_CONVERSIONS_ENABLED 1)
+else()
+  set(MLIR_ROCM_CONVERSIONS_ENABLED 0)
+endif()
+
 include_directories( "include")
 include_directories( ${MLIR_INCLUDE_DIR})
 

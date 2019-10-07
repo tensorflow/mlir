@@ -1,5 +1,6 @@
 add_subdirectory(GPUToCUDA)
 add_subdirectory(GPUToNVVM)
+add_subdirectory(GPUToROCM)
 add_subdirectory(GPUToROCDL)
 add_subdirectory(GPUToSPIRV)
 add_subdirectory(LoopsToGPU)

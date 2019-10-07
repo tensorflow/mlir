@@ -55,6 +55,11 @@ if(MLIR_CUDA_CONVERSIONS_ENABLED)
     MLIRGPUtoCUDATransforms
   )
 endif()
+if(MLIR_ROCM_CONVERSIONS_ENABLED)
+  list(APPEND LIBS
+    MLIRGPUtoROCMTransforms
+  )
+endif()
 add_llvm_executable(mlir-opt
  mlir-opt.cpp
 )

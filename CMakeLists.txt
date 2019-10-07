@@ -51,6 +51,8 @@ else()
   set(MLIR_ROCM_CONVERSIONS_ENABLED 0)
 endif()
 
+set(MLIR_ROCM_RUNNER_ENABLED 0 CACHE BOOL "Enable building the mlir ROCM runner")
+
 include_directories( "include")
 include_directories( ${MLIR_INCLUDE_DIR})
 

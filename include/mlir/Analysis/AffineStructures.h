@@ -677,7 +677,7 @@ public:
   /// constraints, does a single scan, and updates in place.
   void removeTrivialRedundancy();
 
-  /// A more expensive check to detect redundant inequalities than
+  /// A more expensive check to detect redundant inequalities thatn
   /// removeTrivialRedundancy.
   void removeRedundantInequalities();
 

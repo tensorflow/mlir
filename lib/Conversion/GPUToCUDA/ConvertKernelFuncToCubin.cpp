@@ -94,7 +94,7 @@ private:
   std::string translateModuleToPtx(llvm::Module &module,
                                    llvm::TargetMachine &target_machine);
 
-  /// Converts llvmModule to cubin using the user-provded generator. Location is
+  /// Converts llvmModule to cubin using the user-provided generator. Location is
   /// used for error reporting and name is forwarded to the CUBIN generator to
   /// use in its logging mechanisms.
   OwnedCubin convertModuleToCubin(llvm::Module &llvmModule, Location loc,

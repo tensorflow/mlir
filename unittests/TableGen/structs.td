@@ -1,4 +1,4 @@
-//===-- structs.td - StructsGen test definition file ------*- tablegen -*-===//
+//===-- structs.td - StructsGen test definition file -------*- tablegen -*-===//
 //
 // Copyright 2019 The MLIR Authors.
 //

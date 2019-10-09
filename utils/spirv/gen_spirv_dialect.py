@@ -343,7 +343,7 @@ def map_spec_operand_to_ods_argument(operand):
       arg_type = 'Variadic<SPV_Type>'
   elif kind == 'IdMemorySemantics' or kind == 'IdScope':
     # TODO(antiagainst): Need to further constrain 'IdMemorySemantics'
-    # and 'IdScope' given that they should be gerenated from OpConstant.
+    # and 'IdScope' given that they should be generated from OpConstant.
     assert quantifier == '', ('unexpected to have optional/variadic memory '
                               'semantics or scope <id>')
     arg_type = 'I32'

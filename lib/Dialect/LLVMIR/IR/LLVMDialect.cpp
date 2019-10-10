@@ -1367,6 +1367,16 @@ LLVMType LLVMType::getFloatTy(LLVMDialect *dialect) {
 LLVMType LLVMType::getHalfTy(LLVMDialect *dialect) {
   return dialect->impl->halfTy;
 }
+LLVMType LLVMType::getQuadTy(LLVMDialect *dialect) {
+  return getLocked(dialect, [=] {
+    return llvm::Type::getFP128Ty(dialect->getLLVMContext());
+  });
+}
+LLVMType LLVMType::getExtendedDoubleTy(LLVMDialect *dialect) {
+  return getLocked(dialect, [=] {
+    return llvm::Type::getX86_FP80Ty(dialect->getLLVMContext());
+  });
+}
 
 /// Utilities used to generate integer types.
 LLVMType LLVMType::getIntNTy(LLVMDialect *dialect, unsigned numBits) {

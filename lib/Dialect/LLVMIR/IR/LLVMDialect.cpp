@@ -1219,7 +1219,8 @@ LLVMDialect::LLVMDialect(MLIRContext *context)
   impl->floatTy = LLVMType::get(context, llvm::Type::getFloatTy(llvmContext));
   impl->halfTy = LLVMType::get(context, llvm::Type::getHalfTy(llvmContext));
   impl->fp128Ty = LLVMType::get(context, llvm::Type::getFP128Ty(llvmContext));
-  impl->x86_fp80Ty = LLVMType::get(context, llvm::Type::getX86_FP80Ty(llvmContext));
+  impl->x86_fp80Ty = LLVMType::get(context,
+                                   llvm::Type::getX86_FP80Ty(llvmContext));
   /// Other Types.
   impl->voidTy = LLVMType::get(context, llvm::Type::getVoidTy(llvmContext));
 }

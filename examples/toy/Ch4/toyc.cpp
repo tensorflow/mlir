@@ -83,8 +83,9 @@ std::unique_ptr<toy::ModuleAST> parseInputFile(llvm::StringRef filename) {
 mlir::LogicalResult optimize(mlir::ModuleOp module) {
   mlir::PassManager pm(module.getContext());
   pm.addPass(mlir::createCanonicalizerPass());
-  pm.addPass(createShapeInferencePass());
-  pm.addPass(mlir::createCanonicalizerPass());
+  pm.addPass(mlir::createInlinerPass());
+  pm.addPass(mlir::createDeadFunctionEliminationPass());
+  pm.addPass(mlir::createShapeInferencePass());
   // Apply any generic pass manager command line options.
   applyPassManagerCLOptions(pm);
 
@@ -93,7 +94,7 @@ mlir::LogicalResult optimize(mlir::ModuleOp module) {
 
 int dumpMLIR() {
   // Register our Dialect with MLIR
-  mlir::registerDialect<ToyDialect>();
+  mlir::registerDialect<mlir::toy::ToyDialect>();
 
   mlir::MLIRContext context;
   mlir::OwningModuleRef module;

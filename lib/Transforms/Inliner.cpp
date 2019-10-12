@@ -271,8 +271,8 @@ static void inlineSCC(Inliner &inliner, ArrayRef<CallGraphNode *> currentSCC,
 // TODO(riverriddle) This pass should currently only be used for basic testing
 // of inlining functionality.
 namespace {
-struct InlinerPass : public OperationPass<InlinerPass> {
-  void runOnOperation() override {
+struct InlinerPass : public ModulePass<InlinerPass> {
+  void runOnModule() override {
     CallGraph &cg = getAnalysis<CallGraph>();
     auto *context = &getContext();
 
@@ -290,5 +290,9 @@ struct InlinerPass : public OperationPass<InlinerPass> {
   }
 };
 } // end anonymous namespace
-
+namespace mlir {
+std::unique_ptr<OpPassBase<ModuleOp>> createInlinerPass() {
+  return std::make_unique<InlinerPass>();
+}
+} // namespace mlir
 static PassRegistration<InlinerPass> pass("inline", "Inline function calls");

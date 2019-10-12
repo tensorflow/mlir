@@ -21,16 +21,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "toy/Dialect.h"
-
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
-#include "mlir/IR/StandardTypes.h"
-
 #include <numeric>
-
-namespace toy {
+using namespace mlir;
+using namespace toy;
 
 namespace {
+#include "ToyCombine.inc"
+} // end anonymous namespace
 
 /// Fold transpose(transpose(x) -> transpose(x)
 struct SimplifyRedundantTranspose : public mlir::OpRewritePattern<TransposeOp> {
@@ -50,6 +49,7 @@ struct SimplifyRedundantTranspose : public mlir::OpRewritePattern<TransposeOp> {
     mlir::Value *transposeInput = op.getOperand();
     TransposeOp transposeInputOp =
         llvm::dyn_cast_or_null<TransposeOp>(transposeInput->getDefiningOp());
+
     // If the input is defined by another Transpose, bingo!
     if (!transposeInputOp)
       return matchFailure();
@@ -60,96 +60,15 @@ struct SimplifyRedundantTranspose : public mlir::OpRewritePattern<TransposeOp> {
   }
 };
 
-/// Fold reshape(constant(x)) -> constant(x'), with x' being reshaped in place.
-struct SimplifyReshapeConstant : public mlir::OpRewritePattern<ReshapeOp> {
-  using mlir::OpRewritePattern<ReshapeOp>::OpRewritePattern;
-
-  mlir::PatternMatchResult
-  matchAndRewrite(ReshapeOp reshape,
-                  mlir::PatternRewriter &rewriter) const override {
-    // Look through the input of the current reshape.
-    ConstantOp constantOp = llvm::dyn_cast_or_null<ConstantOp>(
-        reshape.getOperand()->getDefiningOp());
-    // If the input is defined by another constant, bingo!
-    if (!constantOp)
-      return matchFailure();
-
-    auto reshapeType = reshape.getType().cast<ToyArrayType>();
-    if (auto valueAttr =
-            constantOp.getAttrOfType<mlir::DenseElementsAttr>("value")) {
-      // FIXME Check matching of element count!
-      //      auto oldType = constantOp.getType();
-      auto newType = rewriter.getTensorType(
-          reshapeType.getShape(), valueAttr.getType().getElementType());
-      auto newAttr = valueAttr.reshape(newType);
-      rewriter.replaceOpWithNewOp<ConstantOp>(reshape, reshapeType.getShape(),
-                                              newAttr);
-    } else if (auto valueAttr =
-                   constantOp.getAttrOfType<mlir::FloatAttr>("value")) {
-      // Broadcast
-      auto dataSize = std::accumulate(reshapeType.getShape().begin(),
-                                      reshapeType.getShape().end(), 1,
-                                      std::multiplies<int>());
-      std::vector<mlir::Attribute> data(dataSize, valueAttr);
-      auto tensorTy = rewriter.getTensorType(reshapeType.getShape(),
-                                             reshapeType.getElementType());
-      auto newAttr = mlir::DenseElementsAttr::get(tensorTy, data);
-      rewriter.replaceOpWithNewOp<ConstantOp>(reshape, reshapeType.getShape(),
-                                              newAttr);
-    } else {
-      llvm_unreachable("Unsupported Constant format");
-    }
-    return matchSuccess();
-  }
-};
-
-/// Fold reshape(reshape(x)) -> reshape(x)
-struct SimplifyReshapeReshape : public mlir::OpRewritePattern<ReshapeOp> {
-  using mlir::OpRewritePattern<ReshapeOp>::OpRewritePattern;
-
-  mlir::PatternMatchResult
-  matchAndRewrite(ReshapeOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    // Look through the input of the current reshape.
-    mlir::Value *reshapeInput = op.getOperand();
-
-    // If the input is defined by another reshape, bingo!
-    if (!matchPattern(reshapeInput, mlir::m_Op<ReshapeOp>()))
-      return matchFailure();
-
-    // Use the rewriter to perform the replacement
-    rewriter.replaceOp(op, {reshapeInput});
-    return matchSuccess();
-  }
-};
-
-/// Fold reshape(x)) -> x, when input type matches output type
-struct SimplifyNullReshape : public mlir::OpRewritePattern<ReshapeOp> {
-  using mlir::OpRewritePattern<ReshapeOp>::OpRewritePattern;
-
-  mlir::PatternMatchResult
-  matchAndRewrite(ReshapeOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    if (op.getOperand()->getType() != op.getType())
-      return matchFailure();
-    rewriter.replaceOp(op, {op.getOperand()});
-    return matchSuccess();
-  }
-};
-
-} // end anonymous namespace.
-
 // Register our patterns for rewrite by the Canonicalization framework.
-void TransposeOp::getCanonicalizationPatterns(
-    mlir::OwningRewritePatternList &results, mlir::MLIRContext *context) {
+void TransposeOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                              MLIRContext *context) {
   results.insert<SimplifyRedundantTranspose>(context);
 }
 
 // Register our patterns for rewrite by the Canonicalization framework.
-void ReshapeOp::getCanonicalizationPatterns(
-    mlir::OwningRewritePatternList &results, mlir::MLIRContext *context) {
-  results.insert<SimplifyReshapeConstant, SimplifyReshapeReshape,
-                 SimplifyNullReshape>(context);
+void ReshapeOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                            MLIRContext *context) {
+  results.insert<ReshapeReshapeOptPattern, RedundantReshapeOptPattern,
+                 FoldConstantReshapeOptPattern>(context);
 }
-
-} // namespace toy

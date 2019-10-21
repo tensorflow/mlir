@@ -235,3 +235,22 @@ func @test_empty_set(%N : index) {
 
   return
 }
+
+// CHECK-LABEL: func @zero_trip_count_loops
+func @zero_trip_count_loops(%N : index) {
+  %c0 = constant 0 : index
+  %c1 = constant 1 : index
+  %c-1 = constant -1 : index
+  %M = affine.apply (d0) -> ((2*d0 + 4) mod 2)(%N)
+  affine.for %i = 0 to %M {
+  }
+  affine.for %i = 0 to -1 {
+  }
+  loop.for %i = %M to %M step %c1 {
+  }
+  loop.for %i = %c0 to %c-1 step %N {
+  }
+  // All loops above should disappear.
+  // CHECK-NOT: loop.for
+  return
+}

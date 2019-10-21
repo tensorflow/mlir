@@ -56,6 +56,10 @@ def LoopLikeOpInterface : OpInterface<"LoopLikeOpInterface"> {
       }],
       "LogicalResult", "moveOutOfLoop", (ins "ArrayRef<Operation *>":$ops)
     >,
+    InterfaceMethod<"Get the trip count if it is a constant.",
+      "llvm::Optional<uint64_t>", "getConstantTripCount", (ins), [{
+      return getConstantTripCount(op);
+    }]>,
   ];
 }
 

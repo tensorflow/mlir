@@ -205,3 +205,6 @@ func @null() {
   %1 = llvm.mlir.null : !llvm<"{void(i32, void()*)*, i64}*">
   llvm.return
 }
+
+// XXXCHECK: llvm.func @recursive_type(!llvm<"%a = type { %a* }">)
+//llvm.func @recursive_type(!llvm<"%a = type { %a* }">)

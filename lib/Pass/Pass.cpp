@@ -725,4 +725,4 @@ void PassInstrumentor::addInstrumentation(
   impl->instrumentations.emplace_back(std::move(pi));
 }
 
-constexpr AnalysisID mlir::detail::PreservedAnalyses::allAnalysesID;
+const AnalysisID mlir::detail::PreservedAnalyses::allAnalysesID;

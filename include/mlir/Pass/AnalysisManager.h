@@ -70,7 +70,7 @@ public:
 
 private:
   /// An identifier used to represent all potential analyses.
-  constexpr static AnalysisID allAnalysesID = {};
+  const static AnalysisID allAnalysesID;
 
   /// The set of analyses that are known to be preserved.
   SmallPtrSet<const void *, 2> preservedIDs;

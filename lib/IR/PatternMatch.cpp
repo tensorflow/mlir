@@ -19,7 +19,10 @@
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Value.h"
+#include "llvm/ADT/SmallSet.h"
+
 using namespace mlir;
+using namespace llvm;
 
 PatternBenefit::PatternBenefit(unsigned benefit) : representation(benefit) {
   assert(representation == benefit && benefit != ImpossibleToMatchSentinel &&
@@ -79,6 +82,44 @@ PatternRewriter::~PatternRewriter() {
   // Out of line to provide a vtable anchor for the class.
 }
 
+/// This method checks if Values in 'valuesToRemoveIfDead' are dead and removes
+/// their defining Operations. An Operation is removed only if all its Value
+/// results are dead and in 'valuesToRemovedIfDead'. An Operation is not removed
+/// if all its Value results are dead but not all of them are in
+/// 'valuesToRemoveIfDead'.
+void PatternRewriter::removeOpsIfDeadResults(
+    ArrayRef<Value *> valuesToRemoveIfDead) {
+  SmallPtrSet<Value *, 8> valuesToRemoveMap;
+  valuesToRemoveMap.insert(valuesToRemoveIfDead.begin(),
+                           valuesToRemoveIfDead.end());
+  for (auto *toRemove : valuesToRemoveIfDead) {
+    auto toRemoveIt = valuesToRemoveMap.find(toRemove);
+    if (toRemoveIt == valuesToRemoveMap.end())
+      // This Value was already processed.
+      continue;
+
+    auto *opToRemove = toRemove->getDefiningOp();
+    auto opResults = opToRemove->getResults();
+    // An Operation is dead if all its Value results have no uses.
+    if (std::all_of(opResults.begin(), opResults.end(), [&](Value *result) {
+          auto resultIt = valuesToRemoveMap.find(result);
+          if (resultIt == valuesToRemoveMap.end())
+            // Result is not in 'valuesToRemoveIfDead' list or it was processed
+            // before so we cannot remove its Operation.
+            return false;
+
+          // Remove result from 'valuesToRemoveMap' so that it's not processed
+          // again.
+          valuesToRemoveMap.erase(result);
+          return result->use_empty();
+        })) {
+
+      notifyOperationRemoved(opToRemove);
+      opToRemove->erase();
+    }
+  }
+}
+
 /// This method performs the final replacement for a pattern, where the
 /// results of the operation are updated to use the specified list of SSA
 /// values.  In addition to replacing and removing the specified operation,
@@ -97,8 +138,7 @@ void PatternRewriter::replaceOp(Operation *op, ArrayRef<Value *> newValues,
   notifyOperationRemoved(op);
   op->erase();
 
-  // TODO: Process the valuesToRemoveIfDead list, removing things and calling
-  // the notifyOperationRemoved hook in the process.
+  removeOpsIfDeadResults(valuesToRemoveIfDead);
 }
 
 /// This method erases an operation that is known to have no uses. The uses of
@@ -195,8 +235,7 @@ void PatternRewriter::updatedRootInPlace(
   // Notify the rewriter subclass that we're about to replace this root.
   notifyRootUpdated(op);
 
-  // TODO: Process the valuesToRemoveIfDead list, removing things and calling
-  // the notifyOperationRemoved hook in the process.
+  removeOpsIfDeadResults(valuesToRemoveIfDead);
 }
 
 //===----------------------------------------------------------------------===//

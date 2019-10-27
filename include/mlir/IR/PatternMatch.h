@@ -325,6 +325,13 @@ public:
                          Region::iterator before);
   void cloneRegionBefore(Region &region, Block *before);
 
+  /// This method checks if Values in 'valuesToRemoveIfDead' are dead and
+  /// removes their defining Operations. An Operation is removed only if all its
+  /// Value results are dead and in 'valuesToRemovedIfDead'. An Operation is not
+  /// removed if all its Value results are dead but not all of them are in
+  /// 'valuesToRemoveIfDead'.
+  void removeOpsIfDeadResults(ArrayRef<Value *> valuesToRemoveIfDead);
+
   /// This method performs the final replacement for a pattern, where the
   /// results of the operation are updated to use the specified list of SSA
   /// values.  In addition to replacing and removing the specified operation,

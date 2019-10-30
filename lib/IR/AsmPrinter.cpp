@@ -1518,10 +1518,19 @@ void OperationPrinter::numberValueID(Value *value) {
   llvm::raw_svector_ostream specialName(specialNameBuffer);
 
   // Check to see if this value requested a special name.
-  auto *op = value->getDefiningOp();
-  if (state && op) {
-    if (auto *interface = state->getOpAsmInterface(op->getDialect()))
-      interface->getOpResultName(op, specialName);
+  if (state) {
+    if (auto *op = value->getDefiningOp()) {
+      // If the value is the result of an Op, ask the Op's dialect for a name
+      if (auto *interface = state->getOpAsmInterface(op->getDialect()))
+        interface->getOpResultName(op, specialName);
+    } else if (auto* arg = mlir::dyn_cast<mlir::BlockArgument>(value)) {
+      // Otherwise, if the value is a block argument, find it's parent op and
+      // ask it's dialect for a friendly name
+      if (auto* op = arg->getOwner()->getParentOp()) {
+        if (auto *interface = state->getOpAsmInterface(op->getDialect()))
+          interface->getBlockArgumentName(arg, specialName);
+      }
+    }
   }
 
   if (specialNameBuffer.empty()) {

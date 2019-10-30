@@ -594,6 +594,9 @@ public:
   /// Get a special name to use when printing the given operation. The desired
   /// name should be streamed into 'os'.
   virtual void getOpResultName(Operation *op, raw_ostream &os) const {}
+  /// Get a special name to use when printing the block arguments. The desired
+  /// name should be streamed into 'os'.
+  virtual void getBlockArgumentName(BlockArgument *arg, raw_ostream &os) const {}
 };
 
 } // end namespace mlir

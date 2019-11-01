@@ -1523,12 +1523,15 @@ void OperationPrinter::numberValueID(Value *value) {
       // If the value is the result of an Op, ask the Op's dialect for a name
       if (auto *interface = state->getOpAsmInterface(op->getDialect()))
         interface->getOpResultName(op, specialName);
-    } else if (auto* arg = mlir::dyn_cast<mlir::BlockArgument>(value)) {
-      // Otherwise, if the value is a block argument, find it's parent op and
-      // ask it's dialect for a friendly name
-      if (auto* op = arg->getOwner()->getParentOp()) {
-        if (auto *interface = state->getOpAsmInterface(op->getDialect()))
-          interface->getBlockArgumentName(arg, specialName);
+    } else {
+      // Otherwise, if the value is an entry block argument, find it's parent
+      // and ask it's dialect for a friendly name
+      auto arg = cast<BlockArgument>(value);
+      if (arg->getOwner()->isEntryBlock()) {
+        if (auto* op = arg->getOwner()->getParentOp()) {
+          if (auto *interface = state->getOpAsmInterface(op->getDialect()))
+            interface->getRegionArgumentName(arg, specialName);
+        }
       }
     }
   }

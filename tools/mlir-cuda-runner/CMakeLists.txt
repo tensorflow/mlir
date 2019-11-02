@@ -71,4 +71,15 @@ if(MLIR_CUDA_RUNNER_ENABLED)
   whole_archive_link(mlir-cuda-runner ${FULL_LINK_LIBS})
   target_link_libraries(mlir-cuda-runner PRIVATE ${FULL_LINK_LIBS} ${LIBS})
 
+  install(TARGETS mlir-cuda-runner
+    ${export_to_llvmexports}
+    COMPONENT mlir-cuda-runner
+    RUNTIME DESTINATION ${LLVM_TOOLS_INSTALL_DIR})
+
+  if(NOT LLVM_ENABLE_IDE)
+    add_llvm_install_targets("install-mlir-cuda-runner"
+      DEPENDS mlir-cuda-runner
+    COMPONENT mlir-cuda-runner)
+  endif()
+
 endif()

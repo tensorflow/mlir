@@ -61,3 +61,14 @@ add_llvm_executable(mlir-opt
 llvm_update_compile_flags(mlir-opt)
 whole_archive_link(mlir-opt ${LIBS})
 target_link_libraries(mlir-opt PRIVATE MLIRIR MLIRMlirOptLib ${LIBS} LLVMSupport)
+
+install(TARGETS mlir-opt
+  ${export_to_llvmexports}
+  COMPONENT mlir-opt
+  RUNTIME DESTINATION ${LLVM_TOOLS_INSTALL_DIR})
+
+if(NOT LLVM_ENABLE_IDE)
+  add_llvm_install_targets("install-mlir-opt"
+    DEPENDS mlir-opt
+  COMPONENT mlir-opt)
+endif()

@@ -1,4 +1,18 @@
 add_subdirectory(Analysis)
+add_subdirectory(Conversion)
 add_subdirectory(Dialect)
 add_subdirectory(EDSC)
+add_subdirectory(Pass)
+add_subdirectory(Target)
 add_subdirectory(Transforms)
+
+install(DIRECTORY IR DESTINATION include/mlir PATTERN "*.h")
+install(DIRECTORY IR DESTINATION include/mlir PATTERN "*.td")
+install(DIRECTORY Support DESTINATION include/mlir PATTERN "*.h")
+install(DIRECTORY Analysis DESTINATION include/mlir PATTERN "*.h")
+install(DIRECTORY Analysis DESTINATION include/mlir PATTERN "*.td")
+install(DIRECTORY Transforms DESTINATION include/mlir PATTERN "*.h")
+install(DIRECTORY Transforms DESTINATION include/mlir PATTERN "*.td")
+
+install(FILES Parser.h DESTINATION include/mlir)
+install(FILES Translation.h DESTINATION include/mlir)

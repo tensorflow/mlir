@@ -1,0 +1,5 @@
+install(FILES AnalysisManager.h DESTINATION include/mlir/Pass)
+install(FILES Pass.h DESTINATION include/mlir/Pass)
+install(FILES PassInstrumentation.h DESTINATION include/mlir/Pass)
+install(FILES PassManager.h DESTINATION include/mlir/Pass)
+install(FILES PassRegistry.h DESTINATION include/mlir/Pass)

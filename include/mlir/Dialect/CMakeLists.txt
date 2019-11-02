@@ -8,3 +8,8 @@ add_subdirectory(QuantOps)
 add_subdirectory(SPIRV)
 add_subdirectory(StandardOps)
 add_subdirectory(VectorOps)
+
+install(DIRECTORY AffineOps DESTINATION include/mlir/Dialect PATTERN "*.h")
+install(DIRECTORY LLVMIR DESTINATION include/mlir/Dialect PATTERN "*.h")
+install(DIRECTORY StandardOps DESTINATION include/mlir/Dialect PATTERN "*.h")
+

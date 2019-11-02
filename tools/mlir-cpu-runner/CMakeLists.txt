@@ -21,3 +21,14 @@ target_link_libraries(mlir-cpu-runner PRIVATE
   LLVMCore
   LLVMSupport
 )
+
+install(TARGETS mlir-cpu-runner
+  ${export_to_llvmexports}
+  COMPONENT mlir-cpu-runner
+  RUNTIME DESTINATION ${LLVM_TOOLS_INSTALL_DIR})
+
+if(NOT LLVM_ENABLE_IDE)
+  add_llvm_install_targets("install-mlir-cpu-runner"
+    DEPENDS mlir-cpu-runner
+  COMPONENT mlir-cpu-runner)
+endif()

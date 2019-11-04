@@ -56,3 +56,36 @@ add_subdirectory(test)
 if( LLVM_INCLUDE_EXAMPLES )
   add_subdirectory(examples)
 endif()
+
+if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
+  install(DIRECTORY include/mlir include/mlir-c
+    DESTINATION include
+    COMPONENT mlir-headers
+    FILES_MATCHING
+    PATTERN "*.def"
+    PATTERN "*.h"
+    PATTERN "*.td"
+    PATTERN "*.inc"
+    PATTERN "LICENSE.TXT"
+    PATTERN ".svn" EXCLUDE
+    )
+
+  install(DIRECTORY ${MLIR_INCLUDE_DIR}/mlir ${MLIR_INCLUDE_DIR}/mlir-c
+    DESTINATION include
+    COMPONENT mlir-headers
+    FILES_MATCHING
+    PATTERN "*.def"
+    PATTERN "*.h"
+    PATTERN "*.gen"
+    PATTERN "*.inc"
+    PATTERN "CMakeFiles" EXCLUDE
+    PATTERN "config.h" EXCLUDE
+    PATTERN ".svn" EXCLUDE
+    )
+
+  if (NOT LLVM_ENABLE_IDE)
+    add_llvm_install_targets(install-mlir-headers
+                             DEPENDS mlir-headers
+                             COMPONENT mlir-headers)
+  endif()
+endif()

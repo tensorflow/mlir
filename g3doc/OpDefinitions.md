@@ -243,13 +243,15 @@ like `"0.5f"`, and an integer array default value should be specified as like
 `Confined` is provided as a general mechanism to help modelling further
 constraints on attributes beyond the ones brought by value types. You can use
 `Confined` to compose complex constraints out of more primitive ones. For
-example, a 32-bit integer attribute whose minimal value must be 10 can be
+example, a 32-bit integer attribute whose minimum value must be 10 can be
 expressed as `Confined<I32Attr, [IntMinValue<10>]>`.
 
 Right now, the following primitive constraints are supported:
 
 * `IntMinValue<N>`: Specifying an integer attribute to be greater than or equal
   to `N`
+* `IntMaxValue<N>`: Specifying an integer attribute to be less than or equal to
+  `N`
 * `ArrayMinCount<N>`: Specifying an array attribute to have at least `N`
   elements
 * `IntArrayNthElemEq<I, N>`: Specifying an integer array attribute's `I`-th

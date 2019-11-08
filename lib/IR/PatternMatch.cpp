@@ -84,39 +84,20 @@ PatternRewriter::~PatternRewriter() {
 
 /// This method checks if Values in 'valuesToRemoveIfDead' are dead and removes
 /// their defining Operations. An Operation is removed only if all its Value
-/// results are dead and in 'valuesToRemovedIfDead'. An Operation is not removed
-/// if all its Value results are dead but not all of them are in
-/// 'valuesToRemoveIfDead'.
+/// results are dead and has no side effect.
 void PatternRewriter::removeOpsIfDeadResults(
     ArrayRef<Value *> valuesToRemoveIfDead) {
-  SmallPtrSet<Value *, 8> valuesToRemoveMap;
-  valuesToRemoveMap.insert(valuesToRemoveIfDead.begin(),
-                           valuesToRemoveIfDead.end());
-  for (auto *toRemove : valuesToRemoveIfDead) {
-    auto toRemoveIt = valuesToRemoveMap.find(toRemove);
-    if (toRemoveIt == valuesToRemoveMap.end())
-      // This Value was already processed.
-      continue;
+  // Gather unique operations to be removed.
+  SmallPtrSet<Operation *, 8> opsToRemove;
+  for (auto *valueToRemove : valuesToRemoveIfDead) {
+    auto *op = valueToRemove->getDefiningOp();
+    if (op->use_empty() && op->hasNoSideEffect())
+      opsToRemove.insert(op);
+  }
 
-    auto *opToRemove = toRemove->getDefiningOp();
-    auto opResults = opToRemove->getResults();
-    // An Operation is dead if all its Value results have no uses.
-    if (std::all_of(opResults.begin(), opResults.end(), [&](Value *result) {
-          auto resultIt = valuesToRemoveMap.find(result);
-          if (resultIt == valuesToRemoveMap.end())
-            // Result is not in 'valuesToRemoveIfDead' list or it was processed
-            // before so we cannot remove its Operation.
-            return false;
-
-          // Remove result from 'valuesToRemoveMap' so that it's not processed
-          // again.
-          valuesToRemoveMap.erase(result);
-          return result->use_empty();
-        })) {
-
-      notifyOperationRemoved(opToRemove);
-      opToRemove->erase();
-    }
+  for (auto *op : opsToRemove) {
+    notifyOperationRemoved(op);
+    op->erase();
   }
 }
 

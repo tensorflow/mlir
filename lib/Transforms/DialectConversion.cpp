@@ -863,6 +863,10 @@ detail::ConversionPatternRewriterImpl &ConversionPatternRewriter::getImpl() {
   return *impl;
 }
 
+Value *ConversionPatternRewriter::getRemappedValue(Value *key) {
+  return impl->mapping.lookupOrDefault(key);
+}
+
 //===----------------------------------------------------------------------===//
 // Conversion Patterns
 //===----------------------------------------------------------------------===//

@@ -338,6 +338,10 @@ public:
     return cast<OpT>(cloneWithoutRegions(op.getOperation()));
   }
 
+  /// Return the converted value that replaces 'key'. Return 'key' if there is
+  /// no such a converted value.
+  Value *getRemappedValue(Value *key);
+
   //===--------------------------------------------------------------------===//
   // PatternRewriter Hooks
   //===--------------------------------------------------------------------===//
@@ -381,9 +385,6 @@ public:
 
   /// Return a reference to the internal implementation.
   detail::ConversionPatternRewriterImpl &getImpl();
-
-  /// Remap the given value to that with potentially different type.
-  Value *getRemappedValue(Value *key);
 
 private:
   std::unique_ptr<detail::ConversionPatternRewriterImpl> impl;

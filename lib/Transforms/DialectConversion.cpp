@@ -803,6 +803,12 @@ Operation *ConversionPatternRewriter::cloneWithoutRegions(Operation *op) {
   return newOp;
 }
 
+/// Return the converted value that replaces 'key'. Return 'key' if there is
+/// no such a converted value.
+Value *ConversionPatternRewriter::getRemappedValue(Value *key) {
+  return impl->mapping.lookupOrDefault(key);
+}
+
 /// PatternRewriter hook for splitting a block into two parts.
 Block *ConversionPatternRewriter::splitBlock(Block *block,
                                              Block::iterator before) {
@@ -861,10 +867,6 @@ void ConversionPatternRewriter::notifyRootUpdated(Operation *op) {
 /// Return a reference to the internal implementation.
 detail::ConversionPatternRewriterImpl &ConversionPatternRewriter::getImpl() {
   return *impl;
-}
-
-Value *ConversionPatternRewriter::getRemappedValue(Value *key) {
-  return impl->mapping.lookupOrDefault(key);
 }
 
 //===----------------------------------------------------------------------===//

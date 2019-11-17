@@ -7,6 +7,7 @@ add_llvm_library(MLIRTestTransforms
   TestLoopParametricTiling.cpp
   TestOpaqueLoc.cpp
   TestMemRefStrideCalculation.cpp
+  TestRemappedValue.cpp
   TestVectorizationUtils.cpp
 
   ADDITIONAL_HEADER_DIRS

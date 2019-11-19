@@ -40,6 +40,7 @@ struct VectorTypeStorage;
 struct RankedTensorTypeStorage;
 struct UnrankedTensorTypeStorage;
 struct MemRefTypeStorage;
+struct UnrankedMemRefTypeStorage;
 struct ComplexTypeStorage;
 struct TupleTypeStorage;
 
@@ -64,6 +65,7 @@ enum Kind {
   RankedTensor,
   UnrankedTensor,
   MemRef,
+  UnrankedMemRef,
   Complex,
   Tuple,
   None,
@@ -420,6 +422,36 @@ private:
                             ArrayRef<AffineMap> affineMapComposition,
                             unsigned memorySpace, Optional<Location> location);
   using Base::getImpl;
+};
+
+/// Unranked MemRef represent multi-dimensional MemRefs that have an
+/// unknown shape.
+class UnrankedMemRefType
+    : public Type::TypeBase<UnrankedMemRefType, ShapedType,
+                            detail::UnrankedMemRefTypeStorage> {
+public:
+  using Base::Base;
+
+  /// Get or create a new UnrankedMemRefType of the provided element
+  /// type.
+  static UnrankedMemRefType get(Type elementType);
+
+  /// Get or create a new UnrankedMemRefType of the provided element
+  /// type declared at the given, potentially unknown, location.  If the
+  /// UnrankedMemRefType defined by the arguments would be ill-formed, emit
+  /// errors and return a nullptr-wrapping type.
+  static UnrankedMemRefType getChecked(Type elementType, Location location);
+
+  /// Verify the construction of a unranked memref type.
+  static LogicalResult
+  verifyConstructionInvariants(llvm::Optional<Location> loc,
+                               MLIRContext *context, Type elementType);
+
+  ArrayRef<int64_t> getShape() const { return llvm::None; }
+
+  static bool kindof(unsigned kind) {
+    return kind == StandardTypes::UnrankedMemRef;
+  }
 };
 
 /// Tuple types represent a collection of other types. Note: This type merely

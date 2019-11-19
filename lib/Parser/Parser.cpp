@@ -606,14 +606,14 @@ public:
     return success(parser.consumeIf(Token::r_square));
   }
 
-  /// Parses a '*' if present.
-  ParseResult parseOptionalStar() override {
-    return success(parser.consumeIf(Token::star));
-  }
-
   /// Parses a '?' if present.
   ParseResult parseOptionalQuestion() override {
     return success(parser.consumeIf(Token::question));
+  }
+
+  /// Parses a '*' if present.
+  ParseResult parseOptionalStar() override {
+    return success(parser.consumeIf(Token::star));
   }
 
   /// Returns if the current token corresponds to a keyword.

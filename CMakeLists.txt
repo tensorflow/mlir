@@ -62,25 +62,20 @@ if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
     DESTINATION include
     COMPONENT mlir-headers
     FILES_MATCHING
-    PATTERN "*.def"
     PATTERN "*.h"
-    PATTERN "*.td"
     PATTERN "*.inc"
     PATTERN "LICENSE.TXT"
-    PATTERN ".svn" EXCLUDE
     )
 
   install(DIRECTORY ${MLIR_INCLUDE_DIR}/mlir ${MLIR_INCLUDE_DIR}/mlir-c
     DESTINATION include
     COMPONENT mlir-headers
     FILES_MATCHING
-    PATTERN "*.def"
     PATTERN "*.h"
     PATTERN "*.gen"
     PATTERN "*.inc"
     PATTERN "CMakeFiles" EXCLUDE
     PATTERN "config.h" EXCLUDE
-    PATTERN ".svn" EXCLUDE
     )
 
   if (NOT LLVM_ENABLE_IDE)

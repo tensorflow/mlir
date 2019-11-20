@@ -379,7 +379,7 @@ documents.
 ```tablegen
 def ConstantOp : Toy_Op<"constant", [NoSideEffect]> {
   // Provide a summary and description for this operation. This can be used to
-  // auto-generate documenatation of the operations within our dialect.
+  // auto-generate documentation of the operations within our dialect.
   let summary = "constant operation";
   let description = [{
     Constant operation turns a literal into an SSA value. The data is attached
@@ -417,7 +417,7 @@ invariants of the operation have already been verified:
 ```tablegen
 def ConstantOp : Toy_Op<"constant", [NoSideEffect]> {
   // Provide a summary and description for this operation. This can be used to
-  // auto-generate documenatation of the operations within our dialect.
+  // auto-generate documentation of the operations within our dialect.
   let summary = "constant operation";
   let description = [{
     Constant operation turns a literal into an SSA value. The data is attached
@@ -457,7 +457,7 @@ the implementation inline.
 ```tablegen
 def ConstantOp : Toy_Op<"constant", [NoSideEffect]> {
   // Provide a summary and description for this operation. This can be used to
-  // auto-generate documenatation of the operations within our dialect.
+  // auto-generate documentation of the operations within our dialect.
   let summary = "constant operation";
   let description = [{
     Constant operation turns a literal into an SSA value. The data is attached

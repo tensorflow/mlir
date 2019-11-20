@@ -162,6 +162,7 @@ static constexpr unsigned kAlignedPtrPosInMemRefDescriptor = 1;
 static constexpr unsigned kOffsetPosInMemRefDescriptor = 2;
 static constexpr unsigned kSizePosInMemRefDescriptor = 3;
 static constexpr unsigned kStridePosInMemRefDescriptor = 4;
+
 Type LLVMTypeConverter::convertMemRefType(MemRefType type) {
   int64_t offset;
   SmallVector<int64_t, 4> strides;
@@ -180,6 +181,22 @@ Type LLVMTypeConverter::convertMemRefType(MemRefType type) {
     return LLVM::LLVMType::getStructTy(ptrTy, ptrTy, indexTy, arrayTy, arrayTy);
   }
   return LLVM::LLVMType::getStructTy(ptrTy, ptrTy, indexTy);
+}
+
+// Converts UnrankedMemRefType to LLVMType. The result is a descriptor which
+// contains:
+// 1. int64_t rank, the dynamic rank of this MemRef
+// 2. void* ptr, pointer to the static ranked MemRef descriptor. This will be
+//    stack allocated (alloca) copy of a MemRef descriptor that got casted to 
+//    be unranked. 
+
+static constexpr unsigned kRankInUnrankedMemRefDescriptor = 0;
+static constexpr unsigned kPtrInUnrankedMemRefDescriptor = 1;
+
+Type LLVMTypeConverter::convertUnrankedMemRefType(UnrankedMemRefType type) {
+  auto rankTy = LLVM::LLVMType::getInt64Ty(llvmDialec);
+  auto ptrTy = LLVM::LLVMType::getVoidTy(llvmDialect).getPointerTo();
+  return LLVM::LLVMType::getStructTy(rankTy, ptrTy);
 }
 
 // Convert an n-D vector type to an LLVM vector type via (n-1)-D array type when
@@ -235,21 +252,42 @@ LLVMOpLowering::LLVMOpLowering(StringRef rootOpName, MLIRContext *context,
     : ConversionPattern(rootOpName, benefit, context), lowering(lowering_) {}
 
 /*============================================================================*/
+/* StructBuilder implementation                                               */
+/*============================================================================*/
+StructBuilder::StructBuilder(Value* value) : value(value)
+{
+  if (value)
+    structType = value->getType().cast<LLVM::LLVMType>();
+}
+
+
+Value *StructBuilder::extractPtr(OpBuilder &builder, Location loc,
+                                    unsigned pos) {
+  Type type = structType.cast<LLVM::LLVMType>().getStructElementType(pos);
+  return builder.create<LLVM::ExtractValueOp>(loc, type, value,
+                                              builder.getI64ArrayAttr(pos));
+}
+
+void StructBuilder::setPtr(OpBuilder &builder, Location loc, unsigned pos,
+                              Value *ptr) {
+  value = builder.create<LLVM::InsertValueOp>(loc, structType, value, ptr,
+                                              builder.getI64ArrayAttr(pos));
+}
+/*============================================================================*/
 /* MemRefDescriptor implementation                                            */
 /*============================================================================*/
 
 /// Construct a helper for the given descriptor value.
-MemRefDescriptor::MemRefDescriptor(Value *descriptor) : value(descriptor) {
-  if (value) {
-    structType = value->getType().cast<LLVM::LLVMType>();
+MemRefDescriptor::MemRefDescriptor(Value *descriptor) : StructBuilder(descriptor) {
+  if (value)
     indexType = value->getType().cast<LLVM::LLVMType>().getStructElementType(
         kOffsetPosInMemRefDescriptor);
-  }
 }
 
 /// Builds IR creating an `undef` value of the descriptor type.
 MemRefDescriptor MemRefDescriptor::undef(OpBuilder &builder, Location loc,
                                          Type descriptorType) {
+  
   Value *descriptor =
       builder.create<LLVM::UndefOp>(loc, descriptorType.cast<LLVM::LLVMType>());
   return MemRefDescriptor(descriptor);
@@ -323,24 +361,44 @@ void MemRefDescriptor::setStride(OpBuilder &builder, Location loc, unsigned pos,
       builder.getI64ArrayAttr({kStridePosInMemRefDescriptor, pos}));
 }
 
-Value *MemRefDescriptor::extractPtr(OpBuilder &builder, Location loc,
-                                    unsigned pos) {
-  Type type = structType.cast<LLVM::LLVMType>().getStructElementType(pos);
-  return builder.create<LLVM::ExtractValueOp>(loc, type, value,
-                                              builder.getI64ArrayAttr(pos));
-}
-
-void MemRefDescriptor::setPtr(OpBuilder &builder, Location loc, unsigned pos,
-                              Value *ptr) {
-  value = builder.create<LLVM::InsertValueOp>(loc, structType, value, ptr,
-                                              builder.getI64ArrayAttr(pos));
-}
-
 LLVM::LLVMType MemRefDescriptor::getElementType() {
   return value->getType().cast<LLVM::LLVMType>().getStructElementType(
       kAlignedPtrPosInMemRefDescriptor);
 }
 
+/*============================================================================*/
+/* UnrankedMemRefDescriptor implementation                                    */
+/*============================================================================*/
+
+/// Construct a helper for the given descriptor value.
+UnrankedMemRefDescriptor::UnrankedMemRefDescriptor(Value *descriptor) : StructBuilder(descriptor) 
+{}
+
+/// Builds IR creating an `undef` value of the descriptor type.
+UnrankedMemRefDescriptor UnrankedMemRefDescriptor::undef(OpBuilder &builder, Location loc,
+                                         Type descriptorType) {
+  Value *descriptor =
+      builder.create<LLVM::UndefOp>(loc, descriptorType.cast<LLVM::LLVMType>());
+  return UnrankedMemRefDescriptor(descriptor);
+}
+
+Value *UnrankedMemRefDescriptor::rank(OpBuilder &builder, Location loc)
+{
+  extractPtr(builder, loc, kRankInUnrankedMemRefDescriptor);
+}
+void UnrankedMemRefDescriptor::setRank(OpBuilder &builder, Location loc, Value* value)
+{
+  setPtr(builder, loc, kRankInUnrankedMemRefDescriptor, value);
+}
+Value *UnrankedMemRefDescriptor::memRefDescPtr(OpBuilder &builder, Location loc)
+{
+  return extractPtr(builder, loc, kPtrInUnrankedMemRefDescriptor);
+}
+
+void UnrankedMemRefDescriptor::setMemRefDescPtr(OpBuilder &builder, Location loc, Value* value)
+{
+  setPtr(builder, loc, kPtrInUnrankedMemRefDescriptor, value);
+}
 namespace {
 // Base class for Standard to LLVM IR op conversions.  Matches the Op type
 // provided as template argument.  Carries a reference to the LLVM dialect in

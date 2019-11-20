@@ -370,6 +370,51 @@ func @standard_instrs(tensor<4x4x?xf32>, f32, i32, index, i64, f16) {
 
   // CHECK: %{{[0-9]+}} = exp %arg0 : tensor<4x4x?xf32>
   %98 = exp %t : tensor<4x4x?xf32>
+
+  // CHECK: %{{[0-9]+}} = fabs %arg1 : f32
+  %99 = "std.fabs"(%f) : (f32) -> f32
+
+  // CHECK: %{{[0-9]+}} = fabs %arg1 : f32
+  %100 = fabs %f : f32
+
+  // CHECK: %{{[0-9]+}} = fabs %arg0 : tensor<4x4x?xf32>
+  %101 = fabs %t : tensor<4x4x?xf32>
+
+  // CHECK: %{{[0-9]+}} = ceil %arg1 : f32
+  %102 = "std.ceil"(%f) : (f32) -> f32
+
+  // CHECK: %{{[0-9]+}} = ceil %arg1 : f32
+  %103 = ceil %f : f32
+
+  // CHECK: %{{[0-9]+}} = ceil %arg0 : tensor<4x4x?xf32>
+  %104 = ceil %t : tensor<4x4x?xf32>
+
+  // CHECK: %{{[0-9]+}} = cos %arg1 : f32
+  %105 = "std.cos"(%f) : (f32) -> f32
+
+  // CHECK: %{{[0-9]+}} = cos %arg1 : f32
+  %106 = cos %f : f32
+
+  // CHECK: %{{[0-9]+}} = cos %arg0 : tensor<4x4x?xf32>
+  %107 = cos %t : tensor<4x4x?xf32>
+
+  // CHECK: %{{[0-9]+}} = fneg %arg1 : f32
+  %108 = "std.fneg"(%f) : (f32) -> f32
+
+  // CHECK: %{{[0-9]+}} = fneg %arg1 : f32
+  %109 = fneg %f : f32
+
+  // CHECK: %{{[0-9]+}} = fneg %arg0 : tensor<4x4x?xf32>
+  %110 = fneg %t : tensor<4x4x?xf32>
+
+  // CHECK: %{{[0-9]+}} = tanh %arg1 : f32
+  %111 = "std.tanh"(%f) : (f32) -> f32
+
+  // CHECK: %{{[0-9]+}} = tanh %arg1 : f32
+  %112 = tanh %f : f32
+
+  // CHECK: %{{[0-9]+}} = tanh %arg0 : tensor<4x4x?xf32>
+  %113 = tanh %t : tensor<4x4x?xf32>
   return
 }
 

@@ -479,6 +479,156 @@ The `exp` operation takes one operand and returns one result of the same type.
 This type may be a float scalar type, a vector whose element type is float, or a
 tensor of floats. It has no standard attributes.
 
+### 'abs' operation
+
+Syntax:
+
+``` {.ebnf}
+operation ::= ssa-id `=` `abs` ssa-use `:` type
+```
+
+Examples:
+
+```mlir {.mlir}
+// Scalar absolute value.
+%a = abs %b : f64
+
+// SIMD vector element-wise absolute value.
+%f = abs %g : vector<4xf32>
+
+// Tensor element-wise absolute value.
+%x = abs %y : tensor<4x?xf8>
+```
+
+The `abs` operation takes one operand and returns one result of the same type.
+This type may be a float scalar type, a vector whose element type is float, or a
+tensor of floats. It has no standard attributes.
+
+### 'ceil' operation
+
+Syntax:
+
+``` {.ebnf}
+operation ::= ssa-id `=` `ceil` ssa-use `:` type
+```
+
+Examples:
+
+```mlir {.mlir}
+// Scalar ceiling value.
+%a = ceil %b : f64
+
+// SIMD vector element-wise ceiling value.
+%f = ceil %g : vector<4xf32>
+
+// Tensor element-wise ceiling value.
+%x = ceil %y : tensor<4x?xf8>
+```
+
+The `ceil` operation takes one operand and returns one result of the same type.
+This type may be a float scalar type, a vector whose element type is float, or a
+tensor of floats. It has no standard attributes.
+
+### 'cos' operation
+
+Syntax:
+
+``` {.ebnf}
+operation ::= ssa-id `=` `cos` ssa-use `:` type
+```
+
+Examples:
+
+```mlir {.mlir}
+// Scalar cosine value.
+%a = cos %b : f64
+
+// SIMD vector element-wise cosine value.
+%f = cos %g : vector<4xf32>
+
+// Tensor element-wise cosine value.
+%x = cos %y : tensor<4x?xf8>
+```
+
+The `cos` operation takes one operand and returns one result of the same type.
+This type may be a float scalar type, a vector whose element type is float, or a
+tensor of floats. It has no standard attributes.
+
+### 'neg' operation
+
+Syntax:
+
+``` {.ebnf}
+operation ::= ssa-id `=` `neg` ssa-use `:` type
+```
+
+Examples:
+
+```mlir {.mlir}
+// Scalar negate value.
+%a = neg %b : f64
+
+// SIMD vector element-wise negate value.
+%f = neg %g : vector<4xf32>
+
+// Tensor element-wise negate value.
+%x = neg %y : tensor<4x?xf8>
+```
+
+The `neg` operation takes one operand and returns one result of the same type.
+This type may be a float scalar type, a vector whose element type is float, or a
+tensor of floats. It has no standard attributes.
+
+### 'sign' operation
+
+Syntax:
+
+``` {.ebnf}
+operation ::= ssa-id `=` `sign` ssa-use `:` type
+```
+
+Examples:
+
+```mlir {.mlir}
+// Scalar sign value.
+%a = sign %b : f64
+
+// SIMD vector element-wise sign value.
+%f = sign %g : vector<4xf32>
+
+// Tensor element-wise sign value.
+%x = sign %y : tensor<4x?xf8>
+```
+
+The `sign` operation takes one operand and returns one result of the same type.
+This type may be a float scalar type, a vector whose element type is float, or a
+tensor of floats. It has no standard attributes.
+
+### 'tanh' operation
+
+Syntax:
+
+``` {.ebnf}
+operation ::= ssa-id `=` `tanh` ssa-use `:` type
+```
+
+Examples:
+
+```mlir {.mlir}
+// Scalar hyperbolic tangents value.
+%a = tanh %b : f64
+
+// SIMD vector element-wise hyperbolic tangents value.
+%f = tanh %g : vector<4xf32>
+
+// Tensor element-wise hyperbolic tangents value.
+%x = tanh %y : tensor<4x?xf8>
+```
+
+The `tanh` operation takes one operand and returns one result of the same type.
+This type may be a float scalar type, a vector whose element type is float, or a
+tensor of floats. It has no standard attributes.
+
 ## Arithmetic Operations
 
 Basic arithmetic in MLIR is specified by standard operations described in this

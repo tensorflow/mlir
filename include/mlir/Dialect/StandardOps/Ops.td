@@ -133,6 +133,10 @@ class FloatArithmeticOp<string mnemonic, list<OpTrait> traits = []> :
     ArithmeticOp<mnemonic, traits>,
     Arguments<(ins FloatLike:$lhs, FloatLike:$rhs)>;
 
+def FAbsOp : FloatUnaryOp<"fabs"> {
+  let summary = "floating point absolute-value operation";
+}
+
 def AddFOp : FloatArithmeticOp<"addf"> {
   let summary = "floating point addition operation";
   let hasFolder = 1;
@@ -343,6 +347,10 @@ def CallIndirectOp : Std_Op<"call_indirect", [CallOpInterface]> {
   }];
 
   let hasCanonicalizer = 1;
+}
+
+def CeilOp : FloatUnaryOp<"ceil"> {
+  let summary = "ceiling value of the specified value";
 }
 
 def CMPI_P_EQ  : I64EnumAttrCase<"eq", 0>;
@@ -601,6 +609,10 @@ def ConstantOp : Std_Op<"constant", [NoSideEffect]> {
   let hasFolder = 1;
 }
 
+def CosOp : FloatUnaryOp<"cos"> {
+  let summary = "cosine value of the specified value";
+}
+
 def DeallocOp : Std_Op<"dealloc"> {
   let summary = "memory deallocation operation";
   let description = [{
@@ -855,6 +867,10 @@ def MulIOp : IntArithmeticOp<"muli", [Commutative]> {
   let hasFolder = 1;
 }
 
+def FNegOp : FloatUnaryOp<"fneg"> {
+  let summary = "floating point negate operation";
+}
+
 def OrOp : IntArithmeticOp<"or", [Commutative]> {
   let summary = "integer binary or";
   let hasFolder = 1;
@@ -948,6 +964,10 @@ def SelectOp : Std_Op<"select", [NoSideEffect, SameOperandsAndResultShape]> {
   }];
 
   let hasFolder = 1;
+}
+
+def SignOp : FloatUnaryOp<"sign"> {
+  let summary = "floating point negate operation";
 }
 
 def SignExtendIOp : Std_Op<"sexti",
@@ -1062,6 +1082,10 @@ def StoreOp : Std_Op<"store"> {
   }];
 
   let hasCanonicalizer = 1;
+}
+
+def TanhOp : FloatUnaryOp<"tanh"> {
+  let summary = "hyperbolic tangents value of the specified value";
 }
 
 def TensorCastOp : CastOp<"tensor_cast"> {

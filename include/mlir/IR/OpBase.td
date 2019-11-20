@@ -491,7 +491,7 @@ class 4DTensorOf<list<Type> allowedTypes> : TensorRankOf<allowedTypes, [4]>;
 
 // Unranked Memref type
 def AnyUnrankedMemRef : 
-    ShapedContainerType<[AnyFloat, AnyInteger], 
+    ShapedContainerType<[AnyType], 
                         IsUnrankedMemRefTypePred, "unranked.memref">;
 // Memref type.
 
@@ -500,6 +500,8 @@ class MemRefOf<list<Type> allowedTypes> :
     ShapedContainerType<allowedTypes, IsMemRefTypePred, "memref">;
 
 def AnyMemRef : MemRefOf<[AnyType]>;
+
+def AnyRankedOrUnrankedMemRef: AnyTypeOf<[AnyUnrankedMemRef, AnyMemRef]>;
 
 // Memref declarations handle any memref, independent of rank, size, (static or
 // dynamic), layout, or memory space.

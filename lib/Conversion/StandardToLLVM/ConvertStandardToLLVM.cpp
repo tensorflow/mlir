@@ -1033,7 +1033,7 @@ struct MemRefCastOpLowering : public LLVMLegalizationPattern<MemRefCastOp> {
     auto memRefCastOp = cast<MemRefCastOp>(op);
     MemRefType sourceType =
         memRefCastOp.getOperand()->getType().cast<MemRefType>();
-    MemRefType targetType = memRefCastOp.getType();
+    MemRefType targetType = memRefCastOp.getType().cast<MemRefType>();
     return (isSupportedMemRefType(targetType) &&
             isSupportedMemRefType(sourceType))
                ? matchSuccess()

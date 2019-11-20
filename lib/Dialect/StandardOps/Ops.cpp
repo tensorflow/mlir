@@ -1754,29 +1754,54 @@ void LoadOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 //===----------------------------------------------------------------------===//
 
 bool MemRefCastOp::areCastCompatible(Type a, Type b) {
+
   auto aT = a.dyn_cast<MemRefType>();
   auto bT = b.dyn_cast<MemRefType>();
 
-  if (!aT || !bT)
-    return false;
-  if (aT.getElementType() != bT.getElementType())
-    return false;
-  if (aT.getAffineMaps() != bT.getAffineMaps())
-    return false;
-  if (aT.getMemorySpace() != bT.getMemorySpace())
-    return false;
+  auto uaT = a.dyn_cast<UnrankedMemRefType>();
+  auto ubT = b.dyn_cast<UnrankedMemRefType>();
 
-  // They must have the same rank, and any specified dimensions must match.
-  if (aT.getRank() != bT.getRank())
-    return false;
-
-  for (unsigned i = 0, e = aT.getRank(); i != e; ++i) {
-    int64_t aDim = aT.getDimSize(i), bDim = bT.getDimSize(i);
-    if (aDim != -1 && bDim != -1 && aDim != bDim)
+  if (aT && bT)
+  {
+    if (aT.getElementType() != bT.getElementType())
       return false;
-  }
+    if (aT.getAffineMaps() != bT.getAffineMaps())
+      return false;
+    if (aT.getMemorySpace() != bT.getMemorySpace())
+      return false;
 
-  return true;
+    // They must have the same rank, and any specified dimensions must match.
+    if (aT.getRank() != bT.getRank())
+      return false;
+
+    for (unsigned i = 0, e = aT.getRank(); i != e; ++i) {
+      int64_t aDim = aT.getDimSize(i), bDim = bT.getDimSize(i);
+      if (aDim != -1 && bDim != -1 && aDim != bDim)
+        return false;
+    }
+    return true;
+  }
+  else 
+  {
+    if (!aT && !uaT)
+      return false;
+    if (!bT && !ubT)
+      return false;
+    
+    auto aEltType = (aT) ? aT.getElementType() : uaT.getElementType();
+    auto bEltType = (bT) ? bT.getElementType() : ubT.getElementType();
+
+    if (aEltType != bEltType)
+      return false;
+
+    auto aMemSpace = (aT) ? aT.getMemorySpace() : uaT.getMemorySpace();
+    auto bMemSpace = (bT) ? bT.getMemorySpace() : ubT.getMemorySpace();
+    if (aMemSpace != bMemSpace)
+      return false;
+    
+    return true;
+  }
+  return false;
 }
 
 OpFoldResult MemRefCastOp::fold(ArrayRef<Attribute> operands) {

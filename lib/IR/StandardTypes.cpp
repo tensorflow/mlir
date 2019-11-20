@@ -405,19 +405,24 @@ unsigned MemRefType::getMemorySpace() const { return getImpl()->memorySpace; }
 // UnrankedMemRefType
 //===----------------------------------------------------------------------===//
 
-UnrankedMemRefType UnrankedMemRefType::get(Type elementType) {
+UnrankedMemRefType UnrankedMemRefType::get(Type elementType, 
+                                           unsigned memorySpace) {
   return Base::get(elementType.getContext(), StandardTypes::UnrankedMemRef,
-                   elementType);
+                   elementType, memorySpace);
 }
 
 UnrankedMemRefType UnrankedMemRefType::getChecked(Type elementType,
+                                                  unsigned memorySpace,
                                                   Location location) {
   return Base::getChecked(location, elementType.getContext(),
-                          StandardTypes::UnrankedMemRef, elementType);
+                          StandardTypes::UnrankedMemRef, elementType,
+                          memorySpace);
 }
 
+unsigned UnrankedMemRefType::getMemorySpace() const { return getImpl()->memorySpace; }
+
 LogicalResult UnrankedMemRefType::verifyConstructionInvariants(
-  llvm::Optional<Location> loc, MLIRContext *context, Type elementType) {
+  llvm::Optional<Location> loc, MLIRContext *context, Type elementType, unsigned memorySpace) {
   // Check that memref is formed from allowed types.
   if (!elementType.isIntOrFloat() && !elementType.isa<VectorType>()) {
     if (loc)

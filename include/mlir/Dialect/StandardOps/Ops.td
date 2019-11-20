@@ -133,7 +133,7 @@ class FloatArithmeticOp<string mnemonic, list<OpTrait> traits = []> :
     ArithmeticOp<mnemonic, traits>,
     Arguments<(ins FloatLike:$lhs, FloatLike:$rhs)>;
 
-def FAbsOp : FloatUnaryOp<"fabs"> {
+def AbsFOp : FloatUnaryOp<"absf"> {
   let summary = "floating point absolute-value operation";
 }
 
@@ -349,8 +349,8 @@ def CallIndirectOp : Std_Op<"call_indirect", [CallOpInterface]> {
   let hasCanonicalizer = 1;
 }
 
-def CeilOp : FloatUnaryOp<"ceil"> {
-  let summary = "ceiling value of the specified value";
+def CeilFOp : FloatUnaryOp<"ceilf"> {
+  let summary = "ceiling of the specified value";
 }
 
 def CMPI_P_EQ  : I64EnumAttrCase<"eq", 0>;
@@ -610,7 +610,7 @@ def ConstantOp : Std_Op<"constant", [NoSideEffect]> {
 }
 
 def CosOp : FloatUnaryOp<"cos"> {
-  let summary = "cosine value of the specified value";
+  let summary = "cosine of the specified value";
 }
 
 def DeallocOp : Std_Op<"dealloc"> {
@@ -867,8 +867,8 @@ def MulIOp : IntArithmeticOp<"muli", [Commutative]> {
   let hasFolder = 1;
 }
 
-def FNegOp : FloatUnaryOp<"fneg"> {
-  let summary = "floating point negate operation";
+def NegFOp : FloatUnaryOp<"negf"> {
+  let summary = "floating point negation";
 }
 
 def OrOp : IntArithmeticOp<"or", [Commutative]> {
@@ -966,8 +966,12 @@ def SelectOp : Std_Op<"select", [NoSideEffect, SameOperandsAndResultShape]> {
   let hasFolder = 1;
 }
 
-def SignOp : FloatUnaryOp<"sign"> {
-  let summary = "floating point negate operation";
+def SignFOp : FloatUnaryOp<"signf"> {
+  let summary = "floating point sign operation";
+}
+
+def SignIOp : IntegerUnaryOp<"signi"> {
+  let summary = "integer sign operation";
 }
 
 def SignExtendIOp : Std_Op<"sexti",

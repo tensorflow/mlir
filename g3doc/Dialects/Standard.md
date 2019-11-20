@@ -454,31 +454,6 @@ tensor_store %8, %10 : memref<4x?xf32, #layout, memspace0>
 
 ## Unary Operations
 
-### 'exp' operation
-
-Syntax:
-
-``` {.ebnf}
-operation ::= ssa-id `=` `exp` ssa-use `:` type
-```
-
-Examples:
-
-```mlir {.mlir}
-// Scalar natural exponential.
-%a = exp %b : f64
-
-// SIMD vector element-wise natural exponential.
-%f = exp %g : vector<4xf32>
-
-// Tensor element-wise natural exponential.
-%x = exp %y : tensor<4x?xf8>
-```
-
-The `exp` operation takes one operand and returns one result of the same type.
-This type may be a float scalar type, a vector whose element type is float, or a
-tensor of floats. It has no standard attributes.
-
 ### 'abs' operation
 
 Syntax:
@@ -501,6 +476,31 @@ Examples:
 ```
 
 The `abs` operation takes one operand and returns one result of the same type.
+This type may be a float scalar type, a vector whose element type is float, or a
+tensor of floats. It has no standard attributes.
+
+### 'exp' operation
+
+Syntax:
+
+``` {.ebnf}
+operation ::= ssa-id `=` `exp` ssa-use `:` type
+```
+
+Examples:
+
+```mlir {.mlir}
+// Scalar natural exponential.
+%a = exp %b : f64
+
+// SIMD vector element-wise natural exponential.
+%f = exp %g : vector<4xf32>
+
+// Tensor element-wise natural exponential.
+%x = exp %y : tensor<4x?xf8>
+```
+
+The `exp` operation takes one operand and returns one result of the same type.
 This type may be a float scalar type, a vector whose element type is float, or a
 tensor of floats. It has no standard attributes.
 
@@ -615,13 +615,13 @@ operation ::= ssa-id `=` `tanh` ssa-use `:` type
 Examples:
 
 ```mlir {.mlir}
-// Scalar hyperbolic tangents value.
+// Scalar hyperbolic tangent value.
 %a = tanh %b : f64
 
-// SIMD vector element-wise hyperbolic tangents value.
+// SIMD vector element-wise hyperbolic tangent value.
 %f = tanh %g : vector<4xf32>
 
-// Tensor element-wise hyperbolic tangents value.
+// Tensor element-wise hyperbolic tangent value.
 %x = tanh %y : tensor<4x?xf8>
 ```
 

@@ -368,53 +368,71 @@ func @standard_instrs(tensor<4x4x?xf32>, f32, i32, index, i64, f16) {
   // CHECK: %{{[0-9]+}} = exp %arg1 : f32
   %97 = exp %f : f32
 
+  // CHECK: %{{[0-9]+}} = exp %arg1 : vector<4xf32>
+  %98 = exp %v : vector<4xf32>
+
   // CHECK: %{{[0-9]+}} = exp %arg0 : tensor<4x4x?xf32>
-  %98 = exp %t : tensor<4x4x?xf32>
+  %99 = exp %t : tensor<4x4x?xf32>
 
-  // CHECK: %{{[0-9]+}} = fabs %arg1 : f32
-  %99 = "std.fabs"(%f) : (f32) -> f32
+  // CHECK: %{{[0-9]+}} = absf %arg1 : f32
+  %100 = "std.absf"(%f) : (f32) -> f32
 
-  // CHECK: %{{[0-9]+}} = fabs %arg1 : f32
-  %100 = fabs %f : f32
+  // CHECK: %{{[0-9]+}} = absf %arg1 : f32
+  %101 = absf %f : f32
 
-  // CHECK: %{{[0-9]+}} = fabs %arg0 : tensor<4x4x?xf32>
-  %101 = fabs %t : tensor<4x4x?xf32>
+  // CHECK: %{{[0-9]+}} = absf %arg1 : vector<4xf32>
+  %102 = absf %v : vector<4xf32>
 
-  // CHECK: %{{[0-9]+}} = ceil %arg1 : f32
-  %102 = "std.ceil"(%f) : (f32) -> f32
+  // CHECK: %{{[0-9]+}} = absf %arg0 : tensor<4x4x?xf32>
+  %103 = absf %t : tensor<4x4x?xf32>
 
-  // CHECK: %{{[0-9]+}} = ceil %arg1 : f32
-  %103 = ceil %f : f32
+  // CHECK: %{{[0-9]+}} = ceilf %arg1 : f32
+  %104 = "std.ceilf"(%f) : (f32) -> f32
 
-  // CHECK: %{{[0-9]+}} = ceil %arg0 : tensor<4x4x?xf32>
-  %104 = ceil %t : tensor<4x4x?xf32>
+  // CHECK: %{{[0-9]+}} = ceilf %arg1 : f32
+  %105 = ceilf %f : f32
+
+  // CHECK: %{{[0-9]+}} = ceilf %arg1 : vector<4xf32>
+  %106 = ceilf %v : vector<4xf32>
+
+  // CHECK: %{{[0-9]+}} = ceilf %arg0 : tensor<4x4x?xf32>
+  %107 = ceilf %t : tensor<4x4x?xf32>
 
   // CHECK: %{{[0-9]+}} = cos %arg1 : f32
-  %105 = "std.cos"(%f) : (f32) -> f32
+  %108 = "std.cos"(%f) : (f32) -> f32
 
   // CHECK: %{{[0-9]+}} = cos %arg1 : f32
-  %106 = cos %f : f32
+  %109 = cos %f : f32
+
+  // CHECK: %{{[0-9]+}} = cos %arg1 : vector<4xf32>
+  %110 = cos %v : vector<4xf32>
 
   // CHECK: %{{[0-9]+}} = cos %arg0 : tensor<4x4x?xf32>
-  %107 = cos %t : tensor<4x4x?xf32>
+  %111 = cos %t : tensor<4x4x?xf32>
 
-  // CHECK: %{{[0-9]+}} = fneg %arg1 : f32
-  %108 = "std.fneg"(%f) : (f32) -> f32
+  // CHECK: %{{[0-9]+}} = negf %arg1 : f32
+  %112 = "std.negf"(%f) : (f32) -> f32
 
-  // CHECK: %{{[0-9]+}} = fneg %arg1 : f32
-  %109 = fneg %f : f32
+  // CHECK: %{{[0-9]+}} = negf %arg1 : f32
+  %113 = negf %f : f32
 
-  // CHECK: %{{[0-9]+}} = fneg %arg0 : tensor<4x4x?xf32>
-  %110 = fneg %t : tensor<4x4x?xf32>
+  // CHECK: %{{[0-9]+}} = negf %arg1 : vector<4xf32>
+  %114 = negf %v : vector<4xf32>
+
+  // CHECK: %{{[0-9]+}} = negf %arg0 : tensor<4x4x?xf32>
+  %115 = negf %t : tensor<4x4x?xf32>
 
   // CHECK: %{{[0-9]+}} = tanh %arg1 : f32
-  %111 = "std.tanh"(%f) : (f32) -> f32
+  %116 = "std.tanh"(%f) : (f32) -> f32
 
   // CHECK: %{{[0-9]+}} = tanh %arg1 : f32
-  %112 = tanh %f : f32
+  %117 = tanh %f : f32
+
+  // CHECK: %{{[0-9]+}} = tanh %arg1 : vector<4xf32>
+  %118 = tanh %v : vector<4xf32>
 
   // CHECK: %{{[0-9]+}} = tanh %arg0 : tensor<4x4x?xf32>
-  %113 = tanh %t : tensor<4x4x?xf32>
+  %119 = tanh %t : tensor<4x4x?xf32>
   return
 }
 

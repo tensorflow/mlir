@@ -454,28 +454,28 @@ tensor_store %8, %10 : memref<4x?xf32, #layout, memspace0>
 
 ## Unary Operations
 
-### 'abs' operation
+### 'absf' operation
 
 Syntax:
 
 ``` {.ebnf}
-operation ::= ssa-id `=` `abs` ssa-use `:` type
+operation ::= ssa-id `=` `absf` ssa-use `:` type
 ```
 
 Examples:
 
 ```mlir {.mlir}
 // Scalar absolute value.
-%a = abs %b : f64
+%a = absf %b : f64
 
 // SIMD vector element-wise absolute value.
-%f = abs %g : vector<4xf32>
+%f = absf %g : vector<4xf32>
 
 // Tensor element-wise absolute value.
-%x = abs %y : tensor<4x?xf8>
+%x = absf %y : tensor<4x?xf8>
 ```
 
-The `abs` operation takes one operand and returns one result of the same type.
+The `absf` operation takes one operand and returns one result of the same type.
 This type may be a float scalar type, a vector whose element type is float, or a
 tensor of floats. It has no standard attributes.
 
@@ -504,28 +504,28 @@ The `exp` operation takes one operand and returns one result of the same type.
 This type may be a float scalar type, a vector whose element type is float, or a
 tensor of floats. It has no standard attributes.
 
-### 'ceil' operation
+### 'ceilf' operation
 
 Syntax:
 
 ``` {.ebnf}
-operation ::= ssa-id `=` `ceil` ssa-use `:` type
+operation ::= ssa-id `=` `ceilf` ssa-use `:` type
 ```
 
 Examples:
 
 ```mlir {.mlir}
 // Scalar ceiling value.
-%a = ceil %b : f64
+%a = ceilf %b : f64
 
 // SIMD vector element-wise ceiling value.
-%f = ceil %g : vector<4xf32>
+%f = ceilf %g : vector<4xf32>
 
 // Tensor element-wise ceiling value.
-%x = ceil %y : tensor<4x?xf8>
+%x = ceilf %y : tensor<4x?xf8>
 ```
 
-The `ceil` operation takes one operand and returns one result of the same type.
+The `ceilf` operation takes one operand and returns one result of the same type.
 This type may be a float scalar type, a vector whose element type is float, or a
 tensor of floats. It has no standard attributes.
 
@@ -554,53 +554,53 @@ The `cos` operation takes one operand and returns one result of the same type.
 This type may be a float scalar type, a vector whose element type is float, or a
 tensor of floats. It has no standard attributes.
 
-### 'neg' operation
+### 'negf' operation
 
 Syntax:
 
 ``` {.ebnf}
-operation ::= ssa-id `=` `neg` ssa-use `:` type
+operation ::= ssa-id `=` `negf` ssa-use `:` type
 ```
 
 Examples:
 
 ```mlir {.mlir}
-// Scalar negate value.
-%a = neg %b : f64
+// Scalar negation value.
+%a = negf %b : f64
 
-// SIMD vector element-wise negate value.
-%f = neg %g : vector<4xf32>
+// SIMD vector element-wise negation value.
+%f = negf %g : vector<4xf32>
 
-// Tensor element-wise negate value.
-%x = neg %y : tensor<4x?xf8>
+// Tensor element-wise negation value.
+%x = negf %y : tensor<4x?xf8>
 ```
 
-The `neg` operation takes one operand and returns one result of the same type.
+The `negf` operation takes one operand and returns one result of the same type.
 This type may be a float scalar type, a vector whose element type is float, or a
 tensor of floats. It has no standard attributes.
 
-### 'sign' operation
+### 'signf' operation
 
 Syntax:
 
 ``` {.ebnf}
-operation ::= ssa-id `=` `sign` ssa-use `:` type
+operation ::= ssa-id `=` `signf` ssa-use `:` type
 ```
 
 Examples:
 
 ```mlir {.mlir}
 // Scalar sign value.
-%a = sign %b : f64
+%a = signf %b : f64
 
 // SIMD vector element-wise sign value.
-%f = sign %g : vector<4xf32>
+%f = signf %g : vector<4xf32>
 
 // Tensor element-wise sign value.
-%x = sign %y : tensor<4x?xf8>
+%x = signf %y : tensor<4x?xf8>
 ```
 
-The `sign` operation takes one operand and returns one result of the same type.
+The `signf` operation takes one operand and returns one result of the same type.
 This type may be a float scalar type, a vector whose element type is float, or a
 tensor of floats. It has no standard attributes.
 

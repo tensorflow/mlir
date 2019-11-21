@@ -135,6 +135,11 @@ class FloatArithmeticOp<string mnemonic, list<OpTrait> traits = []> :
 
 def AbsFOp : FloatUnaryOp<"absf"> {
   let summary = "floating point absolute-value operation";
+  let description = [{
+    The `absf` operation takes one operand and returns one result of the same type.
+    This type may be a float scalar type, a vector whose element type is float, or a
+    tensor of floats. It has no standard attributes.
+  }]
 }
 
 def AddFOp : FloatArithmeticOp<"addf"> {
@@ -351,6 +356,11 @@ def CallIndirectOp : Std_Op<"call_indirect", [CallOpInterface]> {
 
 def CeilFOp : FloatUnaryOp<"ceilf"> {
   let summary = "ceiling of the specified value";
+  let description = [{
+    The `ceilf` operation takes one operand and returns one result of the same type.
+    This type may be a float scalar type, a vector whose element type is float, or a
+    tensor of floats. It has no standard attributes.
+  }]
 }
 
 def CMPI_P_EQ  : I64EnumAttrCase<"eq", 0>;
@@ -611,6 +621,11 @@ def ConstantOp : Std_Op<"constant", [NoSideEffect]> {
 
 def CosOp : FloatUnaryOp<"cos"> {
   let summary = "cosine of the specified value";
+  let description = [{
+    The `cos` operation takes one operand and returns one result of the same type.
+    This type may be a float scalar type, a vector whose element type is float, or a
+    tensor of floats. It has no standard attributes.
+  }]
 }
 
 def DeallocOp : Std_Op<"dealloc"> {
@@ -869,6 +884,11 @@ def MulIOp : IntArithmeticOp<"muli", [Commutative]> {
 
 def NegFOp : FloatUnaryOp<"negf"> {
   let summary = "floating point negation";
+  let description = [{
+    The `negf` operation takes one operand and returns one result of the same type.
+    This type may be a float scalar type, a vector whose element type is float, or a
+    tensor of floats. It has no standard attributes.
+  }]
 }
 
 def OrOp : IntArithmeticOp<"or", [Commutative]> {
@@ -968,10 +988,11 @@ def SelectOp : Std_Op<"select", [NoSideEffect, SameOperandsAndResultShape]> {
 
 def SignFOp : FloatUnaryOp<"signf"> {
   let summary = "floating point sign operation";
-}
-
-def SignIOp : IntegerUnaryOp<"signi"> {
-  let summary = "integer sign operation";
+  let description = [{
+    The `signf` operation takes one operand and returns one result of the same type.
+    This type may be a float scalar type, a vector whose element type is float, or a
+    tensor of floats. It has no standard attributes.
+  }]
 }
 
 def SignExtendIOp : Std_Op<"sexti",
@@ -1089,7 +1110,12 @@ def StoreOp : Std_Op<"store"> {
 }
 
 def TanhOp : FloatUnaryOp<"tanh"> {
-  let summary = "hyperbolic tangents value of the specified value";
+  let summary = "hyperbolic tangent of the specified value";
+  let description = [{
+    The `tanh` operation takes one operand and returns one result of the same type.
+    This type may be a float scalar type, a vector whose element type is float, or a
+    tensor of floats. It has no standard attributes.
+  }]
 }
 
 def TensorCastOp : CastOp<"tensor_cast"> {

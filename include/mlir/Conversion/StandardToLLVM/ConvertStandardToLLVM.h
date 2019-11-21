@@ -116,6 +116,10 @@ private:
   //   2. as many index types as memref has dynamic dimensions.
   Type convertMemRefType(MemRefType type);
 
+  // Convert an unranked memref type to an LLVM type that captures the
+  // runtime rank and a pointer to the static ranked memref desc
+  Type convertUnrankedMemRefType(UnrankedMemRefType type) ;
+
   // Convert a 1D vector type into an LLVM vector type.
   Type convertVectorType(VectorType type);
 

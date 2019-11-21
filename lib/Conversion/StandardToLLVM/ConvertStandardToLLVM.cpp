@@ -194,8 +194,8 @@ static constexpr unsigned kRankInUnrankedMemRefDescriptor = 0;
 static constexpr unsigned kPtrInUnrankedMemRefDescriptor = 1;
 
 Type LLVMTypeConverter::convertUnrankedMemRefType(UnrankedMemRefType type) {
-  auto rankTy = LLVM::LLVMType::getInt64Ty(llvmDialec);
-  auto ptrTy = LLVM::LLVMType::getVoidTy(llvmDialect).getPointerTo();
+  auto rankTy = LLVM::LLVMType::getInt64Ty(llvmDialect);
+  auto ptrTy = LLVM::LLVMType::getInt8PtrTy(llvmDialect);
   return LLVM::LLVMType::getStructTy(rankTy, ptrTy);
 }
 
@@ -227,6 +227,8 @@ Type LLVMTypeConverter::convertStandardType(Type type) {
     return convertIndexType(indexType);
   if (auto memRefType = type.dyn_cast<MemRefType>())
     return convertMemRefType(memRefType);
+  if (auto memRefType = type.dyn_cast<UnrankedMemRefType>())
+    return convertUnrankedMemRefType(memRefType);
   if (auto vectorType = type.dyn_cast<VectorType>())
     return convertVectorType(vectorType);
   if (auto llvmType = type.dyn_cast<LLVM::LLVMType>())
@@ -381,10 +383,10 @@ UnrankedMemRefDescriptor UnrankedMemRefDescriptor::undef(OpBuilder &builder, Loc
       builder.create<LLVM::UndefOp>(loc, descriptorType.cast<LLVM::LLVMType>());
   return UnrankedMemRefDescriptor(descriptor);
 }
-
 Value *UnrankedMemRefDescriptor::rank(OpBuilder &builder, Location loc)
 {
-  extractPtr(builder, loc, kRankInUnrankedMemRefDescriptor);
+  return extractPtr(builder, loc, kRankInUnrankedMemRefDescriptor);
+
 }
 void UnrankedMemRefDescriptor::setRank(OpBuilder &builder, Location loc, Value* value)
 {
@@ -394,7 +396,6 @@ Value *UnrankedMemRefDescriptor::memRefDescPtr(OpBuilder &builder, Location loc)
 {
   return extractPtr(builder, loc, kPtrInUnrankedMemRefDescriptor);
 }
-
 void UnrankedMemRefDescriptor::setMemRefDescPtr(OpBuilder &builder, Location loc, Value* value)
 {
   setPtr(builder, loc, kPtrInUnrankedMemRefDescriptor, value);
@@ -1089,25 +1090,73 @@ struct MemRefCastOpLowering : public LLVMLegalizationPattern<MemRefCastOp> {
 
   PatternMatchResult match(Operation *op) const override {
     auto memRefCastOp = cast<MemRefCastOp>(op);
-    MemRefType sourceType =
-        memRefCastOp.getOperand()->getType().cast<MemRefType>();
-    MemRefType targetType = memRefCastOp.getType().cast<MemRefType>();
-    return (isSupportedMemRefType(targetType) &&
-            isSupportedMemRefType(sourceType))
-               ? matchSuccess()
-               : matchFailure();
+    Type srcType = memRefCastOp.getOperand()->getType();
+    Type dstType = memRefCastOp.getType();
+
+    if (srcType.isa<MemRefType>() && dstType.isa<MemRefType>())
+    {
+      MemRefType sourceType =
+          memRefCastOp.getOperand()->getType().cast<MemRefType>();
+      MemRefType targetType = memRefCastOp.getType().cast<MemRefType>();
+      return (isSupportedMemRefType(targetType) &&
+              isSupportedMemRefType(sourceType))
+                 ? matchSuccess()
+                 : matchFailure();
+    }
+
+    // At least one of the operands is unranked type
+    assert(srcType.isa<UnrankedMemRefType>() || dstType.isa<UnrankedMemRefType>());
+    return matchSuccess();
   }
 
   void rewrite(Operation *op, ArrayRef<Value *> operands,
                ConversionPatternRewriter &rewriter) const override {
     auto memRefCastOp = cast<MemRefCastOp>(op);
     OperandAdaptor<MemRefCastOp> transformed(operands);
-    // memref_cast is defined for source and destination memref types with the
-    // same element type, same mappings, same address space and same rank.
-    // Therefore a simple bitcast suffices. If not it is undefined behavior.
+
+    auto srcType = memRefCastOp.getOperand()->getType();
+    auto dstType = memRefCastOp.getType();
     auto targetStructType = lowering.convertType(memRefCastOp.getType());
-    rewriter.replaceOpWithNewOp<LLVM::BitcastOp>(op, targetStructType,
-                                                 transformed.source());
+    auto loc = op->getLoc();
+
+    if (srcType.isa<MemRefType>() && dstType.isa<MemRefType>()) {
+      // memref_cast is defined for source and destination memref types with the
+      // same element type, same mappings, same address space and same rank.
+      // Therefore a simple bitcast suffices. If not it is undefined behavior.
+      rewriter.replaceOpWithNewOp<LLVM::BitcastOp>(op, targetStructType,
+                                                   transformed.source());
+    } else if (srcType.isa<MemRefType>() && dstType.isa<UnrankedMemRefType>()) {
+    
+      auto srcMemRefType = srcType.cast<MemRefType>();
+      int64_t rank = srcMemRefType.getRank();
+      // ptr = AllocaOp sizeof(MemRefDescriptor)
+      auto ptr = lowering.promoteOneMemRefDescriptor(loc, transformed.source(), rewriter);
+      // voidptr = BitCastOp srcType* -> void*
+      auto voidPtr = rewriter.create<LLVM::BitcastOp>(loc, getVoidPtrType(), ptr).getResult();
+      // rank = ConstantOp <rank of memref type>
+      auto rankVal = rewriter.create<LLVM::ConstantOp>(loc, lowering.convertType(rewriter.getIntegerType(64)), rewriter.getI64IntegerAttr(rank));
+      // undef = UndefOp
+      UnrankedMemRefDescriptor memRefDesc = UnrankedMemRefDescriptor::undef(rewriter, loc, targetStructType);
+      // S1 = InsertValueOp undef, N, 0
+      memRefDesc.setRank(rewriter, loc, rankVal);
+      // S2 = InsertValueOp S1, P2, 1
+      memRefDesc.setMemRefDescPtr(rewriter, loc, voidPtr);
+      rewriter.replaceOp(op, (Value*)memRefDesc);
+      
+    } else if (srcType.isa<UnrankedMemRefType>() && dstType.isa<MemRefType>()) {
+      UnrankedMemRefDescriptor memRefDesc(transformed.source());
+      // ptr = ExtractValueOp src, 1
+      auto ptr = memRefDesc.memRefDescPtr(rewriter, loc);
+      // castPtr = BitCastOp i8* to structTy*
+      auto castPtr = rewriter.create<LLVM::BitcastOp>(loc, targetStructType.cast<LLVM::LLVMType>().getPointerTo(), ptr).getResult();
+      // struct = LoadOp castPtr
+      auto loadOp = rewriter.create<LLVM::LoadOp>(loc, castPtr);
+      rewriter.replaceOp(op, loadOp.getResult());
+    } else {
+      // TODO: Unranked to unranked memref casting. Requires copying of the underlying
+      // MemRef descriptor. 
+    }
+
   }
 };
 

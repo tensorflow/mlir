@@ -475,9 +475,10 @@ Examples:
 %x = absf %y : tensor<4x?xf8>
 ```
 
-The `absf` operation takes one operand and returns one result of the same type.
-This type may be a float scalar type, a vector whose element type is float, or a
-tensor of floats. It has no standard attributes.
+The `absf` operation computes the absolute value. It takes one operand and
+returns one result of the same type. This type may be a float scalar type, a
+vector whose element type is float, or a tensor of floats. It has no standard
+attributes.
 
 ### 'exp' operation
 
@@ -525,9 +526,10 @@ Examples:
 %x = ceilf %y : tensor<4x?xf8>
 ```
 
-The `ceilf` operation takes one operand and returns one result of the same type.
-This type may be a float scalar type, a vector whose element type is float, or a
-tensor of floats. It has no standard attributes.
+The `ceilf` operation computes the ceiling of a given value. It takes one
+operand and returns one result of the same type. This type may be a float
+scalar type, a vector whose element type is float, or a tensor of floats. It
+has no standard attributes.
 
 ### 'cos' operation
 
@@ -550,9 +552,10 @@ Examples:
 %x = cos %y : tensor<4x?xf8>
 ```
 
-The `cos` operation takes one operand and returns one result of the same type.
-This type may be a float scalar type, a vector whose element type is float, or a
-tensor of floats. It has no standard attributes.
+The `cos` operation computes the cosine of a given value. It takes one operand
+and returns one result of the same type. This type may be a float scalar type,
+a vector whose element type is float, or a tensor of floats. It has no standard
+attributes.
 
 ### 'negf' operation
 
@@ -575,34 +578,10 @@ Examples:
 %x = negf %y : tensor<4x?xf8>
 ```
 
-The `negf` operation takes one operand and returns one result of the same type.
-This type may be a float scalar type, a vector whose element type is float, or a
-tensor of floats. It has no standard attributes.
-
-### 'signf' operation
-
-Syntax:
-
-``` {.ebnf}
-operation ::= ssa-id `=` `signf` ssa-use `:` type
-```
-
-Examples:
-
-```mlir {.mlir}
-// Scalar sign value.
-%a = signf %b : f64
-
-// SIMD vector element-wise sign value.
-%f = signf %g : vector<4xf32>
-
-// Tensor element-wise sign value.
-%x = signf %y : tensor<4x?xf8>
-```
-
-The `signf` operation takes one operand and returns one result of the same type.
-This type may be a float scalar type, a vector whose element type is float, or a
-tensor of floats. It has no standard attributes.
+The `negf` operation computes the negation of a given value. It takes one
+operand and returns one result of the same type. This type may be a float
+scalar type, a vector whose element type is float, or a tensor of floats. It
+has no standard attributes.
 
 ### 'tanh' operation
 
@@ -625,9 +604,10 @@ Examples:
 %x = tanh %y : tensor<4x?xf8>
 ```
 
-The `tanh` operation takes one operand and returns one result of the same type.
-This type may be a float scalar type, a vector whose element type is float, or a
-tensor of floats. It has no standard attributes.
+The `tanh` operation computes the hyperbolic tangent. It takes one operand and
+returns one result of the same type. This type may be a float scalar type, a
+vector whose element type is float, or a tensor of floats. It has no standard
+attributes.
 
 ## Arithmetic Operations
 
@@ -824,6 +804,32 @@ MLIR does not allow direct references to functions in SSA operands because the
 compiler is multithreaded, and disallowing SSA values to directly reference a
 function simplifies this
 ([rationale](../Rationale.md#multithreading-the-compiler)).
+
+### 'copysign' operation
+
+Syntax:
+
+``` {.ebnf}
+operation ::= ssa-id `=` `copysign` ssa-use `:` type
+```
+
+Examples:
+
+```mlir {.mlir}
+// Scalar copysign value.
+%a = copysign %b %c : f64
+
+// SIMD vector element-wise copysign value.
+%f = copysign %g %h : vector<4xf32>
+
+// Tensor element-wise copysign value.
+%x = copysign %y %z : tensor<4x?xf8>
+```
+
+The `copysign` operation computes the copysign of the given values. It takes
+one operand and returns one result of the same type. This type may be a float
+scalar type, a vector whose element type is float, or a tensor of floats. It
+has no standard attributes.
 
 ### 'divis' operation
 

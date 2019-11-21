@@ -422,17 +422,17 @@ func @standard_instrs(tensor<4x4x?xf32>, f32, i32, index, i64, f16) {
   // CHECK: %{{[0-9]+}} = negf %arg0 : tensor<4x4x?xf32>
   %115 = negf %t : tensor<4x4x?xf32>
 
-  // CHECK: %{{[0-9]+}} = signf %arg1 : f32
-  %116 = "std.signf"(%f) : (f32) -> f32
+  // CHECK: %{{[0-9]+}} = copysign %arg1 %arg1 : f32
+  %116 = "std.copysign"(%f, %f) : (f32, f32) -> f32
 
-  // CHECK: %{{[0-9]+}} = signf %arg1 : f32
-  %117 = signf %f : f32
+  // CHECK: %{{[0-9]+}} = copysign %arg1 %arg1 : f32
+  %117 = copysign %f, %f : f32
 
-  // CHECK: %{{[0-9]+}} = signf %arg1 : vector<4xf32>
-  %118 = signf %v : vector<4xf32>
+  // CHECK: %{{[0-9]+}} = copysign %arg1 %arg1 : vector<4xf32>
+  %118 = copysign %v, %v : vector<4xf32>
 
-  // CHECK: %{{[0-9]+}} = signf %arg0 : tensor<4x4x?xf32>
-  %119 = signf %t : tensor<4x4x?xf32>
+  // CHECK: %{{[0-9]+}} = copysign %arg0 %arg0 : tensor<4x4x?xf32>
+  %119 = copysign %t, %t : tensor<4x4x?xf32>
 
   // CHECK: %{{[0-9]+}} = tanh %arg1 : f32
   %120 = "std.tanh"(%f) : (f32) -> f32

@@ -355,8 +355,8 @@ struct ConvertFakeForkFromBlockArgsOp : public RewritePattern {
                           leadingSize, unrollFactors);
       extractedVectors.push_back(
           rewriter
-              .create<vector::VectorStridedSliceOp>(op->getLoc(), blockArg,
-                                                    offsets, sizes, strides)
+              .create<vector::StridedSliceOp>(op->getLoc(), blockArg, offsets,
+                                              sizes, strides)
               .getResult());
     }
     rewriter.replaceOp(op, extractedVectors);
@@ -373,7 +373,8 @@ struct FakeJoinTrait {
   static constexpr char const *name = kFakeJoinOp;
 };
 
-template <typename OpNameTrait> struct DCEPattern : public RewritePattern {
+template <typename OpNameTrait>
+struct DCEPattern : public RewritePattern {
   DCEPattern(MLIRContext *context)
       // low-benefit to kick-in late
       : RewritePattern(OpNameTrait::name, 0, context) {}

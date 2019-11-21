@@ -114,7 +114,10 @@ private:
   llvm::SmallVector<Value *, 8> values;
 };
 
-template <typename T> inline T unpack(T value) { return value; }
+template <typename T>
+inline T unpack(T value) {
+  return value;
+}
 
 inline detail::ValueHandleArray unpack(ArrayRef<ValueHandle> values) {
   return detail::ValueHandleArray(values);
@@ -129,7 +132,8 @@ inline detail::ValueHandleArray unpack(ArrayRef<ValueHandle> values) {
 /// Implementing it as a subclass allows it to compose all the way to Value*.
 /// Without subclassing, implicit conversion to Value* would fail when composing
 /// in patterns such as: `select(a, b, select(c, d, e))`.
-template <typename Op> struct ValueBuilder : public ValueHandle {
+template <typename Op>
+struct ValueBuilder : public ValueHandle {
   // Builder-based
   template <typename... Args>
   ValueBuilder(Args... args)
@@ -176,7 +180,8 @@ template <typename Op> struct ValueBuilder : public ValueHandle {
   ValueBuilder() : ValueHandle(ValueHandle::create<Op>()) {}
 };
 
-template <typename Op> struct OperationBuilder : public OperationHandle {
+template <typename Op>
+struct OperationBuilder : public OperationHandle {
   template <typename... Args>
   OperationBuilder(Args... args)
       : OperationHandle(OperationHandle::create<Op>(detail::unpack(args)...)) {}
@@ -215,7 +220,7 @@ using select = ValueBuilder<SelectOp>;
 using std_load = ValueBuilder<LoadOp>;
 using std_store = OperationBuilder<StoreOp>;
 using subi = ValueBuilder<SubIOp>;
-using vector_type_cast = ValueBuilder<vector::VectorTypeCastOp>;
+using vector_type_cast = ValueBuilder<vector::TypeCastOp>;
 using view = ValueBuilder<ViewOp>;
 
 /// Branches into the mlir::Block* captured by BlockHandle `b` with `operands`.

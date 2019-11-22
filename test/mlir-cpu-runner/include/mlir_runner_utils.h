@@ -78,6 +78,12 @@ template <typename T> struct StridedMemRefType<T, 0> {
   int64_t offset;
 };
 
+// Unranked MemRef
+struct UnrankedMemRefType {
+  int64_t rank;
+  void *descriptor;
+};
+
 template <typename StreamType, typename T, int N>
 void printMemRefMetaData(StreamType &os, StridedMemRefType<T, N> &V) {
   static_assert(N > 0, "Expected N > 0");
@@ -107,6 +113,17 @@ extern "C" MLIR_RUNNER_UTILS_EXPORT void
 print_memref_3d_f32(StridedMemRefType<float, 3> *M);
 extern "C" MLIR_RUNNER_UTILS_EXPORT void
 print_memref_4d_f32(StridedMemRefType<float, 4> *M);
+extern "C" MLIR_RUNNER_UTILS_EXPORT void
+print_memref_anyrank_f32(UnrankedMemRefType *M);
+
+
+
+template<typename StreamType>
+void printUnrankedMemRefMetaData(StreamType &os, UnrankedMemRefType &V)
+{
+  os << "Unranked Memref rank = " << V.rank << " "
+     << "descriptor@ = " << V.descriptor << " ";
+}
 
 template <typename T, int Dim, int... Dims> struct Vector {
   Vector<T, Dims...> vector[Dim];

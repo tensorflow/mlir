@@ -480,7 +480,7 @@ struct FuncOpConversion : public LLVMLegalizationPattern<FuncOp> {
       auto converted = lowering.convertType(t).dyn_cast<LLVM::LLVMType>();
       if (!converted)
         return matchFailure();
-      if (t.isa<MemRefType>()) {
+      if (t.isa<MemRefType>() || t.isa<UnrankedMemRefType>()) {
         converted = converted.getPointerTo();
         promotedArgIndices.push_back(en.index());
       }
@@ -1934,7 +1934,8 @@ SmallVector<Value *, 4> LLVMTypeConverter::promoteMemRefDescriptors(
   for (auto it : llvm::zip(opOperands, operands)) {
     auto *operand = std::get<0>(it);
     auto *llvmOperand = std::get<1>(it);
-    if (!operand->getType().isa<MemRefType>()) {
+    if (!operand->getType().isa<MemRefType>() && 
+        !operand->getType().isa<UnrankedMemRefType>()) {
       promotedOperands.push_back(operand);
       continue;
     }

@@ -41,7 +41,17 @@ class Operation;
 class LivenessBlockInfo;
 
 /// Represents an analysis for computing liveness information from a
-/// given top-level operation.
+/// given top-level operation. The analysis iterates over all associated
+/// regions that are attached to the given top-level operation. It
+/// computes liveness information for every value and block that are
+/// included in the mentioned regions. It relies on a fixpoint iteration
+/// to compute all live-in and live-out values of all included blocks.
+/// Sample usage:
+/// Liveness liveness(topLevelOp);
+/// auto &allInValues = liveness.getLiveIn(block);
+/// auto &allOutValues = liveness.getLiveOut(block);
+/// auto allOperationsInWhichValueIsLive = liveness.resolveLiveness(value);
+/// bool lastUse = liveness.isLastUse(value, operation);
 class Liveness {
 public:
   using OperationIdMapT = llvm::DenseMap<Operation *, size_t>;
@@ -58,11 +68,11 @@ public:
   /// Returns the operation this analysis was constructed from.
   Operation *getOperation() const { return operation; }
 
-  /// Resolves liveness info (if any) for the given value.
+  /// Gets liveness info (if any) for the given value.
   /// This includes all operations in which the given value is live.
   OperationListT resolveLiveness(Value *value) const;
 
-  /// Resolves liveness info (if any) for the block.
+  /// Gets liveness info (if any) for the block.
   const LivenessBlockInfo *getLiveness(Block *block) const;
 
   /// Returns a reference to a set containing live-in values.
@@ -71,9 +81,9 @@ public:
   /// Returns a reference to a set containing live-out values.
   const ValueSetT &getLiveOut(Block *block) const;
 
-  /// Returns true if the given operation (and its associated operand index)
-  /// represent the last use of the given value.
-  bool isLastUse(Value *value, Operation *operation, unsigned operandIndex);
+  /// Returns true if the given operation represent the last use of the
+  /// given value.
+  bool isLastUse(Value *value, Operation *operation);
 
   /// Dumps the liveness information in a human readable format.
   void dump() const;
@@ -88,7 +98,7 @@ private:
 private:
   Operation *operation;
 
-  /// Maps operations to unique identifiers (for fast bit-vector lookups).
+  /// Maps operations to consecutive indices (for fast bit-vector lookups).
   OperationIdMapT operationIdMapping;
 
   /// Ordered list of all operations that can be used to map bit indices
@@ -110,11 +120,11 @@ public:
 
 public:
   /// Returns all values that are live at the beginning
-  // of the block.
+  /// of the block.
   const ValueSetT &in() const { return inValues; }
 
   /// Returns all values that are live at the end
-  // of the block.
+  /// of the block.
   const ValueSetT &out() const { return outValues; }
 
 private:

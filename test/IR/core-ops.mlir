@@ -482,6 +482,13 @@ func @memref_cast(%arg0: memref<4xf32>, %arg1 : memref<?xf32>) {
 
   // CHECK: %1 = memref_cast %arg1 : memref<?xf32> to memref<4xf32>
   %1 = memref_cast %arg1 : memref<?xf32> to memref<4xf32>
+
+  // CHECK: %2 = memref_cast %1 : memref<4xf32> to memref<*xf32>
+  %2 = memref_cast %1 : memref<4xf32> to memref<*xf32>
+
+  // CHECK: %3 = memref_cast %2 : memref<*xf32> to memref<4xf32>
+  %3 = memref_cast %2 : memref<*xf32> to memref<4xf32>
+  
   return
 }
 

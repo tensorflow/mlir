@@ -162,7 +162,6 @@ static constexpr unsigned kAlignedPtrPosInMemRefDescriptor = 1;
 static constexpr unsigned kOffsetPosInMemRefDescriptor = 2;
 static constexpr unsigned kSizePosInMemRefDescriptor = 3;
 static constexpr unsigned kStridePosInMemRefDescriptor = 4;
-
 Type LLVMTypeConverter::convertMemRefType(MemRefType type) {
   int64_t offset;
   SmallVector<int64_t, 4> strides;
@@ -187,8 +186,8 @@ Type LLVMTypeConverter::convertMemRefType(MemRefType type) {
 // contains:
 // 1. int64_t rank, the dynamic rank of this MemRef
 // 2. void* ptr, pointer to the static ranked MemRef descriptor. This will be
-//    stack allocated (alloca) copy of a MemRef descriptor that got casted to 
-//    be unranked. 
+//    stack allocated (alloca) copy of a MemRef descriptor that got casted to
+//    be unranked.
 
 static constexpr unsigned kRankInUnrankedMemRefDescriptor = 0;
 static constexpr unsigned kPtrInUnrankedMemRefDescriptor = 1;
@@ -256,22 +255,20 @@ LLVMOpLowering::LLVMOpLowering(StringRef rootOpName, MLIRContext *context,
 /*============================================================================*/
 /* StructBuilder implementation                                               */
 /*============================================================================*/
-StructBuilder::StructBuilder(Value* value) : value(value)
-{
+StructBuilder::StructBuilder(Value *value) : value(value) {
   if (value)
     structType = value->getType().cast<LLVM::LLVMType>();
 }
 
-
 Value *StructBuilder::extractPtr(OpBuilder &builder, Location loc,
-                                    unsigned pos) {
+                                 unsigned pos) {
   Type type = structType.cast<LLVM::LLVMType>().getStructElementType(pos);
   return builder.create<LLVM::ExtractValueOp>(loc, type, value,
                                               builder.getI64ArrayAttr(pos));
 }
 
 void StructBuilder::setPtr(OpBuilder &builder, Location loc, unsigned pos,
-                              Value *ptr) {
+                           Value *ptr) {
   value = builder.create<LLVM::InsertValueOp>(loc, structType, value, ptr,
                                               builder.getI64ArrayAttr(pos));
 }
@@ -280,7 +277,8 @@ void StructBuilder::setPtr(OpBuilder &builder, Location loc, unsigned pos,
 /*============================================================================*/
 
 /// Construct a helper for the given descriptor value.
-MemRefDescriptor::MemRefDescriptor(Value *descriptor) : StructBuilder(descriptor) {
+MemRefDescriptor::MemRefDescriptor(Value *descriptor)
+    : StructBuilder(descriptor) {
   if (value)
     indexType = value->getType().cast<LLVM::LLVMType>().getStructElementType(
         kOffsetPosInMemRefDescriptor);
@@ -289,7 +287,7 @@ MemRefDescriptor::MemRefDescriptor(Value *descriptor) : StructBuilder(descriptor
 /// Builds IR creating an `undef` value of the descriptor type.
 MemRefDescriptor MemRefDescriptor::undef(OpBuilder &builder, Location loc,
                                          Type descriptorType) {
-  
+
   Value *descriptor =
       builder.create<LLVM::UndefOp>(loc, descriptorType.cast<LLVM::LLVMType>());
   return MemRefDescriptor(descriptor);
@@ -373,31 +371,30 @@ LLVM::LLVMType MemRefDescriptor::getElementType() {
 /*============================================================================*/
 
 /// Construct a helper for the given descriptor value.
-UnrankedMemRefDescriptor::UnrankedMemRefDescriptor(Value *descriptor) : StructBuilder(descriptor) 
-{}
+UnrankedMemRefDescriptor::UnrankedMemRefDescriptor(Value *descriptor)
+    : StructBuilder(descriptor) {}
 
 /// Builds IR creating an `undef` value of the descriptor type.
-UnrankedMemRefDescriptor UnrankedMemRefDescriptor::undef(OpBuilder &builder, Location loc,
-                                         Type descriptorType) {
+UnrankedMemRefDescriptor UnrankedMemRefDescriptor::undef(OpBuilder &builder,
+                                                         Location loc,
+                                                         Type descriptorType) {
   Value *descriptor =
       builder.create<LLVM::UndefOp>(loc, descriptorType.cast<LLVM::LLVMType>());
   return UnrankedMemRefDescriptor(descriptor);
 }
-Value *UnrankedMemRefDescriptor::rank(OpBuilder &builder, Location loc)
-{
+Value *UnrankedMemRefDescriptor::rank(OpBuilder &builder, Location loc) {
   return extractPtr(builder, loc, kRankInUnrankedMemRefDescriptor);
-
 }
-void UnrankedMemRefDescriptor::setRank(OpBuilder &builder, Location loc, Value* value)
-{
+void UnrankedMemRefDescriptor::setRank(OpBuilder &builder, Location loc,
+                                       Value *value) {
   setPtr(builder, loc, kRankInUnrankedMemRefDescriptor, value);
 }
-Value *UnrankedMemRefDescriptor::memRefDescPtr(OpBuilder &builder, Location loc)
-{
+Value *UnrankedMemRefDescriptor::memRefDescPtr(OpBuilder &builder,
+                                               Location loc) {
   return extractPtr(builder, loc, kPtrInUnrankedMemRefDescriptor);
 }
-void UnrankedMemRefDescriptor::setMemRefDescPtr(OpBuilder &builder, Location loc, Value* value)
-{
+void UnrankedMemRefDescriptor::setMemRefDescPtr(OpBuilder &builder,
+                                                Location loc, Value *value) {
   setPtr(builder, loc, kPtrInUnrankedMemRefDescriptor, value);
 }
 namespace {
@@ -1093,8 +1090,7 @@ struct MemRefCastOpLowering : public LLVMLegalizationPattern<MemRefCastOp> {
     Type srcType = memRefCastOp.getOperand()->getType();
     Type dstType = memRefCastOp.getType();
 
-    if (srcType.isa<MemRefType>() && dstType.isa<MemRefType>())
-    {
+    if (srcType.isa<MemRefType>() && dstType.isa<MemRefType>()) {
       MemRefType sourceType =
           memRefCastOp.getOperand()->getType().cast<MemRefType>();
       MemRefType targetType = memRefCastOp.getType().cast<MemRefType>();
@@ -1105,7 +1101,8 @@ struct MemRefCastOpLowering : public LLVMLegalizationPattern<MemRefCastOp> {
     }
 
     // At least one of the operands is unranked type
-    assert(srcType.isa<UnrankedMemRefType>() || dstType.isa<UnrankedMemRefType>());
+    assert(srcType.isa<UnrankedMemRefType>() ||
+           dstType.isa<UnrankedMemRefType>());
     return matchSuccess();
   }
 
@@ -1126,37 +1123,53 @@ struct MemRefCastOpLowering : public LLVMLegalizationPattern<MemRefCastOp> {
       rewriter.replaceOpWithNewOp<LLVM::BitcastOp>(op, targetStructType,
                                                    transformed.source());
     } else if (srcType.isa<MemRefType>() && dstType.isa<UnrankedMemRefType>()) {
-    
+      // Casting ranked to unranked memref type
+      // Set the rank in the destination from the memref type
+      // Allocate space on the stack and copy the src memref decsriptor
+      // Set the ptr in the destination to the stack space
       auto srcMemRefType = srcType.cast<MemRefType>();
       int64_t rank = srcMemRefType.getRank();
       // ptr = AllocaOp sizeof(MemRefDescriptor)
-      auto ptr = lowering.promoteOneMemRefDescriptor(loc, transformed.source(), rewriter);
-      // voidptr = BitCastOp srcType* -> void*
-      auto voidPtr = rewriter.create<LLVM::BitcastOp>(loc, getVoidPtrType(), ptr).getResult();
-      // rank = ConstantOp <rank of memref type>
-      auto rankVal = rewriter.create<LLVM::ConstantOp>(loc, lowering.convertType(rewriter.getIntegerType(64)), rewriter.getI64IntegerAttr(rank));
+      auto ptr = lowering.promoteOneMemRefDescriptor(loc, transformed.source(),
+                                                     rewriter);
+      // voidptr = BitCastOp srcType* to void*
+      auto voidPtr =
+          rewriter.create<LLVM::BitcastOp>(loc, getVoidPtrType(), ptr)
+              .getResult();
+      // rank = ConstantOp srcRank
+      auto rankVal = rewriter.create<LLVM::ConstantOp>(
+          loc, lowering.convertType(rewriter.getIntegerType(64)),
+          rewriter.getI64IntegerAttr(rank));
       // undef = UndefOp
-      UnrankedMemRefDescriptor memRefDesc = UnrankedMemRefDescriptor::undef(rewriter, loc, targetStructType);
-      // S1 = InsertValueOp undef, N, 0
+      UnrankedMemRefDescriptor memRefDesc =
+          UnrankedMemRefDescriptor::undef(rewriter, loc, targetStructType);
+      // d1 = InsertValueOp undef, rank, 0
       memRefDesc.setRank(rewriter, loc, rankVal);
-      // S2 = InsertValueOp S1, P2, 1
+      // d2 = InsertValueOp d1, voidptr, 1
       memRefDesc.setMemRefDescPtr(rewriter, loc, voidPtr);
-      rewriter.replaceOp(op, (Value*)memRefDesc);
-      
+      rewriter.replaceOp(op, (Value *)memRefDesc);
+
     } else if (srcType.isa<UnrankedMemRefType>() && dstType.isa<MemRefType>()) {
+      // Casting from unranked type to ranked.
+      // The operation is assumed to be doing a correct cast. If the destination
+      // type mismatches the unranked the type, it is undefined behavior.
       UnrankedMemRefDescriptor memRefDesc(transformed.source());
       // ptr = ExtractValueOp src, 1
       auto ptr = memRefDesc.memRefDescPtr(rewriter, loc);
       // castPtr = BitCastOp i8* to structTy*
-      auto castPtr = rewriter.create<LLVM::BitcastOp>(loc, targetStructType.cast<LLVM::LLVMType>().getPointerTo(), ptr).getResult();
+      auto castPtr =
+          rewriter
+              .create<LLVM::BitcastOp>(
+                  loc, targetStructType.cast<LLVM::LLVMType>().getPointerTo(),
+                  ptr)
+              .getResult();
       // struct = LoadOp castPtr
       auto loadOp = rewriter.create<LLVM::LoadOp>(loc, castPtr);
       rewriter.replaceOp(op, loadOp.getResult());
     } else {
-      // TODO: Unranked to unranked memref casting. Requires copying of the underlying
-      // MemRef descriptor. 
+      // TODO: Unranked to unranked memref casting. Requires copying of the
+      // underlying MemRef descriptor.
     }
-
   }
 };
 
@@ -1934,7 +1947,7 @@ SmallVector<Value *, 4> LLVMTypeConverter::promoteMemRefDescriptors(
   for (auto it : llvm::zip(opOperands, operands)) {
     auto *operand = std::get<0>(it);
     auto *llvmOperand = std::get<1>(it);
-    if (!operand->getType().isa<MemRefType>() && 
+    if (!operand->getType().isa<MemRefType>() &&
         !operand->getType().isa<UnrankedMemRefType>()) {
       promotedOperands.push_back(operand);
       continue;

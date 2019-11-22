@@ -176,30 +176,28 @@ print_memref_vector_4x4xf32(StridedMemRefType<Vector2D<4, 4, float>, 2> *M) {
   printMemRef(*M);
 }
 
-extern "C" void
-print_memref_anyrank_f32(UnrankedMemRefType *M) {
+extern "C" void print_memref_anyrank_f32(UnrankedMemRefType *M) {
   printUnrankedMemRefMetaData(std::cout, *M);
   int rank = M->rank;
-  void* ptr = M->descriptor;
-  
-  switch (rank) {
-    case 0:
-      print_memref_0d_f32(static_cast<StridedMemRefType<float, 0>*>(ptr));
-      break;
-    case 1:
-      print_memref_1d_f32(static_cast<StridedMemRefType<float, 1>*>(ptr));
-      break;
-    case 2:
-      print_memref_2d_f32(static_cast<StridedMemRefType<float, 2>*>(ptr));
-      break;
-    case 3:
-      print_memref_3d_f32(static_cast<StridedMemRefType<float, 3>*>(ptr));
-      break;
-    case 4:
-      print_memref_4d_f32(static_cast<StridedMemRefType<float, 4>*>(ptr));
-      break;
-    default:
-      assert(0 && "Unsupported rank to print");
-  }
+  void *ptr = M->descriptor;
 
+  switch (rank) {
+  case 0:
+    print_memref_0d_f32(static_cast<StridedMemRefType<float, 0> *>(ptr));
+    break;
+  case 1:
+    print_memref_1d_f32(static_cast<StridedMemRefType<float, 1> *>(ptr));
+    break;
+  case 2:
+    print_memref_2d_f32(static_cast<StridedMemRefType<float, 2> *>(ptr));
+    break;
+  case 3:
+    print_memref_3d_f32(static_cast<StridedMemRefType<float, 3> *>(ptr));
+    break;
+  case 4:
+    print_memref_4d_f32(static_cast<StridedMemRefType<float, 4> *>(ptr));
+    break;
+  default:
+    assert(0 && "Unsupported rank to print");
+  }
 }

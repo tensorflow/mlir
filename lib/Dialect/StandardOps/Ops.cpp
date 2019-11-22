@@ -1761,8 +1761,7 @@ bool MemRefCastOp::areCastCompatible(Type a, Type b) {
   auto uaT = a.dyn_cast<UnrankedMemRefType>();
   auto ubT = b.dyn_cast<UnrankedMemRefType>();
 
-  if (aT && bT)
-  {
+  if (aT && bT) {
     if (aT.getElementType() != bT.getElementType())
       return false;
     if (aT.getAffineMaps() != bT.getAffineMaps())
@@ -1780,9 +1779,7 @@ bool MemRefCastOp::areCastCompatible(Type a, Type b) {
         return false;
     }
     return true;
-  }
-  else
-  {
+  } else {
     if (!aT && !uaT)
       return false;
     if (!bT && !ubT)
@@ -1798,10 +1795,10 @@ bool MemRefCastOp::areCastCompatible(Type a, Type b) {
 
     auto aMemSpace = (aT) ? aT.getMemorySpace() : uaT.getMemorySpace();
     auto bMemSpace = (bT) ? bT.getMemorySpace() : ubT.getMemorySpace();
-    
+
     if (aMemSpace != bMemSpace)
       return false;
-    
+
     return true;
   }
   return false;

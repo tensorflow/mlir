@@ -252,13 +252,12 @@ struct MemRefTypeStorage : public ShapedTypeStorage {
   const unsigned memorySpace;
 };
 
-/// Unranked MemRef is a MemRef with unknown rank. 
+/// Unranked MemRef is a MemRef with unknown rank.
 /// Only element type and memory space are known
 struct UnrankedMemRefTypeStorage : public ShapedTypeStorage {
-  
+
   UnrankedMemRefTypeStorage(Type elementType, const unsigned memorySpace)
-      : ShapedTypeStorage(elementType),
-        memorySpace(memorySpace) {}
+      : ShapedTypeStorage(elementType), memorySpace(memorySpace) {}
 
   /// The hash key used for uniquing.
   using KeyTy = std::tuple<Type, unsigned>;
@@ -268,7 +267,7 @@ struct UnrankedMemRefTypeStorage : public ShapedTypeStorage {
 
   /// Construction.
   static UnrankedMemRefTypeStorage *construct(TypeStorageAllocator &allocator,
-                                      const KeyTy &key) {
+                                              const KeyTy &key) {
 
     // Initialize the memory using placement new.
     return new (allocator.allocate<UnrankedMemRefTypeStorage>())

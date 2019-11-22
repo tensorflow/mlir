@@ -1057,9 +1057,10 @@ ParseResult Parser::parseStridedLayout(int64_t &offset,
 ///   memref-type ::= ranked-memref-type | unranked-memref-type
 ///
 ///   ranked-memref-type ::= `memref` `<` dimension-list-ranked type
-///                          (`,` semi-affine-map-composition)? (`,` memory-space)? `>`
+///                          (`,` semi-affine-map-composition)? (`,`
+///                          memory-space)? `>`
 ///
-///   unranked-memref-type ::= `memref` `<` `*x` type (`,` memory-space)? `>`
+///   unranked-memref-type ::= `memref` `<*x` type (`,` memory-space)? `>`
 ///
 ///   semi-affine-map-composition ::= (semi-affine-map `,` )* semi-affine-map
 ///   memory-space ::= integer-literal /* | TODO: address-space-id */
@@ -1149,11 +1150,12 @@ Type Parser::parseMemRefType() {
   }
 
   if (isUnranked)
-    return UnrankedMemRefType::getChecked(elementType, memorySpace, 
-                                 getEncodedSourceLocation(typeLoc));
+    return UnrankedMemRefType::getChecked(elementType, memorySpace,
+                                          getEncodedSourceLocation(typeLoc));
   else
-    return  MemRefType::getChecked(dimensions, elementType, affineMapComposition,
-                                memorySpace, getEncodedSourceLocation(typeLoc));
+    return MemRefType::getChecked(dimensions, elementType, affineMapComposition,
+                                  memorySpace,
+                                  getEncodedSourceLocation(typeLoc));
 }
 
 /// Parse any type except the function type.

@@ -424,8 +424,8 @@ private:
   using Base::getImpl;
 };
 
-/// Unranked MemRef represent multi-dimensional MemRefs that have an
-/// unknown shape.
+/// Unranked MemRef type represent multi-dimensional MemRefs that
+/// have an unknown rank.
 class UnrankedMemRefType
     : public Type::TypeBase<UnrankedMemRefType, ShapedType,
                             detail::UnrankedMemRefTypeStorage> {
@@ -437,21 +437,20 @@ public:
   static UnrankedMemRefType get(Type elementType, unsigned memorySpace);
 
   /// Get or create a new UnrankedMemRefType of the provided element
-  /// type and memory space declared at the given, potentially unknown, location. 
-  /// If the UnrankedMemRefType defined by the arguments would be ill-formed, emit
-  /// errors and return a nullptr-wrapping type.
-  static UnrankedMemRefType getChecked(Type elementType, 
-                                      unsigned memorySpace, Location location);
+  /// type and memory space declared at the given, potentially unknown,
+  /// location. If the UnrankedMemRefType defined by the arguments would be
+  /// ill-formed, emit errors and return a nullptr-wrapping type.
+  static UnrankedMemRefType getChecked(Type elementType, unsigned memorySpace,
+                                       Location location);
 
   /// Verify the construction of a unranked memref type.
   static LogicalResult
   verifyConstructionInvariants(llvm::Optional<Location> loc,
-                               MLIRContext *context, Type elementType, unsigned memorySpace);
+                               MLIRContext *context, Type elementType,
+                               unsigned memorySpace);
 
   ArrayRef<int64_t> getShape() const { return llvm::None; }
-
   unsigned getMemorySpace() const;
-
   static bool kindof(unsigned kind) {
     return kind == StandardTypes::UnrankedMemRef;
   }

@@ -840,12 +840,10 @@ def MemRefCastOp : CastOp<"memref_cast"> {
     address space.
 
     Example:
-    Assert that the input dynamic rank matches the destination static rank, 
-    and that any destination static dimension matches the correponding 
-    input dimension
+    Cast to concrete shape.
         %4 = memref_cast %1 : memref<*xf32> to memref<4x?xf32>
 
-    Erase rank information
+    Erase rank information.
         %5 = memref_cast %1 : memref<4x?xf32> to memref<*xf32>
 
   }];

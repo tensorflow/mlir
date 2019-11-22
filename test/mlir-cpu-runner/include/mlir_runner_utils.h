@@ -116,13 +116,10 @@ print_memref_4d_f32(StridedMemRefType<float, 4> *M);
 extern "C" MLIR_RUNNER_UTILS_EXPORT void
 print_memref_anyrank_f32(UnrankedMemRefType *M);
 
-
-
-template<typename StreamType>
-void printUnrankedMemRefMetaData(StreamType &os, UnrankedMemRefType &V)
-{
+template <typename StreamType>
+void printUnrankedMemRefMetaData(StreamType &os, UnrankedMemRefType &V) {
   os << "Unranked Memref rank = " << V.rank << " "
-     << "descriptor@ = " << reinterpret_cast<float*>(V.descriptor) << " ";
+     << "descriptor@ = " << reinterpret_cast<float *>(V.descriptor) << " ";
 }
 
 template <typename T, int Dim, int... Dims> struct Vector {

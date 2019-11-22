@@ -1,5 +1,6 @@
 // RUN: mlir-opt %s -affine-loop-fusion -split-input-file | FileCheck %s
 // RUN: mlir-opt %s -affine-loop-fusion -fusion-maximal -split-input-file | FileCheck %s --check-prefix=MAXIMAL
+// RUN: mlir-opt %s -affine-loop-fusion -sibling-fusion=false -split-input-file | FileCheck %s --check-prefix=NOSIBLING
 
 // TODO(andydavis) Add more tests:
 // *) Add nested fusion test cases when non-constant loop bound support is
@@ -2388,6 +2389,29 @@ func @mul_add_0(%arg0: memref<3x4xf32>, %arg1: memref<4x3xf32>, %arg2: memref<3x
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
   // CHECK-NEXT: return
+  return
+}
 
+// Verify that 'fuseProducerConsumerNodes' doesn't fuse a producer loop with
+// multiple outgoing edges. Sibling loop fusion is disabled to properly test
+// producer-consumer fusion in isolation.
+// CHECK-LABEL: func @should_not_fuse_multi_outgoing_edge_store_producer
+func @should_not_fuse_multi_outgoing_edge_store_producer() {
+  %cst = constant 0.000000e+00 : f32
+  %0 = alloc() : memref<1xf32>
+  affine.for %arg0 = 0 to 1 {
+    affine.store %cst, %0[%arg0] : memref<1xf32>
+  }
+
+  affine.for %arg0 = 0 to 1 {
+    %1 = affine.load %0[%arg0] : memref<1xf32>
+  }
+
+  affine.for %arg0 = 0 to 1 {
+    %2 = affine.load %0[%arg0] : memref<1xf32>
+  }
+  // NOSIBLING: affine.for %{{.*}} = 0 to 1
+  // NOSIBLING: affine.for %{{.*}} = 0 to 1
+  // NOSIBLING: affine.for %{{.*}} = 0 to 1
   return
 }

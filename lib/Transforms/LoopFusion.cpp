@@ -57,6 +57,11 @@ static llvm::cl::opt<bool>
                         llvm::cl::desc("Enables maximal loop fusion"),
                         llvm::cl::cat(clOptionsCategory));
 
+static llvm::cl::opt<bool> clSiblingFusion(
+    "sibling-fusion", llvm::cl::init(true),
+    llvm::cl::desc("Enables fusion of sibling loops (enabled by default)"),
+    llvm::cl::cat(clOptionsCategory));
+
 /// A threshold in percent of additional computation allowed when fusing.
 static llvm::cl::opt<double> clFusionAddlComputeTolerance(
     "fusion-compute-tolerance",
@@ -1005,17 +1010,23 @@ static Value *createPrivateMemRef(AffineForOp forOp, Operation *srcStoreOpInst,
 
 // Checks if node 'srcId' can be safely fused into node 'dstId'. Node 'srcId'
 // may write to multiple memrefs but it is required that only one of them,
-// 'srcLiveOutStoreOp', have an output edge.
+// 'srcLiveOutStoreOp', has output edges.
 // Returns true if 'dstNode's read/write region to 'memref' is a super set of
-// 'srcNode's write region to 'memref'.
+// 'srcNode's write region to 'memref' and 'srcId' has only one output edge.
 // TODO(andydavis) Generalize this to handle more live in/out cases.
 static bool canFuseSrcWhichWritesToLiveOut(unsigned srcId, unsigned dstId,
                                            AffineStoreOp srcLiveOutStoreOp,
                                            MemRefDependenceGraph *mdg) {
   assert(srcLiveOutStoreOp && "Expected a valid store op");
-  assert(mdg->getOutEdgeCount(srcId) == 1 && "Expected only one output edge");
   auto *dstNode = mdg->getNode(dstId);
   Value *memref = srcLiveOutStoreOp.getMemRef();
+  unsigned memrefNumOutEdges = mdg->getOutEdgeCount(srcId, memref);
+  assert(mdg->getOutEdgeCount(srcId) == memrefNumOutEdges &&
+         "Expected only outgoing edges from memref in srcId");
+
+  // Return false if 'srcNode' has more than one output edge on 'memref'.
+  if (memrefNumOutEdges != 1)
+    return false;
 
   // Compute MemRefRegion 'srcWriteRegion' for 'srcStoreOp' on 'memref'.
   MemRefRegion srcWriteRegion(srcLiveOutStoreOp.getLoc());
@@ -1459,8 +1470,10 @@ public:
   // *) Third pass fuses any remaining producer nodes into their users.
   void run() {
     // TODO(andydavis) Run this repeatedly until a fixed-point is reached.
-    fuseProducerConsumerNodes(/*maxSrcUserCount=*/1);
-    fuseSiblingNodes();
+    if (clSiblingFusion) {
+      fuseProducerConsumerNodes(/*maxSrcUserCount=*/1);
+      fuseSiblingNodes();
+    }
     fuseProducerConsumerNodes(
         /*maxSrcUserCount=*/std::numeric_limits<unsigned>::max());
     eraseUnusedMemRefAllocations();

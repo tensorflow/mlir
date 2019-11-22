@@ -1781,13 +1781,15 @@ bool MemRefCastOp::areCastCompatible(Type a, Type b) {
     }
     return true;
   }
-  else 
+  else
   {
     if (!aT && !uaT)
       return false;
     if (!bT && !ubT)
       return false;
-    
+    // Unranked to unranked casting is unsupported
+    if (uaT && ubT)
+      return false;
     auto aEltType = (aT) ? aT.getElementType() : uaT.getElementType();
     auto bEltType = (bT) ? bT.getElementType() : ubT.getElementType();
 
@@ -1796,6 +1798,7 @@ bool MemRefCastOp::areCastCompatible(Type a, Type b) {
 
     auto aMemSpace = (aT) ? aT.getMemorySpace() : uaT.getMemorySpace();
     auto bMemSpace = (bT) ? bT.getMemorySpace() : ubT.getMemorySpace();
+    
     if (aMemSpace != bMemSpace)
       return false;
     

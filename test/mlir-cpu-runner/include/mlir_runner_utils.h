@@ -122,7 +122,7 @@ template<typename StreamType>
 void printUnrankedMemRefMetaData(StreamType &os, UnrankedMemRefType &V)
 {
   os << "Unranked Memref rank = " << V.rank << " "
-     << "descriptor@ = " << V.descriptor << " ";
+     << "descriptor@ = " << reinterpret_cast<float*>(V.descriptor) << " ";
 }
 
 template <typename T, int Dim, int... Dims> struct Vector {

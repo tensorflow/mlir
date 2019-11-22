@@ -951,3 +951,34 @@ func @invalid_subview(%arg0 : index, %arg1 : memref<?x8x?xf32>) {
   %0 = subview %arg1[%c0, %c0, %c0][%c1, %arg0, %c1][%c1, %c1, %c1] : memref<?x8x?xf32> to memref<?x8x?xf32, offset:?, strides:[?, ?, ?]>
   return
 }
+
+// -----
+
+// incompatible element types
+func @invalid_memref_cast() {
+  %0 = alloc() : memref<2x5xf32, 0>
+  // expected-error@+1 {{operand type 'memref<2x5xf32>' and result type 'memref<*xi32>' are cast incompatible}}
+  %1 = memref_cast %0 : memref<2x5xf32, 0> to memref<*xi32> 
+  return
+}
+
+// -----
+
+// incompatible memory space
+func @invalid_memref_cast() {
+  %0 = alloc() : memref<2x5xf32, 0>
+  // expected-error@+1 {{operand type 'memref<2x5xf32>' and result type 'memref<*xf32>' are cast incompatible}}
+  %1 = memref_cast %0 : memref<2x5xf32, 0> to memref<*xf32, 1> 
+  return
+}
+
+// -----
+
+// unranked to unranked
+func @invalid_memref_cast() {
+  %0 = alloc() : memref<2x5xf32, 0>
+  %1 = memref_cast %0 : memref<2x5xf32, 0> to memref<*xf32, 0> 
+  // expected-error@+1 {{operand type 'memref<*xf32>' and result type 'memref<*xf32>' are cast incompatible}}
+  %2 = memref_cast %1 : memref<*xf32, 0> to memref<*xf32, 0> 
+  return
+}

@@ -147,7 +147,7 @@ id-punct  ::= [$._-]
 integer-literal ::= decimal-literal | hexadecimal-literal
 decimal-literal ::= digit+
 hexadecimal-literal ::= `0x` hex_digit+
-float-literal   ::= TODO
+float-literal ::= [-+]?[0-9]+[.][0-9]*([eE][-+]?[0-9]+)?
 string-literal  ::= `"` [^"\n\f\v\r]* `"`   TODO define escaping rules
 ```
 

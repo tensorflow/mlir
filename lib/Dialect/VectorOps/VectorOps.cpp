@@ -298,6 +298,79 @@ static LogicalResult verify(ExtractElementOp op) {
 }
 
 //===----------------------------------------------------------------------===//
+// InsertElementOp
+//===----------------------------------------------------------------------===//
+
+void InsertElementOp::build(Builder *builder, OperationState &result,
+                            Value *source, Value *dest,
+                            ArrayRef<int64_t> position) {
+  result.addOperands({source, dest});
+  auto positionAttr = builder->getI64ArrayAttr(position);
+  result.addTypes(dest->getType());
+  result.addAttribute(getPositionAttrName(), positionAttr);
+}
+
+static void print(OpAsmPrinter &p, InsertElementOp op) {
+  p << op.getOperationName() << " " << *op.source() << ", " << *op.dest()
+    << op.position();
+  p.printOptionalAttrDict(op.getAttrs(),
+                          {InsertElementOp::getPositionAttrName()});
+  p << " : " << op.getSourceType();
+  p << " into " << op.getDestVectorType();
+}
+
+static ParseResult parseInsertElementOp(OpAsmParser &parser,
+                                        OperationState &result) {
+  llvm::SMLoc attributeLoc, typeLoc;
+  SmallVector<NamedAttribute, 4> attrs;
+  OpAsmParser::OperandType source, dest;
+  Type sourceType;
+  VectorType destType;
+  Attribute attr;
+  return failure(parser.parseOperand(source) || parser.parseComma() ||
+                 parser.parseOperand(dest) ||
+                 parser.parseAttribute(attr,
+                                       InsertElementOp::getPositionAttrName(),
+                                       result.attributes) ||
+                 parser.parseOptionalAttrDict(attrs) ||
+                 parser.parseColonType(sourceType) ||
+                 parser.parseKeywordType("into", destType) ||
+                 parser.resolveOperand(source, sourceType, result.operands) ||
+                 parser.resolveOperand(dest, destType, result.operands) ||
+                 parser.addTypeToList(destType, result.types));
+}
+
+static LogicalResult verify(InsertElementOp op) {
+  auto positionAttr = op.position().getValue();
+  if (positionAttr.empty())
+    return op.emitOpError("expected non-empty position attribute");
+  auto destVectorType = op.getDestVectorType();
+  if (positionAttr.size() > static_cast<unsigned>(destVectorType.getRank()))
+    return op.emitOpError(
+        "expected position attribute of rank smaller than dest vector rank");
+  auto srcVectorType = op.getSourceType().dyn_cast<VectorType>();
+  if (srcVectorType &&
+      (static_cast<unsigned>(srcVectorType.getRank()) + positionAttr.size() !=
+       static_cast<unsigned>(destVectorType.getRank())))
+    return op.emitOpError("expected position attribute rank + source rank to "
+                          "match dest vector rank");
+  else if (!srcVectorType && (positionAttr.size() !=
+                              static_cast<unsigned>(destVectorType.getRank())))
+    return op.emitOpError(
+        "expected position attribute rank to match the dest vector rank");
+  for (auto en : llvm::enumerate(positionAttr)) {
+    auto attr = en.value().dyn_cast<IntegerAttr>();
+    if (!attr || attr.getInt() < 0 ||
+        attr.getInt() > destVectorType.getDimSize(en.index()))
+      return op.emitOpError("expected position attribute #")
+             << (en.index() + 1)
+             << " to be a positive integer smaller than the corresponding "
+                "dest vector dimension";
+  }
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // StridedSliceOp
 //===----------------------------------------------------------------------===//
 

@@ -44,6 +44,41 @@ func @extractelement_position_overflow(%arg0: vector<4x8x16xf32>) {
 
 // -----
 
+func @insert_element_vector_type(%a: f32, %b: vector<4x8x16xf32>) {
+  // expected-error@+1 {{expected non-empty position attribute}}
+  %1 = vector.insertelement %a, %b[] : f32 into vector<4x8x16xf32>
+}
+
+// -----
+
+func @insert_element_vector_type(%a: f32, %b: vector<4x8x16xf32>) {
+  // expected-error@+1 {{expected position attribute of rank smaller than dest vector rank}}
+  %1 = vector.insertelement %a, %b[3,3,3,3,3,3] : f32 into vector<4x8x16xf32>
+}
+
+// -----
+
+func @insert_element_vector_type(%a: vector<4xf32>, %b: vector<4x8x16xf32>) {
+  // expected-error@+1 {{expected position attribute rank + source rank to match dest vector rank}}
+  %1 = vector.insertelement %a, %b[3] : vector<4xf32> into vector<4x8x16xf32>
+}
+
+// -----
+
+func @insert_element_vector_type(%a: f32, %b: vector<4x8x16xf32>) {
+  // expected-error@+1 {{expected position attribute rank to match the dest vector rank}}
+  %1 = vector.insertelement %a, %b[3,3] : f32 into vector<4x8x16xf32>
+}
+
+// -----
+
+func @insertelement_position_overflow(%a: f32, %b: vector<4x8x16xf32>) {
+  // expected-error@+1 {{expected position attribute #3 to be a positive integer smaller than the corresponding dest vector dimension}}
+  %1 = vector.insertelement %a, %b[0, 0, -1] : f32 into vector<4x8x16xf32>
+}
+
+// -----
+
 func @outerproduct_num_operands(%arg0: f32) {
   // expected-error@+1 {{expected at least 2 operands}}
   %1 = vector.outerproduct %arg0 : f32, f32
@@ -369,5 +404,3 @@ func @contraction(%arg0: vector<7x8x16x15xf32>, %arg1: vector<8x16x7x5xf32>,
       : vector<7x8x16x15xf32>, vector<8x16x7x5xf32> into vector<8x15x5xf32>
   return
 }
-
-

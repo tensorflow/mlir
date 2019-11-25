@@ -78,7 +78,7 @@ func @func_loop(%arg0 : i32, %arg1 : i32) -> i32 {
 ^loopHeader(%counter : i32, %i : i32):
   // CHECK: Block: 1
   // CHECK-NEXT: LiveIn: arg1@0
-  // CHECK-NEXT: LiveOut: arg0@1 arg1@0
+  // CHECK-NEXT: LiveOut: arg1@0 arg0@1
   // CHECK-NEXT: BeginLiveness
   // CHECK-NEXT: val_std.cmpi
   // CHECK-NEXT:     %2 = cmpi
@@ -88,7 +88,7 @@ func @func_loop(%arg0 : i32, %arg1 : i32) -> i32 {
   cond_br %lessThan, ^loopBody(%i : i32), ^exit(%i : i32)
 ^loopBody(%val : i32):
   // CHECK: Block: 2
-  // CHECK-NEXT: LiveIn: arg0@1 arg1@0
+  // CHECK-NEXT: LiveIn: arg1@0 arg0@1
   // CHECK-NEXT: LiveOut: arg1@0
   // CHECK-NEXT: BeginLiveness
   // CHECK-NEXT: val_std.constant
@@ -118,7 +118,7 @@ func @func_loop(%arg0 : i32, %arg1 : i32) -> i32 {
 func @func_ranges(%cond : i1, %arg1 : i32, %arg2 : i32, %arg3 : i32) -> i32 {
   // CHECK: Block: 0
   // CHECK-NEXT: LiveIn:{{ *$}}
-  // CHECK-NEXT: LiveOut: val_std.muli val_std.addi arg2@0
+  // CHECK-NEXT: LiveOut: arg2@0 val_std.muli val_std.addi
   // CHECK-NEXT: BeginLiveness
   // CHECK-NEXT: val_std.addi
   // CHECK-NEXT:    %0 = addi
@@ -168,7 +168,7 @@ func @func_ranges(%cond : i1, %arg1 : i32, %arg2 : i32, %arg3 : i32) -> i32 {
 
 ^bb1:
   // CHECK: Block: 1
-  // CHECK-NEXT: LiveIn: val_std.muli arg2@0
+  // CHECK-NEXT: LiveIn: arg2@0 val_std.muli
   // CHECK-NEXT: LiveOut: arg2@0
   %const4 = constant 4 : i32
   %6 = muli %4, %const4 : i32
@@ -176,7 +176,7 @@ func @func_ranges(%cond : i1, %arg1 : i32, %arg2 : i32, %arg3 : i32) -> i32 {
 
 ^bb2:
   // CHECK: Block: 2
-  // CHECK-NEXT: LiveIn: val_std.muli val_std.addi arg2@0
+  // CHECK-NEXT: LiveIn: arg2@0 val_std.muli val_std.addi
   // CHECK-NEXT: LiveOut: arg2@0
   %7 = muli %4, %5 : i32
   %8 = addi %4, %arg2 : i32

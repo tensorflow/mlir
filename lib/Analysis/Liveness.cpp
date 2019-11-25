@@ -24,6 +24,7 @@
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Region.h"
 #include "mlir/IR/Value.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace mlir;
@@ -73,8 +74,10 @@ struct BlockInfoBuilder {
   /// false otherwise.
   bool updateLiveIn() {
     ValueSetT newIn = useValues;
-    newIn.set_union(outValues);
-    newIn.set_subtract(defValues);
+    newIn.insert(outValues.begin(), outValues.end());
+    // Subtract defValues
+    for (Value *defValue : defValues)
+      newIn.erase(defValue);
 
     if (newIn.size() == inValues.size())
       return false;
@@ -90,47 +93,8 @@ struct BlockInfoBuilder {
   void updateLiveOut(SourceT &source) {
     for (Block *succ : block->getSuccessors()) {
       BlockInfoBuilder &builder = source[succ];
-      outValues.set_union(builder.inValues);
+      outValues.insert(builder.inValues.begin(), builder.inValues.end());
     }
-  }
-
-  /// Gets a set of all values that are either live-in, live-out or defined.
-  ValueSetT resolveValues() const {
-    ValueSetT result = inValues;
-    result.set_union(outValues);
-    result.set_union(defValues);
-    return result;
-  }
-
-  /// Gets the start operation for the given value
-  /// (must be referenced in this block).
-  Operation *getStartOperation(Value *value) const {
-    Operation *definingOp = value->getDefiningOp();
-    // The given value is either live-in or is defined
-    // in the scope of this block.
-    if (inValues.count(value) || !definingOp)
-      return &block->front();
-    return definingOp;
-  }
-
-  /// Gets the end operation for the given value using the start operation
-  /// provided (must be referenced in this block).
-  Operation *getEndOperation(Value *value, Operation *startOperation) const {
-    // The given value is either dying in this block or live-out.
-    if (outValues.count(value))
-      return &block->back();
-
-    // Resolve the last operation (must exist by definition).
-    Operation *endOperation = startOperation;
-    for (OpOperand &use : value->getUses()) {
-      Operation *useOperation = use.getOwner();
-      // Check whether the use is in our block and after
-      // the current end operation.
-      if (useOperation->getBlock() == block &&
-          endOperation->isBeforeInBlock(useOperation))
-        endOperation = useOperation;
-    }
-    return endOperation;
   }
 
   /// The current block.
@@ -179,45 +143,6 @@ buildBlockMapping(MutableArrayRef<Region> regions,
   }
 }
 
-/// Builds the internal operation mapping.
-static void buildOperationMapping(MutableArrayRef<Region> regions,
-                                  Liveness::OperationIdMapT &operationIdMapping,
-                                  Liveness::OperationListT &operationList) {
-  // Build unique id mapping.
-  // TODO: we might want to exploit the presence of `closed` regions.
-  for (Region &region : regions)
-    for (Block &block : region)
-      for (Operation &operation : block) {
-        operationIdMapping[&operation] = operationList.size();
-        operationList.push_back(&operation);
-      }
-}
-
-/// Builds the internal liveness value mapping.
-static void
-buildValueMapping(llvm::DenseMap<Block *, BlockInfoBuilder> &builders,
-                  Liveness::OperationIdMapT &operationIdMapping,
-                  Liveness::ValueMapT &valueMapping) {
-  for (auto &entry : builders) {
-    BlockInfoBuilder &builder = entry.second;
-
-    // Iterate over all values.
-    for (Value *value : builder.resolveValues()) {
-      // Resolve start and end operation for the current block.
-      Operation *startOperation = builder.getStartOperation(value);
-      Operation *endOperation = builder.getEndOperation(value, startOperation);
-
-      // Resolve unique operation ids and register live range.
-      size_t startId = operationIdMapping[startOperation];
-      size_t endId = operationIdMapping[endOperation];
-
-      llvm::BitVector &bitSet = valueMapping[value];
-      bitSet.resize(operationIdMapping.size());
-      bitSet.set(startId, endId + 1);
-    }
-  }
-}
-
 //===----------------------------------------------------------------------===//
 // Liveness
 //===----------------------------------------------------------------------===//
@@ -230,20 +155,15 @@ Liveness::Liveness(Operation *op) : operation(op) { build(op->getRegions()); }
 void Liveness::build(MutableArrayRef<Region> regions) {
 
   // Build internal block mapping.
-  DenseMap<Block *, BlockInfoBuilder> builders;
+  llvm::DenseMap<Block *, BlockInfoBuilder> builders;
   buildBlockMapping(regions, builders);
-
-  // Build internal value-id mapping.
-  buildOperationMapping(regions, operationIdMapping, operationList);
-
-  // Build internal value mapping.
-  buildValueMapping(builders, operationIdMapping, valueMapping);
 
   // Store internal block data.
   for (auto &entry : builders) {
     BlockInfoBuilder &builder = entry.second;
     LivenessBlockInfo &info = blockMapping[entry.first];
 
+    info.block = builder.block;
     info.inValues = std::move(builder.inValues);
     info.outValues = std::move(builder.outValues);
   }
@@ -252,16 +172,48 @@ void Liveness::build(MutableArrayRef<Region> regions) {
 /// Gets liveness info (if any) for the given value.
 Liveness::OperationListT Liveness::resolveLiveness(Value *value) const {
   OperationListT result;
-  auto it = valueMapping.find(value);
+  llvm::SmallDenseSet<Block *, 32> visited;
+  llvm::SmallVector<Block *, 8> toProcess;
 
-  // No value entry found.
-  if (it == valueMapping.end())
-    return result;
+  // Start with the defining block
+  Block *currentBlock;
+  if (Operation *defOp = value->getDefiningOp())
+    currentBlock = defOp->getBlock();
+  else
+    currentBlock = cast<BlockArgument>(value)->getOwner();
+  toProcess.push_back(currentBlock);
+  visited.insert(currentBlock);
 
-  // Iterate over all active bits and resolve the corresponding operation.
-  result.reserve(it->second.size());
-  for (auto bit : it->second.set_bits())
-    result.push_back(operationList[bit]);
+  // Start with all associated blocks
+  for (OpOperand &use : value->getUses()) {
+    Block *useBlock = use.getOwner()->getBlock();
+    if (visited.insert(useBlock).second)
+      toProcess.push_back(useBlock);
+  }
+
+  while (toProcess.size()) {
+    // Get block and block liveness information.
+    Block *block = toProcess.back();
+    toProcess.pop_back();
+    const LivenessBlockInfo *blockInfo = getLiveness(block);
+
+    // Note that start and end will be in the same block.
+    Operation *start = blockInfo->getStartOperation(value);
+    Operation *end = blockInfo->getEndOperation(value, start);
+
+    result.push_back(start);
+    while (start != end) {
+      start = start->getNextNode();
+      result.push_back(start);
+    }
+
+    for (Block *successor : block->getSuccessors()) {
+      if (getLiveness(successor)->isLiveIn(value) &&
+          visited.insert(successor).second)
+        toProcess.push_back(successor);
+    }
+  }
+
   return result;
 }
 
@@ -283,22 +235,19 @@ const Liveness::ValueSetT &Liveness::getLiveOut(Block *block) const {
 
 /// Returns true if the given operation represent the last use of the
 /// given value.
-bool Liveness::isLastUse(Value *value, Operation *operation) {
+bool Liveness::isLastUse(Value *value, Operation *operation) const {
   Block *block = operation->getBlock();
-  const ValueSetT &liveOut = getLiveOut(block);
+  const LivenessBlockInfo *blockInfo = getLiveness(block);
+
   // The given value escapes the associated block.
-  if (liveOut.count(value))
+  if (blockInfo->isLiveOut(value))
     return false;
 
-  size_t id = operationIdMapping[operation];
-  llvm::BitVector &bitSet = valueMapping[value];
-  // If the given operation is not the last one in this block and
-  // the value is still alive after this operation...
-  if (&block->back() != operation && bitSet.test(id + 1))
-    return false;
-
-  // The operation dies at this point.
-  return true;
+  Operation *endOperation = blockInfo->getEndOperation(value, operation);
+  // If the operation is a real user of `value` the first check is sufficient.
+  // If not, we will have to test whether the end operation is executed before
+  // the given operation in the block.
+  return endOperation == operation || endOperation->isBeforeInBlock(operation);
 }
 
 /// Dumps the liveness information in a human readable format.
@@ -308,13 +257,23 @@ void Liveness::dump() const { print(llvm::errs()); }
 void Liveness::print(raw_ostream &os) const {
   os << "// ---- Liveness -----\n";
 
-  // Build a unique block mapping for testing purposes.
-  DenseMap<Block *, size_t> blockIds;
+  // Builds unique block/value mappings for testing purposes.
+  llvm::DenseMap<Block *, size_t> blockIds;
+  llvm::DenseMap<Operation *, size_t> operationIds;
+  llvm::DenseMap<Value *, size_t> valueIds;
   for (Region &region : operation->getRegions())
-    for (Block &block : region)
+    for (Block &block : region) {
       blockIds[&block] = blockIds.size();
+      for (BlockArgument *argument : block.getArguments())
+        valueIds[argument] = valueIds.size();
+      for (Operation &operation : block) {
+        operationIds[&operation] = operationIds.size();
+        for (Value *result : operation.getResults())
+          valueIds[result] = valueIds.size();
+      }
+    }
 
-  // Local printing helper to create desired output.
+  // Local printing helpers
   auto printValueRef = [&](Value *value) {
     if (Operation *defOp = value->getDefiningOp())
       os << "val_" << defOp->getName();
@@ -326,17 +285,25 @@ void Liveness::print(raw_ostream &os) const {
     os << " ";
   };
 
+  auto printValueRefs = [&](const ValueSetT &values) {
+    std::vector<Value *> orderedValues(values.begin(), values.end());
+    std::sort(orderedValues.begin(), orderedValues.end(),
+              [&](Value *left, Value *right) {
+                return valueIds[left] < valueIds[right];
+              });
+    for (Value *value : orderedValues)
+      printValueRef(value);
+  };
+
   // Dump information about in and out values.
   for (Region &region : operation->getRegions())
     for (Block &block : region) {
       os << "// - Block: " << blockIds[&block] << "\n";
       auto liveness = getLiveness(&block);
       os << "// --- LiveIn: ";
-      for (Value *liveIn : liveness->inValues)
-        printValueRef(liveIn);
+      printValueRefs(liveness->inValues);
       os << "\n// --- LiveOut: ";
-      for (Value *liveOut : liveness->outValues)
-        printValueRef(liveOut);
+      printValueRefs(liveness->outValues);
       os << "\n";
 
       // Print liveness intervals.
@@ -350,6 +317,10 @@ void Liveness::print(raw_ostream &os) const {
           printValueRef(result);
           os << ":";
           auto liveOperations = resolveLiveness(result);
+          std::sort(liveOperations.begin(), liveOperations.end(),
+                    [&](Operation *left, Operation *right) {
+                      return operationIds[left] < operationIds[right];
+                    });
           for (Operation *operation : liveOperations) {
             os << "\n//     ";
             operation->print(os);
@@ -359,4 +330,50 @@ void Liveness::print(raw_ostream &os) const {
       os << "\n// --- EndLiveness\n";
     }
   os << "// -------------------\n";
+}
+
+//===----------------------------------------------------------------------===//
+// LivenessBlockInfo
+//===----------------------------------------------------------------------===//
+
+/// Returns true if the given value is in the live-in set.
+bool LivenessBlockInfo::isLiveIn(Value *value) const {
+  return inValues.count(value);
+}
+
+/// Returns true if the given value is in the live-out set.
+bool LivenessBlockInfo::isLiveOut(Value *value) const {
+  return outValues.count(value);
+}
+
+/// Gets the start operation for the given value
+/// (must be referenced in this block).
+Operation *LivenessBlockInfo::getStartOperation(Value *value) const {
+  Operation *definingOp = value->getDefiningOp();
+  // The given value is either live-in or is defined
+  // in the scope of this block.
+  if (isLiveIn(value) || !definingOp)
+    return &block->front();
+  return definingOp;
+}
+
+/// Gets the end operation for the given value using the start operation
+/// provided (must be referenced in this block).
+Operation *LivenessBlockInfo::getEndOperation(Value *value,
+                                              Operation *startOperation) const {
+  // The given value is either dying in this block or live-out.
+  if (isLiveOut(value))
+    return &block->back();
+
+  // Resolve the last operation (must exist by definition).
+  Operation *endOperation = startOperation;
+  for (OpOperand &use : value->getUses()) {
+    Operation *useOperation = use.getOwner();
+    // Check whether the use is in our block and after
+    // the current end operation.
+    if (useOperation->getBlock() == block &&
+        endOperation->isBeforeInBlock(useOperation))
+      endOperation = useOperation;
+  }
+  return endOperation;
 }

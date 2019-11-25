@@ -28,9 +28,8 @@
 
 #include <vector>
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/SetVector.h"
+#include "llvm/ADT/DenseSet.h"
 
 namespace mlir {
 class Block;
@@ -54,11 +53,9 @@ class LivenessBlockInfo;
 /// bool lastUse = liveness.isLastUse(value, operation);
 class Liveness {
 public:
-  using OperationIdMapT = llvm::DenseMap<Operation *, size_t>;
   using OperationListT = std::vector<Operation *>;
-  using ValueMapT = llvm::DenseMap<Value *, llvm::BitVector>;
   using BlockMapT = llvm::DenseMap<Block *, LivenessBlockInfo>;
-  using ValueSetT = llvm::SmallSetVector<Value *, 16>;
+  using ValueSetT = llvm::SmallDenseSet<Value *, 16>;
 
 public:
   /// Creates a new Liveness analysis that computes liveness
@@ -70,20 +67,21 @@ public:
 
   /// Gets liveness info (if any) for the given value.
   /// This includes all operations in which the given value is live.
+  /// Note that the operations in this list are not ordered.
   OperationListT resolveLiveness(Value *value) const;
 
   /// Gets liveness info (if any) for the block.
   const LivenessBlockInfo *getLiveness(Block *block) const;
 
-  /// Returns a reference to a set containing live-in values.
+  /// Returns a reference to a set containing live-in values (unordered).
   const ValueSetT &getLiveIn(Block *block) const;
 
-  /// Returns a reference to a set containing live-out values.
+  /// Returns a reference to a set containing live-out values (unordered).
   const ValueSetT &getLiveOut(Block *block) const;
 
   /// Returns true if the given operation represent the last use of the
   /// given value.
-  bool isLastUse(Value *value, Operation *operation);
+  bool isLastUse(Value *value, Operation *operation) const;
 
   /// Dumps the liveness information in a human readable format.
   void dump() const;
@@ -96,17 +94,8 @@ private:
   void build(llvm::MutableArrayRef<Region> regions);
 
 private:
+  /// The operation this analysis was constructed from.
   Operation *operation;
-
-  /// Maps operations to consecutive indices (for fast bit-vector lookups).
-  OperationIdMapT operationIdMapping;
-
-  /// Ordered list of all operations that can be used to map bit indices
-  /// (from bit-vector lookups) to actual operations.
-  OperationListT operationList;
-
-  /// Maps values to internal liveness information.
-  ValueMapT valueMapping;
 
   /// Maps blocks to internal liveness information.
   BlockMapT blockMapping;
@@ -119,15 +108,35 @@ public:
   using ValueSetT = Liveness::ValueSetT;
 
 public:
+  /// Returns the underlying block.
+  Block *getBlock() const { return block; }
+
   /// Returns all values that are live at the beginning
-  /// of the block.
+  /// of the block (unordered).
   const ValueSetT &in() const { return inValues; }
 
   /// Returns all values that are live at the end
-  /// of the block.
+  /// of the block (unordered).
   const ValueSetT &out() const { return outValues; }
 
+  /// Returns true if the given value is in the live-in set.
+  bool isLiveIn(Value *value) const;
+
+  /// Returns true if the given value is in the live-out set.
+  bool isLiveOut(Value *value) const;
+
+  /// Gets the start operation for the given value
+  /// (must be referenced in this block).
+  Operation *getStartOperation(Value *value) const;
+
+  /// Gets the end operation for the given value using the start operation
+  /// provided (must be referenced in this block).
+  Operation *getEndOperation(Value *value, Operation *startOperation) const;
+
 private:
+  /// The underlying block.
+  Block *block;
+
   /// The set of all live in values.
   ValueSetT inValues;
 

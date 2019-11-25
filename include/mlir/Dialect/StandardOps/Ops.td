@@ -843,7 +843,7 @@ def MemRefCastOp : CastOp<"memref_cast"> {
     static bool areCastCompatible(Type a, Type b);
 
     /// The result of a memref_cast is always a memref.
-    MemRefType getType() { return getResult()->getType().cast<MemRefType>(); }
+    RankedMemRefType getType() { return getResult()->getType().cast<RankedMemRefType>(); }
   }];
 }
 

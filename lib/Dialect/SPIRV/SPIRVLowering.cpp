@@ -53,7 +53,7 @@ Type basicTypeConversion(Type t) {
     return convertIndexType(indexType);
   }
 
-  if (auto memRefType = t.dyn_cast<MemRefType>()) {
+  if (auto memRefType = t.dyn_cast<RankedMemRefType>()) {
     auto elementType = memRefType.getElementType();
     if (memRefType.hasStaticShape()) {
       // Convert to a multi-dimensional spv.array if size is known.

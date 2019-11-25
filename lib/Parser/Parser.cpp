@@ -1373,7 +1373,7 @@ ParseResult Parser::parseStrideList(SmallVectorImpl<int64_t> &dimensions) {
     return success();
   while (true) {
     if (consumeIf(Token::question)) {
-      dimensions.push_back(MemRefType::getDynamicStrideOrOffset());
+      dimensions.push_back(RankedMemRefType::getDynamicStrideOrOffset());
     } else {
       // This must be an integer value.
       int64_t val;

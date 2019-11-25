@@ -298,7 +298,7 @@ static void print(OpAsmPrinter &p, AllocOp op) {
   p << "alloc";
 
   // Print dynamic dimension operands.
-  MemRefType type = op.getType();
+  RankedMemRefType type = op.getType();
   printDimAndSymbolList(op.operand_begin(), op.operand_end(),
                         type.getNumDynamicDims(), p);
   p.printOptionalAttrDict(op.getAttrs(), /*elidedAttrs=*/{"map"});
@@ -306,7 +306,7 @@ static void print(OpAsmPrinter &p, AllocOp op) {
 }
 
 static ParseResult parseAllocOp(OpAsmParser &parser, OperationState &result) {
-  MemRefType type;
+  RankedMemRefType type;
 
   // Parse the dimension operands and optional symbol operands, followed by a
   // memref type.
@@ -331,7 +331,7 @@ static ParseResult parseAllocOp(OpAsmParser &parser, OperationState &result) {
 }
 
 static LogicalResult verify(AllocOp op) {
-  auto memRefType = op.getResult()->getType().dyn_cast<MemRefType>();
+  auto memRefType = op.getResult()->getType().dyn_cast<RankedMemRefType>();
   if (!memRefType)
     return op.emitOpError("result must be a memref");
 
@@ -403,7 +403,7 @@ struct SimplifyAllocConst : public OpRewritePattern<AllocOp> {
     }
 
     // Create new memref type (which will have fewer dynamic dimensions).
-    auto newMemRefType = MemRefType::get(
+    auto newMemRefType = RankedMemRefType::get(
         newShapeConstants, memrefType.getElementType(),
         memrefType.getAffineMaps(), memrefType.getMemorySpace());
     assert(static_cast<int64_t>(newOperands.size()) ==
@@ -1270,7 +1270,7 @@ static void print(OpAsmPrinter &p, DeallocOp op) {
 
 static ParseResult parseDeallocOp(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::OperandType memrefInfo;
-  MemRefType type;
+  RankedMemRefType type;
 
   return failure(parser.parseOperand(memrefInfo) ||
                  parser.parseColonType(type) ||
@@ -1278,7 +1278,7 @@ static ParseResult parseDeallocOp(OpAsmParser &parser, OperationState &result) {
 }
 
 static LogicalResult verify(DeallocOp op) {
-  if (!op.memref()->getType().isa<MemRefType>())
+  if (!op.memref()->getType().isa<RankedMemRefType>())
     return op.emitOpError("operand must be a memref");
   return success();
 }
@@ -1326,7 +1326,7 @@ static LogicalResult verify(DimOp op) {
   if (auto tensorType = type.dyn_cast<RankedTensorType>()) {
     if (index >= tensorType.getRank())
       return op.emitOpError("index is out of range");
-  } else if (auto memrefType = type.dyn_cast<MemRefType>()) {
+  } else if (auto memrefType = type.dyn_cast<RankedMemRefType>()) {
     if (index >= memrefType.getRank())
       return op.emitOpError("index is out of range");
 
@@ -1345,7 +1345,7 @@ OpFoldResult DimOp::fold(ArrayRef<Attribute> operands) {
   int64_t indexSize = -1;
   if (auto tensorType = opType.dyn_cast<RankedTensorType>())
     indexSize = tensorType.getShape()[getIndex()];
-  else if (auto memrefType = opType.dyn_cast<MemRefType>())
+  else if (auto memrefType = opType.dyn_cast<RankedMemRefType>())
     indexSize = memrefType.getShape()[getIndex()];
 
   if (indexSize >= 0)
@@ -1509,17 +1509,17 @@ ParseResult DmaStartOp::parse(OpAsmParser &parser, OperationState &result) {
       parser.resolveOperands(tagIndexInfos, indexType, result.operands))
     return failure();
 
-  auto memrefType0 = types[0].dyn_cast<MemRefType>();
+  auto memrefType0 = types[0].dyn_cast<RankedMemRefType>();
   if (!memrefType0)
     return parser.emitError(parser.getNameLoc(),
                             "expected source to be of memref type");
 
-  auto memrefType1 = types[1].dyn_cast<MemRefType>();
+  auto memrefType1 = types[1].dyn_cast<RankedMemRefType>();
   if (!memrefType1)
     return parser.emitError(parser.getNameLoc(),
                             "expected destination to be of memref type");
 
-  auto memrefType2 = types[2].dyn_cast<MemRefType>();
+  auto memrefType2 = types[2].dyn_cast<RankedMemRefType>();
   if (!memrefType2)
     return parser.emitError(parser.getNameLoc(),
                             "expected tag to be of memref type");
@@ -1605,7 +1605,7 @@ ParseResult DmaWaitOp::parse(OpAsmParser &parser, OperationState &result) {
       parser.resolveOperand(numElementsInfo, indexType, result.operands))
     return failure();
 
-  auto memrefType = type.dyn_cast<MemRefType>();
+  auto memrefType = type.dyn_cast<RankedMemRefType>();
   if (!memrefType)
     return parser.emitError(parser.getNameLoc(),
                             "expected tag to be of memref type");
@@ -1720,7 +1720,7 @@ static void print(OpAsmPrinter &p, LoadOp op) {
 static ParseResult parseLoadOp(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::OperandType memrefInfo;
   SmallVector<OpAsmParser::OperandType, 4> indexInfo;
-  MemRefType type;
+  RankedMemRefType type;
 
   auto indexTy = parser.getBuilder().getIndexType();
   return failure(
@@ -1754,8 +1754,8 @@ void LoadOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 //===----------------------------------------------------------------------===//
 
 bool MemRefCastOp::areCastCompatible(Type a, Type b) {
-  auto aT = a.dyn_cast<MemRefType>();
-  auto bT = b.dyn_cast<MemRefType>();
+  auto aT = a.dyn_cast<RankedMemRefType>();
+  auto bT = b.dyn_cast<RankedMemRefType>();
 
   if (!aT || !bT)
     return false;
@@ -2084,7 +2084,7 @@ static ParseResult parseStoreOp(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::OperandType storeValueInfo;
   OpAsmParser::OperandType memrefInfo;
   SmallVector<OpAsmParser::OperandType, 4> indexInfo;
-  MemRefType memrefType;
+  RankedMemRefType memrefType;
 
   auto indexTy = parser.getBuilder().getIndexType();
   return failure(
@@ -2212,7 +2212,7 @@ OpFoldResult TensorCastOp::fold(ArrayRef<Attribute> operands) {
 //===----------------------------------------------------------------------===//
 
 static Type getTensorTypeFromMemRefType(Builder &b, Type type) {
-  if (auto memref = type.dyn_cast<MemRefType>())
+  if (auto memref = type.dyn_cast<RankedMemRefType>())
     return RankedTensorType::get(memref.getShape(), memref.getElementType());
   return b.getNoneType();
 }
@@ -2326,12 +2326,12 @@ Value *ViewOp::getDynamicOffset() {
   auto result =
       succeeded(mlir::getStridesAndOffset(getType(), strides, offset));
   assert(result);
-  if (result && offset == MemRefType::getDynamicStrideOrOffset())
+  if (result && offset == RankedMemRefType::getDynamicStrideOrOffset())
     return getOperand(1);
   return nullptr;
 }
 
-static LogicalResult verifyDynamicStrides(MemRefType memrefType,
+static LogicalResult verifyDynamicStrides(RankedMemRefType memrefType,
                                           ArrayRef<int64_t> strides) {
   ArrayRef<int64_t> shape = memrefType.getShape();
   unsigned rank = memrefType.getRank();
@@ -2342,15 +2342,15 @@ static LogicalResult verifyDynamicStrides(MemRefType memrefType,
     if (ShapedType::isDynamic(shape[i + 1]))
       dynamicStrides = true;
     // If stride at dim 'i' is not dynamic, return error.
-    if (dynamicStrides && strides[i] != MemRefType::getDynamicStrideOrOffset())
+    if (dynamicStrides && strides[i] != RankedMemRefType::getDynamicStrideOrOffset())
       return failure();
   }
   return success();
 }
 
 static LogicalResult verify(ViewOp op) {
-  auto baseType = op.getOperand(0)->getType().cast<MemRefType>();
-  auto viewType = op.getResult()->getType().cast<MemRefType>();
+  auto baseType = op.getOperand(0)->getType().cast<RankedMemRefType>();
+  auto viewType = op.getResult()->getType().cast<RankedMemRefType>();
 
   // The base memref should have identity layout map (or none).
   if (baseType.getAffineMaps().size() > 1 ||
@@ -2374,7 +2374,7 @@ static LogicalResult verify(ViewOp op) {
   unsigned memrefOperandCount = 1;
   unsigned numDynamicDims = viewType.getNumDynamicDims();
   unsigned dynamicOffsetCount =
-      offset == MemRefType::getDynamicStrideOrOffset() ? 1 : 0;
+      offset == RankedMemRefType::getDynamicStrideOrOffset() ? 1 : 0;
   if (op.getNumOperands() !=
       memrefOperandCount + numDynamicDims + dynamicOffsetCount)
     return op.emitError("incorrect number of operands for type ") << viewType;
@@ -2467,7 +2467,7 @@ struct ViewOpShapeFolder : public OpRewritePattern<ViewOp> {
       if (ShapedType::isDynamic(newShapeConstants[i + 1]))
         dynamicStrides = true;
       if (dynamicStrides)
-        newStrides[i] = MemRefType::getDynamicStrideOrOffset();
+        newStrides[i] = RankedMemRefType::getDynamicStrideOrOffset();
       else
         newStrides[i] = newShapeConstants[i + 1] * newStrides[i + 1];
     }
@@ -2478,7 +2478,7 @@ struct ViewOpShapeFolder : public OpRewritePattern<ViewOp> {
 
     // Create new memref type with constant folded dims and/or offset/strides.
     auto newMemRefType =
-        MemRefType::get(newShapeConstants, memrefType.getElementType(), {map},
+        RankedMemRefType::get(newShapeConstants, memrefType.getElementType(), {map},
                         memrefType.getMemorySpace());
     assert(static_cast<int64_t>(newOperands.size()) ==
            dynamicOffsetOperandCount + newMemRefType.getNumDynamicDims());
@@ -2504,11 +2504,11 @@ void ViewOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 // SubViewOp
 //===----------------------------------------------------------------------===//
 
-// Returns a MemRefType with dynamic sizes and offset and the same stride as the
+// Returns a RankedMemRefType with dynamic sizes and offset and the same stride as the
 // `memRefType` passed as argument.
 // TODO(andydavis,ntv) Evolve to a more powerful inference that can also keep
 // sizes and offset static.
-static Type inferSubViewResultType(MemRefType memRefType) {
+static Type inferSubViewResultType(RankedMemRefType memRefType) {
   auto rank = memRefType.getRank();
   int64_t offset;
   SmallVector<int64_t, 4> strides;
@@ -2519,15 +2519,15 @@ static Type inferSubViewResultType(MemRefType memRefType) {
 
   // Assume sizes and offset are fully dynamic for now until canonicalization
   // occurs on the ranges. Typed strides don't change though.
-  offset = MemRefType::getDynamicStrideOrOffset();
+  offset = RankedMemRefType::getDynamicStrideOrOffset();
   // Overwrite strides because verifier will not pass.
   // TODO(b/144419106): don't force degrade the strides to fully dynamic.
   for (auto &stride : strides)
-    stride = MemRefType::getDynamicStrideOrOffset();
+    stride = RankedMemRefType::getDynamicStrideOrOffset();
   auto stridedLayout =
       makeStridedLinearLayoutMap(strides, offset, memRefType.getContext());
   SmallVector<int64_t, 4> sizes(rank, ShapedType::kDynamicSize);
-  return MemRefType::get(sizes, elementType, stridedLayout,
+  return RankedMemRefType::get(sizes, elementType, stridedLayout,
                          memRefType.getMemorySpace());
 }
 
@@ -2551,7 +2551,7 @@ void mlir::SubViewOp::build(Builder *b, OperationState &result, Value *source,
                             ArrayRef<Value *> strides, Type resultType,
                             ArrayRef<NamedAttribute> attrs) {
   if (!resultType)
-    resultType = inferSubViewResultType(source->getType().cast<MemRefType>());
+    resultType = inferSubViewResultType(source->getType().cast<RankedMemRefType>());
   build(b, result, resultType, source, offsets.size(), sizes.size(),
         strides.size(), offsets, sizes, strides);
   result.addAttributes(attrs);
@@ -2608,7 +2608,7 @@ static void print(OpAsmPrinter &p, SubViewOp op) {
 }
 
 static LogicalResult verify(SubViewOp op) {
-  auto baseType = op.getBaseMemRefType().cast<MemRefType>();
+  auto baseType = op.getBaseMemRefType().cast<RankedMemRefType>();
   auto subViewType = op.getType();
 
   // The rank of the base and result subview must match.
@@ -2682,10 +2682,10 @@ static LogicalResult verify(SubViewOp op) {
   // offset or base memref has dynamic strides, then the subview offset is
   // dynamic.
   if ((op.getNumOffsets() > 0 ||
-       baseOffset == MemRefType::getDynamicStrideOrOffset() ||
+       baseOffset == RankedMemRefType::getDynamicStrideOrOffset() ||
        llvm::is_contained(baseStrides,
-                          MemRefType::getDynamicStrideOrOffset())) &&
-      subViewOffset != MemRefType::getDynamicStrideOrOffset()) {
+                          RankedMemRefType::getDynamicStrideOrOffset())) &&
+      subViewOffset != RankedMemRefType::getDynamicStrideOrOffset()) {
     return op.emitError(
         "expected result memref layout map to have dynamic offset");
   }
@@ -2694,7 +2694,7 @@ static LogicalResult verify(SubViewOp op) {
   // memref type have dynamic strides.
   if (op.getNumStrides() > 0) {
     if (llvm::any_of(subViewStrides, [](int64_t stride) {
-          return stride != MemRefType::getDynamicStrideOrOffset();
+          return stride != RankedMemRefType::getDynamicStrideOrOffset();
         })) {
       return op.emitError("expected result type to have dynamic strides");
     }
@@ -2704,9 +2704,9 @@ static LogicalResult verify(SubViewOp op) {
   // stride of the subview must also have dynamic stride.
   assert(baseStrides.size() == subViewStrides.size());
   for (auto stride : enumerate(baseStrides)) {
-    if (stride.value() == MemRefType::getDynamicStrideOrOffset() &&
+    if (stride.value() == RankedMemRefType::getDynamicStrideOrOffset() &&
         subViewStrides[stride.index()] !=
-            MemRefType::getDynamicStrideOrOffset()) {
+            RankedMemRefType::getDynamicStrideOrOffset()) {
       return op.emitError(
           "expected result type to have dynamic stride along a dimension if "
           "the base memref type has dynamic stride along that dimension");
@@ -2732,7 +2732,7 @@ SmallVector<SubViewOp::Range, 8> SubViewOp::getRanges() {
   return res;
 }
 
-static bool hasConstantOffsetSizesAndStrides(MemRefType memrefType) {
+static bool hasConstantOffsetSizesAndStrides(RankedMemRefType memrefType) {
   if (memrefType.getNumDynamicDims() > 0)
     return false;
   // Get offset and strides.
@@ -2741,8 +2741,8 @@ static bool hasConstantOffsetSizesAndStrides(MemRefType memrefType) {
   if (failed(getStridesAndOffset(memrefType, strides, offset)))
     return false;
   // Return 'false' if any of offset or strides is dynamic.
-  if (offset == MemRefType::getDynamicStrideOrOffset() ||
-      llvm::is_contained(strides, MemRefType::getDynamicStrideOrOffset()))
+  if (offset == RankedMemRefType::getDynamicStrideOrOffset() ||
+      llvm::is_contained(strides, RankedMemRefType::getDynamicStrideOrOffset()))
     return false;
   return true;
 }
@@ -2756,7 +2756,7 @@ public:
 
   PatternMatchResult matchAndRewrite(SubViewOp subViewOp,
                                      PatternRewriter &rewriter) const override {
-    MemRefType subViewType = subViewOp.getType();
+    RankedMemRefType subViewType = subViewOp.getType();
     // Follow all or nothing approach for shapes for now. If all the operands
     // for sizes are constants then fold it into the type of the result memref.
     if (subViewType.hasStaticShape() ||
@@ -2771,7 +2771,7 @@ public:
       assert(defOp);
       staticShape[size.index()] = cast<ConstantIndexOp>(defOp).getValue();
     }
-    MemRefType newMemRefType = MemRefType::get(
+    RankedMemRefType newMemRefType = RankedMemRefType::get(
         staticShape, subViewType.getElementType(), subViewType.getAffineMaps(),
         subViewType.getMemorySpace());
     auto newSubViewOp = rewriter.create<SubViewOp>(
@@ -2801,12 +2801,12 @@ public:
     // memref.
     int64_t baseOffset, resultOffset;
     SmallVector<int64_t, 4> baseStrides, resultStrides;
-    MemRefType subViewType = subViewOp.getType();
+    RankedMemRefType subViewType = subViewOp.getType();
     if (failed(getStridesAndOffset(subViewOp.getBaseMemRefType(), baseStrides,
                                    baseOffset)) ||
         failed(getStridesAndOffset(subViewType, resultStrides, resultOffset)) ||
         llvm::is_contained(baseStrides,
-                           MemRefType::getDynamicStrideOrOffset()) ||
+                           RankedMemRefType::getDynamicStrideOrOffset()) ||
         llvm::any_of(subViewOp.getDynamicStrides(), [](Value *stride) {
           return !matchPattern(stride, m_ConstantIndex());
         })) {
@@ -2823,8 +2823,8 @@ public:
     }
     AffineMap layoutMap = makeStridedLinearLayoutMap(
         staticStrides, resultOffset, rewriter.getContext());
-    MemRefType newMemRefType =
-        MemRefType::get(subViewType.getShape(), subViewType.getElementType(),
+    RankedMemRefType newMemRefType =
+        RankedMemRefType::get(subViewType.getShape(), subViewType.getElementType(),
                         layoutMap, subViewType.getMemorySpace());
     auto newSubViewOp = rewriter.create<SubViewOp>(
         subViewOp.getLoc(), subViewOp.source(),
@@ -2854,13 +2854,13 @@ public:
     // memref.
     int64_t baseOffset, resultOffset;
     SmallVector<int64_t, 4> baseStrides, resultStrides;
-    MemRefType subViewType = subViewOp.getType();
+    RankedMemRefType subViewType = subViewOp.getType();
     if (failed(getStridesAndOffset(subViewOp.getBaseMemRefType(), baseStrides,
                                    baseOffset)) ||
         failed(getStridesAndOffset(subViewType, resultStrides, resultOffset)) ||
         llvm::is_contained(baseStrides,
-                           MemRefType::getDynamicStrideOrOffset()) ||
-        baseOffset == MemRefType::getDynamicStrideOrOffset() ||
+                           RankedMemRefType::getDynamicStrideOrOffset()) ||
+        baseOffset == RankedMemRefType::getDynamicStrideOrOffset() ||
         llvm::any_of(subViewOp.getDynamicOffsets(), [](Value *stride) {
           return !matchPattern(stride, m_ConstantIndex());
         })) {
@@ -2878,8 +2878,8 @@ public:
 
     AffineMap layoutMap = makeStridedLinearLayoutMap(
         resultStrides, staticOffset, rewriter.getContext());
-    MemRefType newMemRefType =
-        MemRefType::get(subViewType.getShape(), subViewType.getElementType(),
+    RankedMemRefType newMemRefType =
+        RankedMemRefType::get(subViewType.getShape(), subViewType.getElementType(),
                         layoutMap, subViewType.getMemorySpace());
     auto newSubViewOp = rewriter.create<SubViewOp>(
         subViewOp.getLoc(), subViewOp.source(), ArrayRef<Value *>(),

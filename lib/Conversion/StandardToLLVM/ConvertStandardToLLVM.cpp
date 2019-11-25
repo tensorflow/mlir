@@ -256,8 +256,8 @@ LLVMOpLowering::LLVMOpLowering(StringRef rootOpName, MLIRContext *context,
 /* StructBuilder implementation                                               */
 /*============================================================================*/
 StructBuilder::StructBuilder(Value *value) : value(value) {
-  if (value)
-    structType = value->getType().cast<LLVM::LLVMType>();
+  assert(value != nullptr, "value cannot be null");
+  structType = value->getType().cast<LLVM::LLVMType>();
 }
 
 Value *StructBuilder::extractPtr(OpBuilder &builder, Location loc,
@@ -279,9 +279,9 @@ void StructBuilder::setPtr(OpBuilder &builder, Location loc, unsigned pos,
 /// Construct a helper for the given descriptor value.
 MemRefDescriptor::MemRefDescriptor(Value *descriptor)
     : StructBuilder(descriptor) {
-  if (value)
-    indexType = value->getType().cast<LLVM::LLVMType>().getStructElementType(
-        kOffsetPosInMemRefDescriptor);
+  assert(value != nullptr, "value cannot be null");
+  indexType = value->getType().cast<LLVM::LLVMType>().getStructElementType(
+    kOffsetPosInMemRefDescriptor);
 }
 
 /// Builds IR creating an `undef` value of the descriptor type.
@@ -1103,7 +1103,11 @@ struct MemRefCastOpLowering : public LLVMLegalizationPattern<MemRefCastOp> {
     // At least one of the operands is unranked type
     assert(srcType.isa<UnrankedMemRefType>() ||
            dstType.isa<UnrankedMemRefType>());
-    return matchSuccess();
+
+    // Unranked to unranked cast is disallowed    
+    return !(srcType.isa<UnrankedMemRefType>() && dstType.isa<UnrankedMemRefType>()) ? 
+            matchSuccess()
+            : matchFailure();
   }
 
   void rewrite(Operation *op, ArrayRef<Value *> operands,
@@ -1167,8 +1171,7 @@ struct MemRefCastOpLowering : public LLVMLegalizationPattern<MemRefCastOp> {
       auto loadOp = rewriter.create<LLVM::LoadOp>(loc, castPtr);
       rewriter.replaceOp(op, loadOp.getResult());
     } else {
-      // TODO: Unranked to unranked memref casting. Requires copying of the
-      // underlying MemRef descriptor.
+      llvm_unreachable("Unsuppored unranked memref to unranked memref cast");
     }
   }
 };

@@ -241,6 +241,7 @@ public:
     return type.getKind() == StandardTypes::Vector ||
            type.getKind() == StandardTypes::RankedTensor ||
            type.getKind() == StandardTypes::UnrankedTensor ||
+           type.getKind() == StandardTypes::UnrankedMemRef || 
            type.getKind() == StandardTypes::MemRef;
   }
 

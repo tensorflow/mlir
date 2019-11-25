@@ -373,9 +373,9 @@ func @memref_cast_ranked_to_unranked(%arg : memref<42x2x?xf32>) {
 // CHECK-DAG:  llvm.store %[[ld]], %[[p]] : !llvm<"{ float*, float*, i64, [3 x i64], [3 x i64] }*">
 // CHECK-DAG:  %[[p2:.*]] = llvm.bitcast %2 : !llvm<"{ float*, float*, i64, [3 x i64], [3 x i64] }*"> to !llvm<"i8*">
 // CHECK-DAG:  %[[r:.*]] = llvm.mlir.constant(3 : i64) : !llvm.i64
-// CHECK    :  %{{.*}} = llvm.mlir.undef : !llvm<"{ i64, i8* }">
-// CHECK-DAG:  %{{.*}} = llvm.insertvalue %[[r]], %{{.*}}[0] : !llvm<"{ i64, i8* }">
-// CHECK-DAG:  %{{.*}} = llvm.insertvalue %[[p2]], %{{.*}}[1] : !llvm<"{ i64, i8* }">
+// CHECK    :  llvm.mlir.undef : !llvm<"{ i64, i8* }">
+// CHECK-DAG:  llvm.insertvalue %[[r]], %{{.*}}[0] : !llvm<"{ i64, i8* }">
+// CHECK-DAG:  llvm.insertvalue %[[p2]], %{{.*}}[1] : !llvm<"{ i64, i8* }">
   %0 = memref_cast %arg : memref<42x2x?xf32> to memref<*xf32>
   return
 }
@@ -384,7 +384,7 @@ func @memref_cast_ranked_to_unranked(%arg : memref<42x2x?xf32>) {
 func @memref_cast_unranked_to_ranked(%arg : memref<*xf32>) {
 // CHECK: %[[ld:.*]] = llvm.load %{{.*}} : !llvm<"{ i64, i8* }*">
 // CHECK-NEXT: %[[p:.*]] = llvm.extractvalue %[[ld]][1] : !llvm<"{ i64, i8* }">
-// CHECK-NEXT: %{{.*}} = llvm.bitcast %[[p]] : !llvm<"i8*"> to !llvm<"{ float*, float*, i64, [4 x i64], [4 x i64] }*">
+// CHECK-NEXT: llvm.bitcast %[[p]] : !llvm<"i8*"> to !llvm<"{ float*, float*, i64, [4 x i64], [4 x i64] }*">
   %0 = memref_cast %arg : memref<*xf32> to memref<?x?x10x2xf32>
   return
 }

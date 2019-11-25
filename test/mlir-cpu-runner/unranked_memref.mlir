@@ -23,21 +23,21 @@ func @main() -> () {
     %V = memref_cast %A : memref<10x3xf32, 0> to memref<?x?xf32>
     linalg.fill(%V, %f10) : memref<?x?xf32, 0>, f32
     %U = memref_cast %A : memref<10x3xf32, 0> to memref<*xf32>
-    call @print_memref_anyrank_f32(%U) : (memref<*xf32>) -> ()
+    call @print_memref_f32(%U) : (memref<*xf32>) -> ()
 
     %V2 = memref_cast %U : memref<*xf32> to memref<?x?xf32>
     linalg.fill(%V2, %f5) : memref<?x?xf32, 0>, f32
-    call @print_memref_2d_f32(%V2) : (memref<?x?xf32>) -> ()
+    %U2 = memref_cast %V2 : memref<?x?xf32, 0> to memref<*xf32>
+    call @print_memref_f32(%U2) : (memref<*xf32>) -> ()
 
     %V3 = memref_cast %V2 : memref<?x?xf32> to memref<*xf32>
     %V4 = memref_cast %V3 : memref<*xf32> to memref<?x?xf32>
     linalg.fill(%V4, %f2) : memref<?x?xf32, 0>, f32
-    call @print_memref_2d_f32(%V2) : (memref<?x?xf32>) -> ()
+    %U3 = memref_cast %V2 : memref<?x?xf32> to memref<*xf32>
+    call @print_memref_f32(%U3) : (memref<*xf32>) -> ()
 
     dealloc %A : memref<10x3xf32, 0>
     return
 }
 
-
-func @print_memref_anyrank_f32(memref<*xf32>)
-func @print_memref_2d_f32(memref<?x?xf32>)
+func @print_memref_f32(memref<*xf32>)

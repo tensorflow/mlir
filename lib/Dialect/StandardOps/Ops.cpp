@@ -1787,15 +1787,14 @@ bool MemRefCastOp::areCastCompatible(Type a, Type b) {
     // Unranked to unranked casting is unsupported
     if (uaT && ubT)
       return false;
+      
     auto aEltType = (aT) ? aT.getElementType() : uaT.getElementType();
     auto bEltType = (bT) ? bT.getElementType() : ubT.getElementType();
-
     if (aEltType != bEltType)
       return false;
 
     auto aMemSpace = (aT) ? aT.getMemorySpace() : uaT.getMemorySpace();
     auto bMemSpace = (bT) ? bT.getMemorySpace() : ubT.getMemorySpace();
-
     if (aMemSpace != bMemSpace)
       return false;
 

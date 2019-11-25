@@ -1131,8 +1131,9 @@ Type Parser::parseMemRefType() {
       return nullptr;
   }
 
-  return UnrankedMemRefType::getChecked(dimensions, elementType, affineMapComposition,
-                                memorySpace, getEncodedSourceLocation(typeLoc));
+  return RankedMemRefType::getChecked(dimensions, elementType,
+                                      affineMapComposition, memorySpace,
+                                      getEncodedSourceLocation(typeLoc));
 }
 
 /// Parse any type except the function type.

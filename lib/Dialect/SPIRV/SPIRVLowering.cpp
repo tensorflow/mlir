@@ -235,7 +235,7 @@ Value *createAndLoadGlobalVarForEntryFnArg(PatternRewriter &rewriter,
   // loaded. Instead the pointer value is returned to allow its use in access
   // chain ops.
   auto origArgType = origArg->getType();
-  if (origArgType.isa<MemRefType>()) {
+  if (origArgType.isa<RankedMemRefType>()) {
     return accessChain;
   }
   return rewriter.create<spirv::LoadOp>(

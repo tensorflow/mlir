@@ -772,10 +772,10 @@ memory region which it references. Memref types use the same shape specifier as
 tensor types. Note that `memref<f32>`, `memref<0 x f32>`, `memref<1 x 0 x f32>`, 
 and `memref<0 x 1 x f32>` are all different types. 
 
-`memref` also allows its shape to be of unkown (e.g. `memref<*xf32>`). 
-However, this type should only be used in casting operations to pass arguments 
+`memref` also allows its shape to be of unknown rank (e.g. `memref<*xf32>`). 
+However, this type should be only used to pass arguments 
 to external library calls without the need to version the calls based on 
-the memref rank. Other uses of this type is not allowed or will have 
+the memref rank. Other uses of this type are disallowed or will have 
 undefined behavior. 
 
 Example

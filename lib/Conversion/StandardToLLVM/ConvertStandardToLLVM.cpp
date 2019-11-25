@@ -281,7 +281,7 @@ MemRefDescriptor::MemRefDescriptor(Value *descriptor)
     : StructBuilder(descriptor) {
   assert(value != nullptr, "value cannot be null");
   indexType = value->getType().cast<LLVM::LLVMType>().getStructElementType(
-    kOffsetPosInMemRefDescriptor);
+      kOffsetPosInMemRefDescriptor);
 }
 
 /// Builds IR creating an `undef` value of the descriptor type.
@@ -1104,10 +1104,11 @@ struct MemRefCastOpLowering : public LLVMLegalizationPattern<MemRefCastOp> {
     assert(srcType.isa<UnrankedMemRefType>() ||
            dstType.isa<UnrankedMemRefType>());
 
-    // Unranked to unranked cast is disallowed    
-    return !(srcType.isa<UnrankedMemRefType>() && dstType.isa<UnrankedMemRefType>()) ? 
-            matchSuccess()
-            : matchFailure();
+    // Unranked to unranked cast is disallowed
+    return !(srcType.isa<UnrankedMemRefType>() &&
+             dstType.isa<UnrankedMemRefType>())
+               ? matchSuccess()
+               : matchFailure();
   }
 
   void rewrite(Operation *op, ArrayRef<Value *> operands,

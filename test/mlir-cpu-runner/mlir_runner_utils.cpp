@@ -148,7 +148,8 @@ template <typename T, int N> void printMemRef(StridedMemRefType<T, N> &M) {
   std::cout << std::endl;
 }
 
-template <typename T> void printMemRef(StridedMemRefType<T, 0> &M) {
+template <typename T>
+void printMemRef(StridedMemRefType<T, 0> &M) {
   std::cout << "\nMemref base@ = " << M.data << " rank = " << 0
             << " offset = " << M.offset << " data = [";
   MemRefDataPrinter<T, 0>::print(std::cout, M.data, 0, M.offset);
@@ -165,10 +166,10 @@ extern "C" void print_memref_f32(UnrankedMemRefType *M) {
   int rank = M->rank;
   void *ptr = M->descriptor;
 
-#define MEMREF_CASE(RANK)                                             \
-  case RANK:                                                          \
-  printMemRef(*(static_cast<StridedMemRefType<float, RANK> *>(ptr))); \
-  break
+#define MEMREF_CASE(RANK)                                                      \
+  case RANK:                                                                   \
+    printMemRef(*(static_cast<StridedMemRefType<float, RANK> *>(ptr)));        \
+    break
 
   switch (rank) {
     MEMREF_CASE(0);

@@ -749,9 +749,15 @@ TODO: Need to decide on a representation for quantized integers
 Syntax:
 
 ``` {.ebnf}
-memref-type ::= `memref` `<` dimension-list-ranked tensor-memref-element-type
-                (`,` layout-specification)? |
-                (`,` memory-space)? `>`
+
+memref-type ::= ranked-memref-type | unranked-memref-type
+
+ranked-memref-type ::= `memref` `<` dimension-list-ranked tensor-memref-element-type
+                      (`,` layout-specification)? |
+                      (`,` memory-space)? `>`
+
+unranked-memref-type ::= `memref` `<*x` tensor-memref-element-type 
+                         (`,` memory-space)? `>`
 
 stride-list ::= `[` (dimension (`,` dimension)*)? `]`
 strided-layout ::= `offset:` dimension `,` `strides: ` stride-list
@@ -763,9 +769,33 @@ A `memref` type is a reference to a region of memory (similar to a buffer
 pointer, but more powerful). The buffer pointed to by a memref can be allocated,
 aliased and deallocated. A memref can be used to read and write data from/to the
 memory region which it references. Memref types use the same shape specifier as
-tensor types, but do not allow unknown rank. Note that `memref<f32>`, `memref<0
-x f32>`, `memref<1 x 0 x f32>`, and `memref<0 x 1 x f32>` are all different
-types.
+tensor types. Note that `memref<f32>`, `memref<0 x f32>`, `memref<1 x 0 x f32>`, 
+and `memref<0 x 1 x f32>` are all different types. 
+
+`memref` also allows its shape to be of unkown (e.g. `memref<*xf32>`). 
+However, this type should only be used in casting operations to pass arguments 
+to external library calls without the need to version the calls based on 
+the memref rank. Other uses of this type is not allowed or will have 
+undefined behavior. 
+
+Example
+```mlir {.mlir}
+// With static ranks, we need a function for each possible argument type
+%A = alloc() : memref<16x32xf32>
+%B = alloc() : memref<16x32x64xf32>
+call @helper_2D(%A) : (memref<16x32xf32>)->()
+call @helper_3D(%B) : (memref<16x32x64xf32>)->()
+
+// With unknown rank, the functions can be unified under one unranked type
+%A = alloc() : memref<16x32xf32>
+%B = alloc() : memref<16x32x64xf32>
+// Remove rank info
+%A_u = memref_cast %A : memref<16x32xf32> -> memref<*xf32>
+%B_u = memref_cast %B : memref<16x32x64xf32> -> memref<*xf32>
+// call same function with dynamic ranks
+call @helper(%A_u) : (memref<*xf32>)->()
+call @helper(%B_u) : (memref<*xf32>)->()
+```
 
 The core syntax and representation of a layout specification is a
 [semi-affine map](Dialects/Affine.md#semi-affine-maps). Additionally, syntactic

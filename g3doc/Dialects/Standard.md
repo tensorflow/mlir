@@ -756,12 +756,22 @@ Examples:
 
 // Convert to a type with more known dimensions.
 %4 = memref_cast %3 : memref<?x?xf32> to memref<4x?xf32>
+
+// Convert to a type with unknown rank.
+%5 = memref_cast %3 : memref<?x?xf32> to memref<*xf32>
+
+// Convert to a type with static rank.
+%6 = memref_cast %5 : memref<*xf32> to memref<?x?xf32>
 ```
 
 Convert a memref from one type to an equivalent type without changing any data
-elements. The source and destination types must both be memref types with the
-same element type, same mappings, same address space, and same rank. The
-operation is invalid if converting to a mismatching constant dimension.
+elements. The types are equivalent if either
+1. they have both have static equal ranks, same element type, same mappings, 
+same address space. The operation is invalid if converting to a mismatching 
+constant dimension, or
+2. exactly one of the operands have a dynamic rank, and they both have the 
+same element type. The operation is invalid if converting to a mismatching
+static rank.
 
 ### 'mulf' operation
 

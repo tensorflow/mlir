@@ -2342,7 +2342,8 @@ static LogicalResult verifyDynamicStrides(RankedMemRefType memrefType,
     if (ShapedType::isDynamic(shape[i + 1]))
       dynamicStrides = true;
     // If stride at dim 'i' is not dynamic, return error.
-    if (dynamicStrides && strides[i] != RankedMemRefType::getDynamicStrideOrOffset())
+    if (dynamicStrides &&
+        strides[i] != RankedMemRefType::getDynamicStrideOrOffset())
       return failure();
   }
   return success();
@@ -2478,8 +2479,8 @@ struct ViewOpShapeFolder : public OpRewritePattern<ViewOp> {
 
     // Create new memref type with constant folded dims and/or offset/strides.
     auto newMemRefType =
-        RankedMemRefType::get(newShapeConstants, memrefType.getElementType(), {map},
-                        memrefType.getMemorySpace());
+        RankedMemRefType::get(newShapeConstants, memrefType.getElementType(),
+                              {map}, memrefType.getMemorySpace());
     assert(static_cast<int64_t>(newOperands.size()) ==
            dynamicOffsetOperandCount + newMemRefType.getNumDynamicDims());
 
@@ -2504,8 +2505,8 @@ void ViewOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 // SubViewOp
 //===----------------------------------------------------------------------===//
 
-// Returns a RankedMemRefType with dynamic sizes and offset and the same stride as the
-// `memRefType` passed as argument.
+// Returns a RankedMemRefType with dynamic sizes and offset and the same stride
+// as the `memRefType` passed as argument.
 // TODO(andydavis,ntv) Evolve to a more powerful inference that can also keep
 // sizes and offset static.
 static Type inferSubViewResultType(RankedMemRefType memRefType) {
@@ -2528,7 +2529,7 @@ static Type inferSubViewResultType(RankedMemRefType memRefType) {
       makeStridedLinearLayoutMap(strides, offset, memRefType.getContext());
   SmallVector<int64_t, 4> sizes(rank, ShapedType::kDynamicSize);
   return RankedMemRefType::get(sizes, elementType, stridedLayout,
-                         memRefType.getMemorySpace());
+                               memRefType.getMemorySpace());
 }
 
 void mlir::SubViewOp::build(Builder *b, OperationState &result, Type resultType,
@@ -2551,7 +2552,8 @@ void mlir::SubViewOp::build(Builder *b, OperationState &result, Value *source,
                             ArrayRef<Value *> strides, Type resultType,
                             ArrayRef<NamedAttribute> attrs) {
   if (!resultType)
-    resultType = inferSubViewResultType(source->getType().cast<RankedMemRefType>());
+    resultType =
+        inferSubViewResultType(source->getType().cast<RankedMemRefType>());
   build(b, result, resultType, source, offsets.size(), sizes.size(),
         strides.size(), offsets, sizes, strides);
   result.addAttributes(attrs);
@@ -2823,9 +2825,9 @@ public:
     }
     AffineMap layoutMap = makeStridedLinearLayoutMap(
         staticStrides, resultOffset, rewriter.getContext());
-    RankedMemRefType newMemRefType =
-        RankedMemRefType::get(subViewType.getShape(), subViewType.getElementType(),
-                        layoutMap, subViewType.getMemorySpace());
+    RankedMemRefType newMemRefType = RankedMemRefType::get(
+        subViewType.getShape(), subViewType.getElementType(), layoutMap,
+        subViewType.getMemorySpace());
     auto newSubViewOp = rewriter.create<SubViewOp>(
         subViewOp.getLoc(), subViewOp.source(),
         llvm::to_vector<4>(subViewOp.getDynamicOffsets()),
@@ -2878,9 +2880,9 @@ public:
 
     AffineMap layoutMap = makeStridedLinearLayoutMap(
         resultStrides, staticOffset, rewriter.getContext());
-    RankedMemRefType newMemRefType =
-        RankedMemRefType::get(subViewType.getShape(), subViewType.getElementType(),
-                        layoutMap, subViewType.getMemorySpace());
+    RankedMemRefType newMemRefType = RankedMemRefType::get(
+        subViewType.getShape(), subViewType.getElementType(), layoutMap,
+        subViewType.getMemorySpace());
     auto newSubViewOp = rewriter.create<SubViewOp>(
         subViewOp.getLoc(), subViewOp.source(), ArrayRef<Value *>(),
         llvm::to_vector<4>(subViewOp.getDynamicSizes()),

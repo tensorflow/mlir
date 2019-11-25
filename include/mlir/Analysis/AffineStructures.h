@@ -37,7 +37,7 @@ class IntegerSet;
 class MLIRContext;
 class Value;
 class HyperRectangularSet;
-class MemRefType;
+class RankedMemRefType;
 
 /// A mutable affine map. Its affine expressions are however unique.
 struct MutableAffineMap {

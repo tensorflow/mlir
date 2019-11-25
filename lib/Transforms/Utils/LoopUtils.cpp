@@ -1187,7 +1187,8 @@ static void getMultiLevelStrides(const MemRefRegion &region,
   int64_t numEltPerStride = 1;
   int64_t stride = 1;
   for (int d = bufferShape.size() - 1; d >= 1; d--) {
-    int64_t dimSize = region.memref->getType().cast<MemRefType>().getDimSize(d);
+    int64_t dimSize =
+        region.memref->getType().cast<RankedMemRefType>().getDimSize(d);
     stride *= dimSize;
     numEltPerStride *= bufferShape[d];
     // A stride is needed only if the region has a shorter extent than the
@@ -1308,7 +1309,7 @@ static LogicalResult generateCopy(
 
   auto loc = region.loc;
   auto *memref = region.memref;
-  auto memRefType = memref->getType().cast<MemRefType>();
+  auto memRefType = memref->getType().cast<RankedMemRefType>();
 
   auto layoutMaps = memRefType.getAffineMaps();
   if (layoutMaps.size() > 1 ||
@@ -1402,8 +1403,8 @@ static LogicalResult generateCopy(
   if (!existingBuf) {
     AffineMap fastBufferLayout = b.getMultiDimIdentityMap(rank);
     auto fastMemRefType =
-        MemRefType::get(fastBufferShape, memRefType.getElementType(),
-                        fastBufferLayout, copyOptions.fastMemorySpace);
+        RankedMemRefType::get(fastBufferShape, memRefType.getElementType(),
+                              fastBufferLayout, copyOptions.fastMemorySpace);
 
     // Create the fast memory space buffer just before the 'affine.for'
     // operation.
@@ -1471,8 +1472,8 @@ static LogicalResult generateCopy(
   } else {
     // DMA generation.
     // Create a tag (single element 1-d memref) for the DMA.
-    auto tagMemRefType = MemRefType::get({1}, top.getIntegerType(32), {},
-                                         copyOptions.tagMemorySpace);
+    auto tagMemRefType = RankedMemRefType::get({1}, top.getIntegerType(32), {},
+                                               copyOptions.tagMemorySpace);
     auto tagMemRef = prologue.create<AllocOp>(loc, tagMemRefType);
 
     SmallVector<Value *, 4> tagIndices({zeroIndex});
@@ -1573,7 +1574,7 @@ static bool getFullMemRefAsRegion(Operation *opInst, unsigned numParamLoopIVs,
     assert(false && "expected load or store op");
     return false;
   }
-  auto memRefType = region->memref->getType().cast<MemRefType>();
+  auto memRefType = region->memref->getType().cast<RankedMemRefType>();
   if (!memRefType.hasStaticShape())
     return false;
 

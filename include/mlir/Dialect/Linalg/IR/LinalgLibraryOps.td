@@ -131,10 +131,10 @@ def LinalgLibraryInterface : OpInterface<"LinalgOp"> {
     >,
     InterfaceMethod<[{
         Query the type of the input view at the given index.
-      }], "MemRefType", "getInputViewType", (ins "unsigned":$i)>,
+      }], "RankedMemRefType", "getInputViewType", (ins "unsigned":$i)>,
     InterfaceMethod<[{
         Query the type of the output view at the given index.
-      }], "MemRefType", "getOutputViewType", (ins "unsigned":$i)>,
+      }], "RankedMemRefType", "getOutputViewType", (ins "unsigned":$i)>,
 
     StaticInterfaceMethod<[{
         Create an operation of the current type with the given location,
@@ -255,7 +255,7 @@ def CopyOp : LinalgLibrary_Op<"copy", [NInputsAndOutputs<1, 1>]> {
   let extraClassDeclaration = libraryCallName # [{
     unsigned getNumParallelLoops() {
       auto *view = *(getOperands().begin());
-      return view->getType().cast<MemRefType>().getRank();
+      return view->getType().cast<RankedMemRefType>().getRank();
     }
     unsigned getNumReductionLoops() { return 0; }
     unsigned getNumWindowLoops() { return 0; }
@@ -269,7 +269,7 @@ def FillOp : LinalgLibrary_Op<"fill", [NInputsAndOutputs<0, 1>]> {
   let extraClassDeclaration = libraryCallName # [{
     unsigned getNumParallelLoops() {
       auto *view = *(getOperands().begin());
-      return view->getType().cast<MemRefType>().getRank();
+      return view->getType().cast<RankedMemRefType>().getRank();
     }
     unsigned getNumReductionLoops() { return 0; }
     unsigned getNumWindowLoops() { return 0; }

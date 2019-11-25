@@ -370,28 +370,28 @@ public:
 /// number of dimensions. Each shape element can be a non-negative integer or
 /// unknown (represented by any negative integer). MemRef types also have an
 /// affine map composition, represented as an array AffineMap pointers.
-class MemRefType
-    : public Type::TypeBase<MemRefType, ShapedType, detail::MemRefTypeStorage> {
+class RankedMemRefType : public Type::TypeBase<RankedMemRefType, ShapedType,
+                                               detail::MemRefTypeStorage> {
 public:
   using Base::Base;
 
-  /// Get or create a new MemRefType based on shape, element type, affine
+  /// Get or create a new RankedMemRefType based on shape, element type, affine
   /// map composition, and memory space.  Assumes the arguments define a
-  /// well-formed MemRef type.  Use getChecked to gracefully handle MemRefType
-  /// construction failures.
-  static MemRefType get(ArrayRef<int64_t> shape, Type elementType,
-                        ArrayRef<AffineMap> affineMapComposition = {},
-                        unsigned memorySpace = 0);
+  /// well-formed MemRef type.  Use getChecked to gracefully handle
+  /// RankedMemRefType construction failures.
+  static RankedMemRefType get(ArrayRef<int64_t> shape, Type elementType,
+                              ArrayRef<AffineMap> affineMapComposition = {},
+                              unsigned memorySpace = 0);
 
-  /// Get or create a new MemRefType based on shape, element type, affine
+  /// Get or create a new RankedMemRefType based on shape, element type, affine
   /// map composition, and memory space declared at the given location.
   /// If the location is unknown, the last argument should be an instance of
-  /// UnknownLoc.  If the MemRefType defined by the arguments would be
+  /// UnknownLoc.  If the RankedMemRefType defined by the arguments would be
   /// ill-formed, emits errors (to the handler registered with the context or to
   /// the error stream) and returns nullptr.
-  static MemRefType getChecked(ArrayRef<int64_t> shape, Type elementType,
-                               ArrayRef<AffineMap> affineMapComposition,
-                               unsigned memorySpace, Location location);
+  static RankedMemRefType getChecked(ArrayRef<int64_t> shape, Type elementType,
+                                     ArrayRef<AffineMap> affineMapComposition,
+                                     unsigned memorySpace, Location location);
 
   ArrayRef<int64_t> getShape() const;
 
@@ -413,12 +413,13 @@ public:
   static bool kindof(unsigned kind) { return kind == StandardTypes::MemRef; }
 
 private:
-  /// Get or create a new MemRefType defined by the arguments.  If the resulting
-  /// type would be ill-formed, return nullptr.  If the location is provided,
-  /// emit detailed error messages.
-  static MemRefType getImpl(ArrayRef<int64_t> shape, Type elementType,
-                            ArrayRef<AffineMap> affineMapComposition,
-                            unsigned memorySpace, Optional<Location> location);
+  /// Get or create a new RankedMemRefType defined by the arguments.  If the
+  /// resulting type would be ill-formed, return nullptr.  If the location is
+  /// provided, emit detailed error messages.
+  static RankedMemRefType getImpl(ArrayRef<int64_t> shape, Type elementType,
+                                  ArrayRef<AffineMap> affineMapComposition,
+                                  unsigned memorySpace,
+                                  Optional<Location> location);
   using Base::getImpl;
 };
 
@@ -498,15 +499,16 @@ public:
 ///
 /// The convention is that the strides for dimensions d0, .. dn appear in
 /// order to make indexing intuitive into the result.
-LogicalResult getStridesAndOffset(MemRefType t,
+LogicalResult getStridesAndOffset(RankedMemRefType t,
                                   SmallVectorImpl<int64_t> &strides,
                                   int64_t &offset);
 
-/// Given a list of strides (in which MemRefType::getDynamicStrideOrOffset()
-/// represents a dynamic value), return the single result AffineMap which
-/// represents the linearized strided layout map. Dimensions correspond to the
-/// offset followed by the strides in order. Symbols are inserted for each
-/// dynamic dimension in order. A stride cannot take value `0`.
+/// Given a list of strides (in which
+/// RankedMemRefType::getDynamicStrideOrOffset() represents a dynamic value),
+/// return the single result AffineMap which represents the linearized strided
+/// layout map. Dimensions correspond to the offset followed by the strides in
+/// order. Symbols are inserted for each dynamic dimension in order. A stride
+/// cannot take value `0`.
 ///
 /// Examples:
 /// =========
@@ -522,7 +524,7 @@ LogicalResult getStridesAndOffset(MemRefType t,
 AffineMap makeStridedLinearLayoutMap(ArrayRef<int64_t> strides, int64_t offset,
                                      MLIRContext *context);
 
-bool isStrided(MemRefType t);
+bool isStrided(RankedMemRefType t);
 
 } // end namespace mlir
 

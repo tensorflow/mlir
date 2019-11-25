@@ -291,7 +291,7 @@ void ModuleState::visitType(Type type) {
       visitType(result);
     return;
   }
-  if (auto memref = type.dyn_cast<MemRefType>()) {
+  if (auto memref = type.dyn_cast<RankedMemRefType>()) {
     // Visit affine maps in memref type.
     for (auto map : memref.getAffineMaps())
       recordAttributeReference(AffineMapAttr::get(map));
@@ -1054,7 +1054,7 @@ void ModulePrinter::printType(Type type) {
     return;
   }
   case StandardTypes::MemRef: {
-    auto v = type.cast<MemRefType>();
+    auto v = type.cast<RankedMemRefType>();
     os << "memref<";
     for (auto dim : v.getShape()) {
       if (dim < 0)

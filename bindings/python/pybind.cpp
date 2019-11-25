@@ -813,7 +813,8 @@ PYBIND11_MODULE(pybind, m) {
       .def("get_function", &PythonMLIRModule::getNamedFunction,
            "Looks up the function with the given name in the module.")
       .def("make_memref_type", &PythonMLIRModule::makeMemRefType,
-           "Returns an mlir::MemRefType of an elemental scalar. -1 is used to "
+           "Returns an mlir::RankedMemRefType of an elemental scalar. -1 is "
+           "used to "
            "denote symbolic dimensions in the resulting memref shape.")
       .def("make_index_type", &PythonMLIRModule::makeIndexType,
            "Returns an mlir::IndexType")

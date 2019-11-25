@@ -88,7 +88,8 @@ extern "C" void mcuMemHostRegister(void *ptr, uint64_t sizeBytes) {
 }
 
 // A struct that corresponds to how MLIR represents memrefs.
-template <typename T, int N> struct MemRefType {
+template <typename T, int N>
+struct RankedMemRefType {
   T *basePtr;
   T *data;
   int64_t offset;
@@ -99,17 +100,17 @@ template <typename T, int N> struct MemRefType {
 // Allows to register a MemRef with the CUDA runtime. Initializes array with
 // value. Helpful until we have transfer functions implemented.
 template <typename T, int N>
-void mcuMemHostRegisterMemRef(const MemRefType<T, N> *arg, T value) {
+void mcuMemHostRegisterMemRef(const RankedMemRefType<T, N> *arg, T value) {
   auto count = std::accumulate(arg->sizes, arg->sizes + N, 1,
                                std::multiplies<int64_t>());
   std::fill_n(arg->data, count, value);
   mcuMemHostRegister(arg->data, count * sizeof(T));
 }
 extern "C" void
-mcuMemHostRegisterMemRef1dFloat(const MemRefType<float, 1> *arg) {
+mcuMemHostRegisterMemRef1dFloat(const RankedMemRefType<float, 1> *arg) {
   mcuMemHostRegisterMemRef(arg, 1.23f);
 }
 extern "C" void
-mcuMemHostRegisterMemRef3dFloat(const MemRefType<float, 3> *arg) {
+mcuMemHostRegisterMemRef3dFloat(const RankedMemRefType<float, 3> *arg) {
   mcuMemHostRegisterMemRef(arg, 1.23f);
 }

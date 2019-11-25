@@ -348,7 +348,7 @@ TEST_FUNC(builder_helpers) {
   using namespace edsc::intrinsics;
   using namespace edsc::op;
   auto f32Type = FloatType::getF32(&globalContext());
-  auto memrefType = MemRefType::get({-1, -1, -1}, f32Type, {}, 0);
+  auto memrefType = RankedMemRefType::get({-1, -1, -1}, f32Type, {}, 0);
   auto f =
       makeFunction("builder_helpers", {}, {memrefType, memrefType, memrefType});
 
@@ -469,7 +469,7 @@ TEST_FUNC(select_op_i32) {
   using namespace edsc::intrinsics;
   using namespace edsc::op;
   auto f32Type = FloatType::getF32(&globalContext());
-  auto memrefType = MemRefType::get({-1, -1}, f32Type, {}, 0);
+  auto memrefType = RankedMemRefType::get({-1, -1}, f32Type, {}, 0);
   auto f = makeFunction("select_op", {}, {memrefType});
 
   OpBuilder builder(f.getBody());
@@ -504,7 +504,7 @@ TEST_FUNC(select_op_f32) {
   using namespace edsc::intrinsics;
   using namespace edsc::op;
   auto f32Type = FloatType::getF32(&globalContext());
-  auto memrefType = MemRefType::get({-1, -1}, f32Type, {}, 0);
+  auto memrefType = RankedMemRefType::get({-1, -1}, f32Type, {}, 0);
   auto f = makeFunction("select_op", {}, {memrefType, memrefType});
 
   OpBuilder builder(f.getBody());
@@ -580,8 +580,8 @@ TEST_FUNC(tile_2d) {
   using namespace edsc;
   using namespace edsc::intrinsics;
   using namespace edsc::op;
-  auto memrefType =
-      MemRefType::get({-1, -1, -1}, FloatType::getF32(&globalContext()), {}, 0);
+  auto memrefType = RankedMemRefType::get(
+      {-1, -1, -1}, FloatType::getF32(&globalContext()), {}, 0);
   auto f = makeFunction("tile_2d", {}, {memrefType, memrefType, memrefType});
 
   OpBuilder builder(f.getBody());
@@ -652,9 +652,9 @@ TEST_FUNC(vectorize_2d) {
   using namespace edsc::intrinsics;
   using namespace edsc::op;
   auto memrefType =
-      MemRefType::get({-1, -1, -1}, FloatType::getF32(&globalContext()), {}, 0);
-  auto owningF =
-      makeFunction("vectorize_2d", {}, {memrefType, memrefType, memrefType});
+      RankedMemRefType::get({-1, -1, -1}, FloatType::getF32(&globalContext()),
+{}, 0); auto owningF = makeFunction("vectorize_2d", {}, {memrefType, memrefType,
+memrefType});
 
   mlir::FuncOp f = owningF;
   mlir::OwningModuleRef module = ModuleOp::create(&globalContext());
@@ -710,7 +710,7 @@ TEST_FUNC(indirect_access) {
   using namespace edsc::intrinsics;
   using namespace edsc::op;
   auto memrefType =
-      MemRefType::get({-1}, FloatType::getF32(&globalContext()), {}, 0);
+      RankedMemRefType::get({-1}, FloatType::getF32(&globalContext()), {}, 0);
   auto f = makeFunction("indirect_access", {},
                         {memrefType, memrefType, memrefType, memrefType});
 
@@ -745,7 +745,7 @@ TEST_FUNC(empty_map_load_store) {
   using namespace edsc::intrinsics;
   using namespace edsc::op;
   auto memrefType =
-      MemRefType::get({}, FloatType::getF32(&globalContext()), {}, 0);
+      RankedMemRefType::get({}, FloatType::getF32(&globalContext()), {}, 0);
   auto f = makeFunction("empty_map_load_store", {},
                         {memrefType, memrefType, memrefType, memrefType});
 
@@ -781,7 +781,7 @@ TEST_FUNC(affine_if_op) {
   using namespace edsc::intrinsics;
   using namespace edsc::op;
   auto f32Type = FloatType::getF32(&globalContext());
-  auto memrefType = MemRefType::get({-1, -1}, f32Type, {}, 0);
+  auto memrefType = RankedMemRefType::get({-1, -1}, f32Type, {}, 0);
   auto f = makeFunction("affine_if_op", {}, {memrefType});
 
   OpBuilder builder(f.getBody());

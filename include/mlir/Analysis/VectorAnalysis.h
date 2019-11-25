@@ -28,7 +28,7 @@ class AffineApplyOp;
 class AffineForOp;
 class AffineMap;
 class Location;
-class MemRefType;
+class RankedMemRefType;
 class OpBuilder;
 class Operation;
 class Value;

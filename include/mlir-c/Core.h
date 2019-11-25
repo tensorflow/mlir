@@ -67,7 +67,7 @@ typedef struct {
 
 /// Minimal C API for exposing EDSCs to Swift, Python and other languages.
 
-/// Returns an `mlir::MemRefType` of the element type `elemType` and shape
+/// Returns an `mlir::RankedMemRefType` of the element type `elemType` and shape
 /// `sizes`.
 mlir_type_t makeMemRefType(mlir_context_t context, mlir_type_t elemType,
                            int64_list_t sizes);
@@ -97,9 +97,9 @@ mlir_type_t mlirParseType(const char *type, mlir_context_t context,
 unsigned getFunctionArity(mlir_func_t function);
 
 /// Returns the rank of the `function` argument at position `pos`.
-/// If the argument is of MemRefType, this returns the rank of the MemRef.
+/// If the argument is of RankedMemRefType, this returns the rank of the MemRef.
 /// Otherwise returns `0`.
-/// TODO(ntv): support more than MemRefType and scalar Type.
+/// TODO(ntv): support more than RankedMemRefType and scalar Type.
 unsigned getRankOfFunctionArgument(mlir_func_t function, unsigned pos);
 
 /// Returns an opaque mlir::Type of the `function` argument at position `pos`.

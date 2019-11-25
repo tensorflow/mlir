@@ -104,10 +104,10 @@ struct VectorTransferRewriter : public RewritePattern {
       : RewritePattern(TransferOpTy::getOperationName(), 1, context) {}
 
   /// Used for staging the transfer in a local scalar buffer.
-  MemRefType tmpMemRefType(TransferOpTy transfer) const {
+  RankedMemRefType tmpMemRefType(TransferOpTy transfer) const {
     auto vectorType = transfer.getVectorType();
-    return MemRefType::get(vectorType.getShape(), vectorType.getElementType(),
-                           {}, 0);
+    return RankedMemRefType::get(vectorType.getShape(),
+                                 vectorType.getElementType(), {}, 0);
   }
 
   /// Performs the rewrite.

@@ -585,7 +585,7 @@ ParseResult parseTransferReadOp(OpAsmParser &parser, OperationState &result) {
   if (types.size() != 2)
     return parser.emitError(typesLoc, "two types required");
   auto indexType = parser.getBuilder().getIndexType();
-  MemRefType memRefType = types[0].dyn_cast<MemRefType>();
+  RankedMemRefType memRefType = types[0].dyn_cast<RankedMemRefType>();
   if (!memRefType)
     return parser.emitError(typesLoc, "memref type required"), failure();
   Type vectorType = types[1];
@@ -599,7 +599,7 @@ ParseResult parseTransferReadOp(OpAsmParser &parser, OperationState &result) {
 
 static LogicalResult verify(TransferReadOp op) {
   // Consistency of elemental types in memref and vector.
-  MemRefType memrefType = op.getMemRefType();
+  RankedMemRefType memrefType = op.getMemRefType();
   VectorType vectorType = op.getVectorType();
   if (memrefType.getElementType() != vectorType.getElementType())
     return op.emitOpError(
@@ -664,7 +664,7 @@ ParseResult parseTransferWriteOp(OpAsmParser &parser, OperationState &result) {
 
 static LogicalResult verify(TransferWriteOp op) {
   // Consistency of elemental types in memref and vector.
-  MemRefType memrefType = op.getMemRefType();
+  RankedMemRefType memrefType = op.getMemRefType();
   VectorType vectorType = op.getVectorType();
   if (memrefType.getElementType() != vectorType.getElementType())
     return op.emitOpError(
@@ -692,19 +692,20 @@ static LogicalResult verify(TransferWriteOp op) {
 // TypeCastOp
 //===----------------------------------------------------------------------===//
 
-static MemRefType inferVectorTypeCastResultType(MemRefType t) {
-  return MemRefType::get({}, VectorType::get(t.getShape(), t.getElementType()));
+static RankedMemRefType inferVectorTypeCastResultType(RankedMemRefType t) {
+  return RankedMemRefType::get(
+      {}, VectorType::get(t.getShape(), t.getElementType()));
 }
 
 void TypeCastOp::build(Builder *builder, OperationState &result,
                        Value *source) {
   result.addOperands(source);
-  result.addTypes(
-      inferVectorTypeCastResultType(source->getType().cast<MemRefType>()));
+  result.addTypes(inferVectorTypeCastResultType(
+      source->getType().cast<RankedMemRefType>()));
 }
 
 static void print(OpAsmPrinter &p, TypeCastOp &op) {
-  auto type = op.getOperand()->getType().cast<MemRefType>();
+  auto type = op.getOperand()->getType().cast<RankedMemRefType>();
   p << op.getOperationName() << ' ' << *op.memref() << " : " << type << " to "
     << inferVectorTypeCastResultType(type);
 }

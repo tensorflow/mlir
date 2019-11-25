@@ -113,9 +113,9 @@ def SliceOp : Linalg_Op<"slice", [NoSideEffect]>,
     enum { FirstIndexingOperand = 1 };
     unsigned getRank() { return getViewType().getRank(); }
     Type getElementType() { return getViewType().getElementType(); }
-    MemRefType getViewType() { return getType().cast<MemRefType>(); }
+    RankedMemRefType getViewType() { return getType().cast<RankedMemRefType>(); }
     unsigned getBaseViewRank() { return getBaseViewType().getRank(); }
-    MemRefType getBaseViewType() { return view()->getType().cast<MemRefType>(); }
+    RankedMemRefType getBaseViewType() { return view()->getType().cast<RankedMemRefType>(); }
 
     // Get the underlying indexing at a given rank.
     Value *indexing(unsigned rank) { return *(indexings().begin() + rank); }
@@ -159,7 +159,7 @@ def TransposeOp : Linalg_Op<"transpose", [NoSideEffect]>,
 
   let extraClassDeclaration = [{
     static StringRef getPermutationAttrName() { return "permutation"; }
-    MemRefType getViewType() { return view()->getType().cast<MemRefType>(); }
+    RankedMemRefType getViewType() { return view()->getType().cast<RankedMemRefType>(); }
   }];
 }
 

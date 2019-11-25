@@ -399,7 +399,7 @@ public:
     if (!hasEdge(srcId, dstId, value)) {
       outEdges[srcId].push_back({dstId, value});
       inEdges[dstId].push_back({srcId, value});
-      if (value->getType().isa<MemRefType>())
+      if (value->getType().isa<RankedMemRefType>())
         memrefEdgeCount[value]++;
     }
   }
@@ -408,7 +408,7 @@ public:
   void removeEdge(unsigned srcId, unsigned dstId, Value *value) {
     assert(inEdges.count(dstId) > 0);
     assert(outEdges.count(srcId) > 0);
-    if (value->getType().isa<MemRefType>()) {
+    if (value->getType().isa<RankedMemRefType>()) {
       assert(memrefEdgeCount.count(value) > 0);
       memrefEdgeCount[value]--;
     }
@@ -643,7 +643,7 @@ public:
                          const std::function<void(Edge)> &callback) {
     for (auto &edge : edges) {
       // Skip if 'edge' is not a memref dependence edge.
-      if (!edge.value->getType().isa<MemRefType>())
+      if (!edge.value->getType().isa<RankedMemRefType>())
         continue;
       assert(nodes.count(edge.id) > 0);
       // Skip if 'edge.id' is not a loop nest.
@@ -872,7 +872,7 @@ static void sinkSequentialLoops(MemRefDependenceGraph::Node *node) {
 }
 
 //  TODO(mlir-team): improve/complete this when we have target data.
-unsigned getMemRefEltSizeInBytes(MemRefType memRefType) {
+unsigned getMemRefEltSizeInBytes(RankedMemRefType memRefType) {
   auto elementType = memRefType.getElementType();
 
   unsigned sizeInBits;
@@ -903,7 +903,7 @@ static Value *createPrivateMemRef(AffineForOp forOp, Operation *srcStoreOpInst,
   OpBuilder top(forInst->getParentOfType<FuncOp>().getBody());
   // Create new memref type based on slice bounds.
   auto *oldMemRef = cast<AffineStoreOp>(srcStoreOpInst).getMemRef();
-  auto oldMemRefType = oldMemRef->getType().cast<MemRefType>();
+  auto oldMemRefType = oldMemRef->getType().cast<RankedMemRefType>();
   unsigned rank = oldMemRefType.getRank();
 
   // Compute MemRefRegion for 'srcStoreOpInst' at depth 'dstLoopDepth'.
@@ -955,8 +955,8 @@ static Value *createPrivateMemRef(AffineForOp forOp, Operation *srcStoreOpInst,
   } else {
     newMemSpace = oldMemRefType.getMemorySpace();
   }
-  auto newMemRefType = MemRefType::get(newShape, oldMemRefType.getElementType(),
-                                       {}, newMemSpace);
+  auto newMemRefType = RankedMemRefType::get(
+      newShape, oldMemRefType.getElementType(), {}, newMemSpace);
   // Gather alloc operands for the dynamic dimensions of the memref.
   SmallVector<Value *, 4> allocOperands;
   unsigned dynamicDimCount = 0;

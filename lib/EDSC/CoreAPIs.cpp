@@ -33,7 +33,7 @@ using namespace mlir;
 
 mlir_type_t makeMemRefType(mlir_context_t context, mlir_type_t elemType,
                            int64_list_t sizes) {
-  auto t = mlir::MemRefType::get(
+  auto t = mlir::RankedMemRefType::get(
       llvm::ArrayRef<int64_t>(sizes.values, sizes.n),
       mlir::Type::getFromOpaquePointer(elemType),
       {mlir::AffineMap::getMultiDimIdentityMap(

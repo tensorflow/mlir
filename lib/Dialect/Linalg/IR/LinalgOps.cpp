@@ -324,7 +324,7 @@ void mlir::linalg::SliceOp::build(Builder *b, OperationState &result,
   result.addOperands(base);
   result.addOperands(indexings);
 
-  auto memRefType = base->getType().cast<MemRefType>();
+  auto memRefType = base->getType().cast<RankedMemRefType>();
   int64_t offset;
   SmallVector<int64_t, 4> strides;
   auto res = getStridesAndOffset(memRefType, strides, offset);
@@ -335,7 +335,7 @@ void mlir::linalg::SliceOp::build(Builder *b, OperationState &result,
   // TODO(ntv): propagate static size and stride information when available.
   SmallVector<int64_t, 4> sizes(rank, -1); // -1 encodes dynamic size.
   Type elementType = memRefType.getElementType();
-  result.addTypes({MemRefType::get(
+  result.addTypes({RankedMemRefType::get(
       sizes, elementType,
       {makeStridedLinearLayoutMap(strides, offset, b->getContext())},
       memRefType.getMemorySpace())});
@@ -402,7 +402,7 @@ void mlir::linalg::TransposeOp::build(Builder *b, OperationState &result,
   auto permutationMap = permutation.getValue();
   assert(permutationMap);
 
-  auto memRefType = view->getType().cast<MemRefType>();
+  auto memRefType = view->getType().cast<RankedMemRefType>();
   auto rank = memRefType.getRank();
   auto originalSizes = memRefType.getShape();
   // Compute permuted sizes.
@@ -420,8 +420,8 @@ void mlir::linalg::TransposeOp::build(Builder *b, OperationState &result,
   auto map = makeStridedLinearLayoutMap(strides, offset, b->getContext());
   map = permutationMap ? map.compose(permutationMap) : map;
   // Compute result type.
-  auto resultType = MemRefType::get(sizes, memRefType.getElementType(), map,
-                                    memRefType.getMemorySpace());
+  auto resultType = RankedMemRefType::get(sizes, memRefType.getElementType(),
+                                          map, memRefType.getMemorySpace());
 
   build(b, result, resultType, view, attrs);
   result.addAttribute(TransposeOp::getPermutationAttrName(), permutation);
@@ -438,7 +438,7 @@ static ParseResult parseTransposeOp(OpAsmParser &parser,
                                     OperationState &result) {
   OpAsmParser::OperandType view;
   AffineMapAttr permutation;
-  MemRefType type;
+  RankedMemRefType type;
   return failure(parser.parseOperand(view) ||
                  parser.parseAttribute(permutation,
                                        TransposeOp::getPermutationAttrName(),
@@ -533,7 +533,7 @@ static LogicalResult verify(YieldOp op) {
 //     memref<?x?xf32, stride_specification>
 // ```
 //
-// Where %0, %1 and %2 are ssa-values of type MemRefType with strides.
+// Where %0, %1 and %2 are ssa-values of type RankedMemRefType with strides.
 static void printLinalgLibraryOp(OpAsmPrinter &p, Operation *op) {
   assert(op->getAbstractOperation() && "unregistered operation");
   p << op->getName().getStringRef() << "(";
@@ -608,9 +608,9 @@ verifyStrideOrDilation(ConvOp op, ArrayRef<Attribute> attrs, bool isStride) {
 }
 
 static LogicalResult verify(ConvOp op) {
-  auto oType = op.output()->getType().cast<MemRefType>();
-  auto fType = op.filter()->getType().cast<MemRefType>();
-  auto iType = op.input()->getType().cast<MemRefType>();
+  auto oType = op.output()->getType().cast<RankedMemRefType>();
+  auto fType = op.filter()->getType().cast<RankedMemRefType>();
+  auto iType = op.input()->getType().cast<RankedMemRefType>();
   if (oType.getElementType() != iType.getElementType() ||
       oType.getElementType() != fType.getElementType())
     return op.emitOpError("expects memref elemental types to match");
@@ -780,7 +780,7 @@ SmallVector<AffineMap, 4> mlir::linalg::loopToOperandRangesMaps(Operation *op) {
 }
 
 static void appendMangledType(llvm::raw_string_ostream &ss, Type t) {
-  if (auto memref = t.dyn_cast<MemRefType>()) {
+  if (auto memref = t.dyn_cast<RankedMemRefType>()) {
     ss << "view";
     for (auto size : memref.getShape())
       if (size < 0)

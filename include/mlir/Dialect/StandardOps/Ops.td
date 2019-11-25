@@ -169,7 +169,7 @@ def AllocOp : Std_Op<"alloc"> {
 
     The optional `alignment` attribute may be specified to ensure that the
     region of memory that will be indexed is aligned at the specified byte
-    boundary. TODO(b/144281289) optional alignment attribute to MemRefType.
+    boundary. TODO(b/144281289) optional alignment attribute to RankedMemRefType.
 
       %0 = alloc()[%s] {alignment = 8} :
         memref<8x64xf32, (d0, d1)[s0] -> ((d0 + s0), d1), 1>
@@ -180,11 +180,11 @@ def AllocOp : Std_Op<"alloc"> {
   let results = (outs AnyMemRef);
 
   let builders = [OpBuilder<
-    "Builder *builder, OperationState &result, MemRefType memrefType", [{
+    "Builder *builder, OperationState &result, RankedMemRefType memrefType", [{
        result.types.push_back(memrefType);
      }]>,
     OpBuilder<
-    "Builder *builder, OperationState &result, MemRefType memrefType, " #
+    "Builder *builder, OperationState &result, RankedMemRefType memrefType, " #
     "ArrayRef<Value*> operands, IntegerAttr alignment = IntegerAttr()", [{
        result.addOperands(operands);
        result.types.push_back(memrefType);
@@ -195,7 +195,7 @@ def AllocOp : Std_Op<"alloc"> {
   let extraClassDeclaration = [{
     static StringRef getAlignmentAttrName() { return "alignment"; }
 
-    MemRefType getType() { return getResult()->getType().cast<MemRefType>(); }
+    RankedMemRefType getType() { return getResult()->getType().cast<RankedMemRefType>(); }
 
     /// Returns the number of symbolic operands (the ones in square brackets),
     /// which bind to the symbols of the memref's layout map.
@@ -796,7 +796,7 @@ def LoadOp : Std_Op<"load"> {
   let builders = [OpBuilder<
     "Builder *, OperationState &result, Value *memref,"
     "ArrayRef<Value *> indices = {}", [{
-      auto memrefType = memref->getType().cast<MemRefType>();
+      auto memrefType = memref->getType().cast<RankedMemRefType>();
       result.addOperands(memref);
       result.addOperands(indices);
       result.types.push_back(memrefType.getElementType());
@@ -805,8 +805,8 @@ def LoadOp : Std_Op<"load"> {
   let extraClassDeclaration = [{
     Value *getMemRef() { return getOperand(0); }
     void setMemRef(Value *value) { setOperand(0, value); }
-    MemRefType getMemRefType() {
-      return getMemRef()->getType().cast<MemRefType>();
+    RankedMemRefType getMemRefType() {
+      return getMemRef()->getType().cast<RankedMemRefType>();
     }
 
     operand_range getIndices() { return {operand_begin() + 1, operand_end()}; }
@@ -1054,8 +1054,8 @@ def StoreOp : Std_Op<"store"> {
 
       Value *getMemRef() { return getOperand(1); }
       void setMemRef(Value *value) { setOperand(1, value); }
-      MemRefType getMemRefType() {
-        return getMemRef()->getType().cast<MemRefType>();
+      RankedMemRefType getMemRefType() {
+        return getMemRef()->getType().cast<RankedMemRefType>();
       }
 
       operand_range getIndices() {
@@ -1111,7 +1111,7 @@ def TensorLoadOp : Std_Op<"tensor_load",
 
   let builders = [OpBuilder<
     "Builder *builder, OperationState &result, Value *memref", [{
-      auto memrefType = memref->getType().cast<MemRefType>();
+      auto memrefType = memref->getType().cast<RankedMemRefType>();
       auto resultType = RankedTensorType::get(memrefType.getShape(),
                                               memrefType.getElementType());
       result.addOperands(memref);
@@ -1219,7 +1219,7 @@ def ViewOp : Std_Op<"view", [NoSideEffect]> {
 
   let extraClassDeclaration = [{
     /// The result of a view is always a memref.
-    MemRefType getType() { return getResult()->getType().cast<MemRefType>(); }
+    RankedMemRefType getType() { return getResult()->getType().cast<RankedMemRefType>(); }
 
     /// Returns the dynamic offset for this view operation if specified.
     /// Returns nullptr if no dynamic offset was specified.
@@ -1367,12 +1367,12 @@ def SubViewOp : Std_Op<"subview", [NoSideEffect]> {
 
   let extraClassDeclaration = [{
     /// Returns the type of the base memref operand.
-    MemRefType getBaseMemRefType() {
-      return source()->getType().cast<MemRefType>();
+    RankedMemRefType getBaseMemRefType() {
+      return source()->getType().cast<RankedMemRefType>();
     }
 
     /// The result of a subview is always a memref.
-    MemRefType getType() { return getResult()->getType().cast<MemRefType>(); }
+    RankedMemRefType getType() { return getResult()->getType().cast<RankedMemRefType>(); }
 
     /// Returns as integer value the number of offset operands.
     int64_t getNumOffsets() {

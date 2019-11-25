@@ -75,19 +75,19 @@ static bool doubleBuffer(Value *oldMemRef, AffineForOp forOp) {
   OpBuilder bInner(forBody, forBody->begin());
 
   // Doubles the shape with a leading dimension extent of 2.
-  auto doubleShape = [&](MemRefType oldMemRefType) -> MemRefType {
+  auto doubleShape = [&](RankedMemRefType oldMemRefType) -> RankedMemRefType {
     // Add the leading dimension in the shape for the double buffer.
     ArrayRef<int64_t> oldShape = oldMemRefType.getShape();
     SmallVector<int64_t, 4> newShape(1 + oldMemRefType.getRank());
     newShape[0] = 2;
     std::copy(oldShape.begin(), oldShape.end(), newShape.begin() + 1);
     auto newMemRefType =
-        MemRefType::get(newShape, oldMemRefType.getElementType(), {},
-                        oldMemRefType.getMemorySpace());
+        RankedMemRefType::get(newShape, oldMemRefType.getElementType(), {},
+                              oldMemRefType.getMemorySpace());
     return newMemRefType;
   };
 
-  auto oldMemRefType = oldMemRef->getType().cast<MemRefType>();
+  auto oldMemRefType = oldMemRef->getType().cast<RankedMemRefType>();
   auto newMemRefType = doubleShape(oldMemRefType);
 
   // The double buffer is allocated right before 'forInst'.

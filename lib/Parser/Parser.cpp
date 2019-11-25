@@ -1033,7 +1033,7 @@ ParseResult Parser::parseStridedLayout(int64_t &offset,
   if (!maybeOffset && !question)
     return emitError("invalid offset");
   offset = maybeOffset ? static_cast<int64_t>(maybeOffset.getValue())
-                       : MemRefType::getDynamicStrideOrOffset();
+                       : RankedMemRefType::getDynamicStrideOrOffset();
   consumeToken();
 
   if (!consumeIf(Token::comma))
@@ -1131,7 +1131,7 @@ Type Parser::parseMemRefType() {
       return nullptr;
   }
 
-  return MemRefType::getChecked(dimensions, elementType, affineMapComposition,
+  return UnrankedMemRefType::getChecked(dimensions, elementType, affineMapComposition,
                                 memorySpace, getEncodedSourceLocation(typeLoc));
 }
 

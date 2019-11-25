@@ -218,8 +218,8 @@ def IsVectorTypePred : CPred<"$_self.isa<VectorType>()">;
 // Whether a type is a TensorType.
 def IsTensorTypePred : CPred<"$_self.isa<TensorType>()">;
 
-// Whether a type is a MemRefType.
-def IsMemRefTypePred : CPred<"$_self.isa<MemRefType>()">;
+// Whether a type is a RankedMemRefType.
+def IsMemRefTypePred : CPred<"$_self.isa<RankedMemRefType>()">;
 
 // Whether a type is a ShapedType.
 def IsShapedTypePred : CPred<"$_self.isa<ShapedType>()">;
@@ -519,8 +519,8 @@ class StaticShapeMemRefOf<list<Type> allowedTypes>
 
 def AnyStaticShapeMemRef : StaticShapeMemRefOf<[AnyType]>;
 
-// For a MemRefType, verify that it has strides.
-def HasStridesPred : CPred<[{ isStrided($_self.cast<MemRefType>()) }]>;
+// For a RankedMemRefType, verify that it has strides.
+def HasStridesPred : CPred<[{ isStrided($_self.cast<RankedMemRefType>()) }]>;
 
 class StridedMemRefOf<list<Type> allowedTypes>
     : Type<And<[MemRefOf<allowedTypes>.predicate, HasStridesPred]>,

@@ -23,7 +23,7 @@ using namespace mlir;
 using namespace mlir::edsc;
 
 static SmallVector<ValueHandle, 8> getMemRefSizes(Value *memRef) {
-  MemRefType memRefType = memRef->getType().cast<MemRefType>();
+  RankedMemRefType memRefType = memRef->getType().cast<RankedMemRefType>();
   assert(isStrided(memRefType) && "Expected strided MemRef type");
 
   SmallVector<ValueHandle, 8> res;
@@ -40,7 +40,7 @@ static SmallVector<ValueHandle, 8> getMemRefSizes(Value *memRef) {
 }
 
 mlir::edsc::MemRefView::MemRefView(Value *v) : base(v) {
-  assert(v->getType().isa<MemRefType>() && "MemRefType expected");
+  assert(v->getType().isa<RankedMemRefType>() && "RankedMemRefType expected");
 
   auto memrefSizeValues = getMemRefSizes(v);
   for (auto &size : memrefSizeValues) {

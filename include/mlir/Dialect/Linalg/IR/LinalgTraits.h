@@ -82,8 +82,8 @@ public:
     return llvm::None;
   }
   /// Return the `i`-th input view type.
-  MemRefType getInputViewType(unsigned i) {
-    return getInput(i)->getType().template cast<MemRefType>();
+  RankedMemRefType getInputViewType(unsigned i) {
+    return getInput(i)->getType().template cast<RankedMemRefType>();
   }
   /// Return the range over input views.
   Operation::operand_range getInputs() {
@@ -103,8 +103,8 @@ public:
     return llvm::None;
   }
   /// Return the `i`-th output view type.
-  MemRefType getOutputViewType(unsigned i) {
-    return getOutput(i)->getType().template cast<MemRefType>();
+  RankedMemRefType getOutputViewType(unsigned i) {
+    return getOutput(i)->getType().template cast<RankedMemRefType>();
   }
   /// Return the range over output views.
   Operation::operand_range getOutputs() {
@@ -115,7 +115,7 @@ public:
   /// Return the number of input and output views.
   unsigned getNumInputsAndOutputs() { return nInputs() + nOutputs(); }
   /// Return the `i`-th view type.
-  MemRefType getViewType(unsigned i) {
+  RankedMemRefType getViewType(unsigned i) {
     return (i < nInputs()) ? getInputViewType(i)
                            : getOutputViewType(i - nInputs());
   }

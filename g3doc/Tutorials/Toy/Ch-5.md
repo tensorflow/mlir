@@ -16,7 +16,7 @@ part of the program and is limited: it doesn't support representing our
 [next chapter](Ch-6.md) directly the `LLVM IR` dialect for lowering `print`. As
 part of this lowering, we will be lowering from the
 [TensorType](../../LangRef.md#tensor-type) that `Toy` operates on to the
-[MemRefType](../../LangRef.md#memref-type) that is indexed via an affine
+[RankedMemRefType](../../LangRef.md#memref-type) that is indexed via an affine
 loop-nest. Tensors represent an abstract value-typed sequence of data, meaning
 that they don't live in any memory. MemRefs, on the other hand, represent lower
 level buffer access, as they are concrete references to a region of memory.
@@ -89,7 +89,7 @@ remapped/replaced. This is used when dealing with type conversions, as the
 pattern will want to operate on values of the new type but match against the
 old. For our lowering, this invariant will be useful as it translates from the
 [TensorType](../../LangRef.md#tensor-type) currently being operated on to the
-[MemRefType](../../LangRef.md#memref-type). Let's look at a snippet of lowering
+[RankedMemRefType](../../LangRef.md#memref-type). Let's look at a snippet of lowering
 the `toy.transpose` operation:
 
 ```c++
@@ -189,7 +189,7 @@ void ToyToAffineLoweringPass::runOnFunction() {
 Before diving into the result of our lowering, this is a good time to discuss
 potential design considerations when it comes to partial lowering. In our
 lowering, we transform from a value-type, TensorType, to an allocated
-(buffer-like) type, MemRefType. However, given that we do not lower the
+(buffer-like) type, RankedMemRefType. However, given that we do not lower the
 `toy.print` operation, we need to temporarily bridge these two worlds. There are
 many ways to go about this, each with their own tradeoffs:
 

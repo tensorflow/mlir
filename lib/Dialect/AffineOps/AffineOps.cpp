@@ -930,11 +930,17 @@ ParseResult AffineDmaStartOp::parse(OpAsmParser &parser,
 }
 
 LogicalResult AffineDmaStartOp::verify() {
-  if (!getOperand(getSrcMemRefOperandIndex())->getType().isa<MemRefType>())
+  if (!getOperand(getSrcMemRefOperandIndex())
+           ->getType()
+           .isa<RankedMemRefType>())
     return emitOpError("expected DMA source to be of memref type");
-  if (!getOperand(getDstMemRefOperandIndex())->getType().isa<MemRefType>())
+  if (!getOperand(getDstMemRefOperandIndex())
+           ->getType()
+           .isa<RankedMemRefType>())
     return emitOpError("expected DMA destination to be of memref type");
-  if (!getOperand(getTagMemRefOperandIndex())->getType().isa<MemRefType>())
+  if (!getOperand(getTagMemRefOperandIndex())
+           ->getType()
+           .isa<RankedMemRefType>())
     return emitOpError("expected DMA tag to be of memref type");
 
   // DMAs from different memory spaces supported.
@@ -1024,7 +1030,7 @@ ParseResult AffineDmaWaitOp::parse(OpAsmParser &parser,
       parser.resolveOperand(numElementsInfo, indexType, result.operands))
     return failure();
 
-  if (!type.isa<MemRefType>())
+  if (!type.isa<RankedMemRefType>())
     return parser.emitError(parser.getNameLoc(),
                             "expected tag to be of memref type");
 
@@ -1035,7 +1041,7 @@ ParseResult AffineDmaWaitOp::parse(OpAsmParser &parser,
 }
 
 LogicalResult AffineDmaWaitOp::verify() {
-  if (!getOperand(0)->getType().isa<MemRefType>())
+  if (!getOperand(0)->getType().isa<RankedMemRefType>())
     return emitOpError("expected DMA tag to be of memref type");
   for (auto *idx : getTagIndices()) {
     if (!idx->getType().isIndex())
@@ -1750,7 +1756,7 @@ void AffineLoadOp::build(Builder *builder, OperationState &result,
   result.addOperands(operands);
   if (map)
     result.addAttribute(getMapAttrName(), AffineMapAttr::get(map));
-  auto memrefType = operands[0]->getType().cast<MemRefType>();
+  auto memrefType = operands[0]->getType().cast<RankedMemRefType>();
   result.types.push_back(memrefType.getElementType());
 }
 
@@ -1760,14 +1766,14 @@ void AffineLoadOp::build(Builder *builder, OperationState &result,
   assert(map.getNumInputs() == mapOperands.size() && "inconsistent index info");
   result.addOperands(memref);
   result.addOperands(mapOperands);
-  auto memrefType = memref->getType().cast<MemRefType>();
+  auto memrefType = memref->getType().cast<RankedMemRefType>();
   result.addAttribute(getMapAttrName(), AffineMapAttr::get(map));
   result.types.push_back(memrefType.getElementType());
 }
 
 void AffineLoadOp::build(Builder *builder, OperationState &result,
                          Value *memref, ArrayRef<Value *> indices) {
-  auto memrefType = memref->getType().cast<MemRefType>();
+  auto memrefType = memref->getType().cast<RankedMemRefType>();
   auto rank = memrefType.getRank();
   // Create identity map for memrefs with at least one dimension or () -> ()
   // for zero-dimensional memrefs.
@@ -1780,7 +1786,7 @@ ParseResult AffineLoadOp::parse(OpAsmParser &parser, OperationState &result) {
   auto &builder = parser.getBuilder();
   auto indexTy = builder.getIndexType();
 
-  MemRefType type;
+  RankedMemRefType type;
   OpAsmParser::OperandType memrefInfo;
   AffineMapAttr mapAttr;
   SmallVector<OpAsmParser::OperandType, 1> mapOperands;
@@ -1859,7 +1865,7 @@ void AffineStoreOp::build(Builder *builder, OperationState &result,
 void AffineStoreOp::build(Builder *builder, OperationState &result,
                           Value *valueToStore, Value *memref,
                           ArrayRef<Value *> indices) {
-  auto memrefType = memref->getType().cast<MemRefType>();
+  auto memrefType = memref->getType().cast<RankedMemRefType>();
   auto rank = memrefType.getRank();
   // Create identity map for memrefs with at least one dimension or () -> ()
   // for zero-dimensional memrefs.
@@ -1871,7 +1877,7 @@ void AffineStoreOp::build(Builder *builder, OperationState &result,
 ParseResult AffineStoreOp::parse(OpAsmParser &parser, OperationState &result) {
   auto indexTy = parser.getBuilder().getIndexType();
 
-  MemRefType type;
+  RankedMemRefType type;
   OpAsmParser::OperandType storeValueInfo;
   OpAsmParser::OperandType memrefInfo;
   AffineMapAttr mapAttr;

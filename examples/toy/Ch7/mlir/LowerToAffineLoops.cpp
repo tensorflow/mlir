@@ -36,14 +36,14 @@ using namespace mlir;
 // ToyToAffine RewritePatterns
 //===----------------------------------------------------------------------===//
 
-/// Convert the given TensorType into the corresponding MemRefType.
-static MemRefType convertTensorToMemRef(TensorType type) {
+/// Convert the given TensorType into the corresponding RankedMemRefType.
+static RankedMemRefType convertTensorToMemRef(TensorType type) {
   assert(type.hasRank() && "expected only ranked shapes");
-  return MemRefType::get(type.getShape(), type.getElementType());
+  return RankedMemRefType::get(type.getShape(), type.getElementType());
 }
 
-/// Insert an allocation and deallocation for the given MemRefType.
-static Value *insertAllocAndDealloc(MemRefType type, Location loc,
+/// Insert an allocation and deallocation for the given RankedMemRefType.
+static Value *insertAllocAndDealloc(RankedMemRefType type, Location loc,
                                     PatternRewriter &rewriter) {
   auto alloc = rewriter.create<AllocOp>(loc, type);
 

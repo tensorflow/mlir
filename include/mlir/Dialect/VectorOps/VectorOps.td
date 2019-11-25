@@ -377,8 +377,8 @@ def Vector_TransferReadOp :
   }];
 
   let extraClassDeclaration = [{
-    MemRefType getMemRefType() {
-      return memref()->getType().cast<MemRefType>();
+    RankedMemRefType getMemRefType() {
+      return memref()->getType().cast<RankedMemRefType>();
     }
     VectorType getVectorType() {
       return vector()->getType().cast<VectorType>();
@@ -441,8 +441,8 @@ def Vector_TransferWriteOp :
     VectorType getVectorType() {
       return vector()->getType().cast<VectorType>();
     }
-    MemRefType getMemRefType() {
-      return memref()->getType().cast<MemRefType>();
+    RankedMemRefType getMemRefType() {
+      return memref()->getType().cast<RankedMemRefType>();
     }
   }];
 }
@@ -481,11 +481,11 @@ def Vector_TypeCastOp :
   }];
 
   let extraClassDeclaration = [{
-    MemRefType getMemRefType() {
-      return memref()->getType().cast<MemRefType>();
+    RankedMemRefType getMemRefType() {
+      return memref()->getType().cast<RankedMemRefType>();
     }
-    MemRefType getResultMemRefType() {
-      return getResult()->getType().cast<MemRefType>();
+    RankedMemRefType getResultMemRefType() {
+      return getResult()->getType().cast<RankedMemRefType>();
     }
   }];
 }

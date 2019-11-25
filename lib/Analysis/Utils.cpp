@@ -97,13 +97,13 @@ void ComputationSliceState::clearBounds() {
 }
 
 unsigned MemRefRegion::getRank() const {
-  return memref->getType().cast<MemRefType>().getRank();
+  return memref->getType().cast<RankedMemRefType>().getRank();
 }
 
 Optional<int64_t> MemRefRegion::getConstantBoundingSizeAndShape(
     SmallVectorImpl<int64_t> *shape, std::vector<SmallVector<int64_t, 4>> *lbs,
     SmallVectorImpl<int64_t> *lbDivisors) const {
-  auto memRefType = memref->getType().cast<MemRefType>();
+  auto memRefType = memref->getType().cast<RankedMemRefType>();
   unsigned rank = memRefType.getRank();
   if (shape)
     shape->reserve(rank);
@@ -302,7 +302,7 @@ LogicalResult MemRefRegion::compute(Operation *op, unsigned loopDepth,
   // to guard against potential over-approximation from projection.
   // TODO(andydavis) Support dynamic memref dimensions.
   if (addMemRefDimBounds) {
-    auto memRefType = memref->getType().cast<MemRefType>();
+    auto memRefType = memref->getType().cast<RankedMemRefType>();
     for (unsigned r = 0; r < rank; r++) {
       cst.addConstantLowerBound(r, 0);
       int64_t dimSize = memRefType.getDimSize(r);
@@ -318,7 +318,7 @@ LogicalResult MemRefRegion::compute(Operation *op, unsigned loopDepth,
 }
 
 //  TODO(mlir-team): improve/complete this when we have target data.
-static unsigned getMemRefEltSizeInBytes(MemRefType memRefType) {
+static unsigned getMemRefEltSizeInBytes(RankedMemRefType memRefType) {
   auto elementType = memRefType.getElementType();
 
   unsigned sizeInBits;
@@ -334,7 +334,7 @@ static unsigned getMemRefEltSizeInBytes(MemRefType memRefType) {
 
 // Returns the size of the region.
 Optional<int64_t> MemRefRegion::getRegionSize() {
-  auto memRefType = memref->getType().cast<MemRefType>();
+  auto memRefType = memref->getType().cast<RankedMemRefType>();
 
   auto layoutMaps = memRefType.getAffineMaps();
   if (layoutMaps.size() > 1 ||
@@ -362,7 +362,7 @@ Optional<int64_t> MemRefRegion::getRegionSize() {
 /// otherwise.  If the element of the memref has vector type, takes into account
 /// size of the vector as well.
 //  TODO(mlir-team): improve/complete this when we have target data.
-Optional<uint64_t> mlir::getMemRefSizeInBytes(MemRefType memRefType) {
+Optional<uint64_t> mlir::getMemRefSizeInBytes(RankedMemRefType memRefType) {
   if (!memRefType.hasStaticShape())
     return None;
   auto elementType = memRefType.getElementType();
@@ -863,7 +863,7 @@ MemRefAccess::MemRefAccess(Operation *loadOrStoreOpInst) {
 }
 
 unsigned MemRefAccess::getRank() const {
-  return memref->getType().cast<MemRefType>().getRank();
+  return memref->getType().cast<RankedMemRefType>().getRank();
 }
 
 bool MemRefAccess::isStore() const { return isa<AffineStoreOp>(opInst); }

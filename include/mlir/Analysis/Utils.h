@@ -279,7 +279,7 @@ struct MemRefRegion {
 
 /// Returns the size of memref data in bytes if it's statically shaped, None
 /// otherwise.
-Optional<uint64_t> getMemRefSizeInBytes(MemRefType memRefType);
+Optional<uint64_t> getMemRefSizeInBytes(RankedMemRefType memRefType);
 
 /// Checks a load or store op for an out of bound access; returns failure if the
 /// access is out of bounds along any of the dimensions, success otherwise.

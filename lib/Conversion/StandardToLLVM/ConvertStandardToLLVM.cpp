@@ -162,7 +162,7 @@ static constexpr unsigned kAlignedPtrPosInMemRefDescriptor = 1;
 static constexpr unsigned kOffsetPosInMemRefDescriptor = 2;
 static constexpr unsigned kSizePosInMemRefDescriptor = 3;
 static constexpr unsigned kStridePosInMemRefDescriptor = 4;
-Type LLVMTypeConverter::convertMemRefType(MemRefType type) {
+Type LLVMTypeConverter::convertMemRefType(RankedMemRefType type) {
   int64_t offset;
   SmallVector<int64_t, 4> strides;
   bool strideSuccess = succeeded(getStridesAndOffset(type, strides, offset));
@@ -208,7 +208,7 @@ Type LLVMTypeConverter::convertStandardType(Type type) {
     return convertFloatType(floatType);
   if (auto indexType = type.dyn_cast<IndexType>())
     return convertIndexType(indexType);
-  if (auto memRefType = type.dyn_cast<MemRefType>())
+  if (auto memRefType = type.dyn_cast<RankedMemRefType>())
     return convertMemRefType(memRefType);
   if (auto vectorType = type.dyn_cast<VectorType>())
     return convertVectorType(vectorType);
@@ -221,7 +221,8 @@ Type LLVMTypeConverter::convertStandardType(Type type) {
 // Convert the element type of the memref `t` to to an LLVM type using
 // `lowering`, get a pointer LLVM type pointing to the converted `t`, wrap it
 // into the MLIR LLVM dialect type and return.
-static Type getMemRefElementPtrType(MemRefType t, LLVMTypeConverter &lowering) {
+static Type getMemRefElementPtrType(RankedMemRefType t,
+                                    LLVMTypeConverter &lowering) {
   auto elementType = t.getElementType();
   auto converted = lowering.convertType(elementType);
   if (!converted)
@@ -421,7 +422,7 @@ struct FuncOpConversion : public LLVMLegalizationPattern<FuncOp> {
       auto converted = lowering.convertType(t).dyn_cast<LLVM::LLVMType>();
       if (!converted)
         return matchFailure();
-      if (t.isa<MemRefType>()) {
+      if (t.isa<RankedMemRefType>()) {
         converted = converted.getPointerTo();
         promotedArgIndices.push_back(en.index());
       }
@@ -739,9 +740,9 @@ struct ConstLLVMOpLowering
   using Super::Super;
 };
 
-// Check if the MemRefType `type` is supported by the lowering. We currently
-// only support memrefs with identity maps.
-static bool isSupportedMemRefType(MemRefType type) {
+// Check if the RankedMemRefType `type` is supported by the lowering. We
+// currently only support memrefs with identity maps.
+static bool isSupportedMemRefType(RankedMemRefType type) {
   return type.getAffineMaps().empty() ||
          llvm::all_of(type.getAffineMaps(),
                       [](AffineMap map) { return map.isIdentity(); });
@@ -763,7 +764,7 @@ struct AllocOpLowering : public LLVMLegalizationPattern<AllocOp> {
   using LLVMLegalizationPattern<AllocOp>::LLVMLegalizationPattern;
 
   PatternMatchResult match(Operation *op) const override {
-    MemRefType type = cast<AllocOp>(op).getType();
+    RankedMemRefType type = cast<AllocOp>(op).getType();
     if (isSupportedMemRefType(type))
       return matchSuccess();
 
@@ -776,7 +777,7 @@ struct AllocOpLowering : public LLVMLegalizationPattern<AllocOp> {
     // Dynamic strides are ok if they can be deduced from dynamic sizes (which
     // is guaranteed when succeeded(successStrides)). Dynamic offset however can
     // never be alloc'ed.
-    if (offset == MemRefType::getDynamicStrideOrOffset())
+    if (offset == RankedMemRefType::getDynamicStrideOrOffset())
       return matchFailure();
 
     return matchSuccess();
@@ -786,7 +787,7 @@ struct AllocOpLowering : public LLVMLegalizationPattern<AllocOp> {
                ConversionPatternRewriter &rewriter) const override {
     auto loc = op->getLoc();
     auto allocOp = cast<AllocOp>(op);
-    MemRefType type = allocOp.getType();
+    RankedMemRefType type = allocOp.getType();
 
     // Get actual sizes of the memref as values: static sizes are constant
     // values and dynamic sizes are passed to 'alloc' as operands.  In case of
@@ -860,7 +861,7 @@ struct AllocOpLowering : public LLVMLegalizationPattern<AllocOp> {
     auto successStrides = getStridesAndOffset(type, strides, offset);
     assert(succeeded(successStrides) && "unexpected non-strided memref");
     (void)successStrides;
-    assert(offset != MemRefType::getDynamicStrideOrOffset() &&
+    assert(offset != RankedMemRefType::getDynamicStrideOrOffset() &&
            "unexpected dynamic offset");
 
     // 0-D memref corner case: they have size 1 ...
@@ -907,7 +908,7 @@ struct AllocOpLowering : public LLVMLegalizationPattern<AllocOp> {
     SmallVector<Value *, 4> strideValues(nStrides, nullptr);
     for (auto indexedStride : llvm::enumerate(llvm::reverse(strides))) {
       int64_t index = nStrides - 1 - indexedStride.index();
-      if (strides[index] == MemRefType::getDynamicStrideOrOffset())
+      if (strides[index] == RankedMemRefType::getDynamicStrideOrOffset())
         // Identity layout map is enforced in the match function, so we compute:
         //   `runningStride *= sizes[index]`
         runningStride =
@@ -930,8 +931,8 @@ struct AllocOpLowering : public LLVMLegalizationPattern<AllocOp> {
   }
 };
 
-// A CallOp automatically promotes MemRefType to a sequence of alloca/store and
-// passes the pointer to the MemRef across function boundaries.
+// A CallOp automatically promotes RankedMemRefType to a sequence of
+// alloca/store and passes the pointer to the MemRef across function boundaries.
 template <typename CallOpType>
 struct CallOpInterfaceLowering : public LLVMLegalizationPattern<CallOpType> {
   using LLVMLegalizationPattern<CallOpType>::LLVMLegalizationPattern;
@@ -969,8 +970,8 @@ struct CallOpInterfaceLowering : public LLVMLegalizationPattern<CallOpType> {
     // Otherwise, it had been converted to an operation producing a structure.
     // Extract individual results from the structure and return them as list.
     // TODO(aminim, ntv, riverriddle, zinenko): this seems like patching around
-    // a particular interaction between MemRefType and CallOp lowering. Find a
-    // way to avoid special casing.
+    // a particular interaction between RankedMemRefType and CallOp lowering.
+    // Find a way to avoid special casing.
     SmallVector<Value *, 4> results;
     results.reserve(numResults);
     for (unsigned i = 0; i < numResults; ++i) {
@@ -1031,9 +1032,9 @@ struct MemRefCastOpLowering : public LLVMLegalizationPattern<MemRefCastOp> {
 
   PatternMatchResult match(Operation *op) const override {
     auto memRefCastOp = cast<MemRefCastOp>(op);
-    MemRefType sourceType =
-        memRefCastOp.getOperand()->getType().cast<MemRefType>();
-    MemRefType targetType = memRefCastOp.getType();
+    RankedMemRefType sourceType =
+        memRefCastOp.getOperand()->getType().cast<RankedMemRefType>();
+    RankedMemRefType targetType = memRefCastOp.getType();
     return (isSupportedMemRefType(targetType) &&
             isSupportedMemRefType(sourceType))
                ? matchSuccess()
@@ -1063,7 +1064,8 @@ struct DimOpLowering : public LLVMLegalizationPattern<DimOp> {
                   ConversionPatternRewriter &rewriter) const override {
     auto dimOp = cast<DimOp>(op);
     OperandAdaptor<DimOp> transformed(operands);
-    MemRefType type = dimOp.getOperand()->getType().cast<MemRefType>();
+    RankedMemRefType type =
+        dimOp.getOperand()->getType().cast<RankedMemRefType>();
 
     auto shape = type.getShape();
     int64_t index = dimOp.getIndex();
@@ -1088,7 +1090,7 @@ struct LoadStoreOpLowering : public LLVMLegalizationPattern<Derived> {
   using Base = LoadStoreOpLowering<Derived>;
 
   PatternMatchResult match(Operation *op) const override {
-    MemRefType type = cast<Derived>(op).getMemRefType();
+    RankedMemRefType type = cast<Derived>(op).getMemRefType();
     return isSupportedMemRefType(type) ? this->matchSuccess()
                                        : this->matchFailure();
   }
@@ -1128,13 +1130,13 @@ struct LoadStoreOpLowering : public LLVMLegalizationPattern<Derived> {
     MemRefDescriptor memRefDescriptor(descriptor);
 
     Value *base = memRefDescriptor.alignedPtr(rewriter, loc);
-    Value *offsetValue = offset == MemRefType::getDynamicStrideOrOffset()
+    Value *offsetValue = offset == RankedMemRefType::getDynamicStrideOrOffset()
                              ? memRefDescriptor.offset(rewriter, loc)
                              : this->createIndexConstant(rewriter, loc, offset);
 
     for (int i = 0, e = indices.size(); i < e; ++i) {
       Value *stride =
-          strides[i] == MemRefType::getDynamicStrideOrOffset()
+          strides[i] == RankedMemRefType::getDynamicStrideOrOffset()
               ? memRefDescriptor.stride(rewriter, loc, i)
               : this->createIndexConstant(rewriter, loc, strides[i]);
       Value *additionalOffset =
@@ -1145,7 +1147,7 @@ struct LoadStoreOpLowering : public LLVMLegalizationPattern<Derived> {
     return rewriter.create<LLVM::GEPOp>(loc, elementTypePtr, base, offsetValue);
   }
 
-  Value *getDataPtr(Location loc, MemRefType type, Value *memRefDesc,
+  Value *getDataPtr(Location loc, RankedMemRefType type, Value *memRefDesc,
                     ArrayRef<Value *> indices,
                     ConversionPatternRewriter &rewriter,
                     llvm::Module &module) const {
@@ -1492,7 +1494,7 @@ struct SubViewOpLowering : public LLVMLegalizationPattern<SubViewOp> {
                   1 + viewOp.getNumOffsets() + viewOp.getNumSizes()),
         operands.end());
 
-    auto sourceMemRefType = viewOp.source()->getType().cast<MemRefType>();
+    auto sourceMemRefType = viewOp.source()->getType().cast<RankedMemRefType>();
     auto sourceElementTy =
         lowering.convertType(sourceMemRefType.getElementType())
             .dyn_cast_or_null<LLVM::LLVMType>();
@@ -1592,7 +1594,7 @@ struct ViewOpLowering : public LLVMLegalizationPattern<ViewOp> {
                    ArrayRef<int64_t> strides, Value *nextSize,
                    Value *runningStride, unsigned idx) const {
     assert(idx < strides.size());
-    if (strides[idx] != MemRefType::getDynamicStrideOrOffset())
+    if (strides[idx] != RankedMemRefType::getDynamicStrideOrOffset())
       return createIndexConstant(rewriter, loc, strides[idx]);
     if (nextSize)
       return runningStride
@@ -1646,8 +1648,8 @@ struct ViewOpLowering : public LLVMLegalizationPattern<ViewOp> {
     (void)numDynamicSizes;
     auto sizeAndOffsetOperands = adaptor.operands();
     assert(llvm::size(sizeAndOffsetOperands) == numDynamicSizes + 1 ||
-           offset != MemRefType::getDynamicStrideOrOffset());
-    Value *baseOffset = (offset != MemRefType::getDynamicStrideOrOffset())
+           offset != RankedMemRefType::getDynamicStrideOrOffset());
+    Value *baseOffset = (offset != RankedMemRefType::getDynamicStrideOrOffset())
                             ? createIndexConstant(rewriter, loc, offset)
                             // TODO(ntv): better adaptor.
                             : sizeAndOffsetOperands.back();
@@ -1827,7 +1829,7 @@ SmallVector<Value *, 4> LLVMTypeConverter::promoteMemRefDescriptors(
   for (auto it : llvm::zip(opOperands, operands)) {
     auto *operand = std::get<0>(it);
     auto *llvmOperand = std::get<1>(it);
-    if (!operand->getType().isa<MemRefType>()) {
+    if (!operand->getType().isa<RankedMemRefType>()) {
       promotedOperands.push_back(operand);
       continue;
     }

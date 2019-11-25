@@ -801,7 +801,8 @@ template <typename LoadOrStoreOpPointer>
 static LogicalResult vectorizeRootOrTerminal(Value *iv,
                                              LoadOrStoreOpPointer memoryOp,
                                              VectorizationState *state) {
-  auto memRefType = memoryOp.getMemRef()->getType().template cast<MemRefType>();
+  auto memRefType =
+      memoryOp.getMemRef()->getType().template cast<RankedMemRefType>();
 
   auto elementType = memRefType.getElementType();
   // TODO(ntv): ponder whether we want to further vectorize a vector value.

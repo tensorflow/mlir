@@ -28,7 +28,7 @@
 
 namespace mlir {
 
-class MemRefType;
+class RankedMemRefType;
 class Type;
 
 namespace edsc {

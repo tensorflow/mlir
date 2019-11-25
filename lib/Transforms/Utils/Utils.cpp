@@ -64,9 +64,11 @@ LogicalResult mlir::replaceAllMemRefUsesWith(Value *oldMemRef, Value *newMemRef,
                                              AffineMap indexRemap,
                                              ArrayRef<Value *> extraOperands,
                                              ArrayRef<Value *> symbolOperands) {
-  unsigned newMemRefRank = newMemRef->getType().cast<MemRefType>().getRank();
+  unsigned newMemRefRank =
+      newMemRef->getType().cast<RankedMemRefType>().getRank();
   (void)newMemRefRank; // unused in opt mode
-  unsigned oldMemRefRank = oldMemRef->getType().cast<MemRefType>().getRank();
+  unsigned oldMemRefRank =
+      oldMemRef->getType().cast<RankedMemRefType>().getRank();
   (void)oldMemRefRank; // unused in opt mode
   if (indexRemap) {
     assert(indexRemap.getNumSymbols() == symbolOperands.size() &&
@@ -79,8 +81,8 @@ LogicalResult mlir::replaceAllMemRefUsesWith(Value *oldMemRef, Value *newMemRef,
   }
 
   // Assert same elemental type.
-  assert(oldMemRef->getType().cast<MemRefType>().getElementType() ==
-         newMemRef->getType().cast<MemRefType>().getElementType());
+  assert(oldMemRef->getType().cast<RankedMemRefType>().getElementType() ==
+         newMemRef->getType().cast<RankedMemRefType>().getElementType());
 
   if (!isMemRefDereferencingOp(*op))
     // Failure: memref used in a non-dereferencing context (potentially
@@ -234,9 +236,11 @@ LogicalResult mlir::replaceAllMemRefUsesWith(Value *oldMemRef, Value *newMemRef,
                                              ArrayRef<Value *> symbolOperands,
                                              Operation *domInstFilter,
                                              Operation *postDomInstFilter) {
-  unsigned newMemRefRank = newMemRef->getType().cast<MemRefType>().getRank();
+  unsigned newMemRefRank =
+      newMemRef->getType().cast<RankedMemRefType>().getRank();
   (void)newMemRefRank; // unused in opt mode
-  unsigned oldMemRefRank = oldMemRef->getType().cast<MemRefType>().getRank();
+  unsigned oldMemRefRank =
+      oldMemRef->getType().cast<RankedMemRefType>().getRank();
   (void)oldMemRefRank;
   if (indexRemap) {
     assert(indexRemap.getNumSymbols() == symbolOperands.size() &&
@@ -249,8 +253,8 @@ LogicalResult mlir::replaceAllMemRefUsesWith(Value *oldMemRef, Value *newMemRef,
   }
 
   // Assert same elemental type.
-  assert(oldMemRef->getType().cast<MemRefType>().getElementType() ==
-         newMemRef->getType().cast<MemRefType>().getElementType());
+  assert(oldMemRef->getType().cast<RankedMemRefType>().getElementType() ==
+         newMemRef->getType().cast<RankedMemRefType>().getElementType());
 
   std::unique_ptr<DominanceInfo> domInfo;
   std::unique_ptr<PostDominanceInfo> postDomInfo;
@@ -400,7 +404,7 @@ void mlir::createAffineComputationSlice(
 
 // TODO: Currently works for static memrefs with a single layout map.
 LogicalResult mlir::normalizeMemRef(AllocOp allocOp) {
-  MemRefType memrefType = allocOp.getType();
+  RankedMemRefType memrefType = allocOp.getType();
   unsigned rank = memrefType.getRank();
   if (rank == 0)
     return success();
@@ -457,8 +461,8 @@ LogicalResult mlir::normalizeMemRef(AllocOp allocOp) {
   auto *oldMemRef = allocOp.getResult();
   SmallVector<Value *, 4> symbolOperands(allocOp.getSymbolicOperands());
 
-  auto newMemRefType = MemRefType::get(newShape, memrefType.getElementType(),
-                                       b.getMultiDimIdentityMap(newRank));
+  auto newMemRefType = RankedMemRefType::get(
+      newShape, memrefType.getElementType(), b.getMultiDimIdentityMap(newRank));
   auto newAlloc = b.create<AllocOp>(allocOp.getLoc(), newMemRefType);
 
   // Replace all uses of the old memref.

@@ -114,7 +114,7 @@ private:
   // resulting type is an LLVM structure type that contains:
   //   1. a pointer to the (converted) memref element type
   //   2. as many index types as memref has dynamic dimensions.
-  Type convertMemRefType(MemRefType type);
+  Type convertMemRefType(RankedMemRefType type);
 
   // Convert a 1D vector type into an LLVM vector type.
   Type convertVectorType(VectorType type);

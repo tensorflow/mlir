@@ -184,11 +184,11 @@ public:
                     Value *stride = nullptr,
                     Value *elementsPerStride = nullptr);
 
-  // Returns the source MemRefType for this DMA operation.
+  // Returns the source RankedMemRefType for this DMA operation.
   Value *getSrcMemRef() { return getOperand(0); }
-  // Returns the rank (number of indices) of the source MemRefType.
+  // Returns the rank (number of indices) of the source RankedMemRefType.
   unsigned getSrcMemRefRank() {
-    return getSrcMemRef()->getType().cast<MemRefType>().getRank();
+    return getSrcMemRef()->getType().cast<RankedMemRefType>().getRank();
   }
   // Returns the source memerf indices for this DMA operation.
   operand_range getSrcIndices() {
@@ -196,17 +196,17 @@ public:
             getOperation()->operand_begin() + 1 + getSrcMemRefRank()};
   }
 
-  // Returns the destination MemRefType for this DMA operations.
+  // Returns the destination RankedMemRefType for this DMA operations.
   Value *getDstMemRef() { return getOperand(1 + getSrcMemRefRank()); }
-  // Returns the rank (number of indices) of the destination MemRefType.
+  // Returns the rank (number of indices) of the destination RankedMemRefType.
   unsigned getDstMemRefRank() {
-    return getDstMemRef()->getType().cast<MemRefType>().getRank();
+    return getDstMemRef()->getType().cast<RankedMemRefType>().getRank();
   }
   unsigned getSrcMemorySpace() {
-    return getSrcMemRef()->getType().cast<MemRefType>().getMemorySpace();
+    return getSrcMemRef()->getType().cast<RankedMemRefType>().getMemorySpace();
   }
   unsigned getDstMemorySpace() {
-    return getDstMemRef()->getType().cast<MemRefType>().getMemorySpace();
+    return getDstMemRef()->getType().cast<RankedMemRefType>().getMemorySpace();
   }
 
   // Returns the destination memref indices for this DMA operation.
@@ -225,9 +225,9 @@ public:
   Value *getTagMemRef() {
     return getOperand(1 + getSrcMemRefRank() + 1 + getDstMemRefRank() + 1);
   }
-  // Returns the rank (number of indices) of the tag MemRefType.
+  // Returns the rank (number of indices) of the tag RankedMemRefType.
   unsigned getTagMemRefRank() {
-    return getTagMemRef()->getType().cast<MemRefType>().getRank();
+    return getTagMemRef()->getType().cast<RankedMemRefType>().getRank();
   }
 
   // Returns the tag memref index for this DMA operation.
@@ -318,7 +318,7 @@ public:
 
   // Returns the rank (number of indices) of the tag memref.
   unsigned getTagMemRefRank() {
-    return getTagMemRef()->getType().cast<MemRefType>().getRank();
+    return getTagMemRef()->getType().cast<RankedMemRefType>().getRank();
   }
 
   // Returns the number of elements transferred in the associated DMA operation.

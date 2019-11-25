@@ -60,10 +60,10 @@ static Value *allocBuffer(Type elementType, Value *size, bool dynamicBuffers) {
   auto width = llvm::divideCeil(elementType.getIntOrFloatBitWidth(), 8);
   if (!dynamicBuffers)
     if (auto cst = dyn_cast_or_null<ConstantIndexOp>(size->getDefiningOp()))
-      return alloc(
-          MemRefType::get(width * cst.getValue(), IntegerType::get(8, ctx)));
+      return alloc(RankedMemRefType::get(width * cst.getValue(),
+                                         IntegerType::get(8, ctx)));
   Value *mul = muli(constant_index(width), size);
-  return alloc(MemRefType::get(-1, IntegerType::get(8, ctx)), mul);
+  return alloc(RankedMemRefType::get(-1, IntegerType::get(8, ctx)), mul);
 }
 
 // Performs promotion of a `subView` into a local buffer of the size of the
@@ -107,8 +107,9 @@ static PromotionInfo promoteFullTileBuffer(OpBuilder &b, Location loc,
   SmallVector<int64_t, 4> dynSizes(fullRanges.size(), -1);
   auto *buffer =
       allocBuffer(viewType.getElementType(), allocSize, dynamicBuffers);
-  auto fullLocalView = view(
-      MemRefType::get(dynSizes, viewType.getElementType()), buffer, fullRanges);
+  auto fullLocalView =
+      view(RankedMemRefType::get(dynSizes, viewType.getElementType()), buffer,
+           fullRanges);
   auto partialLocalView = slice(fullLocalView, partialRanges);
   return PromotionInfo{buffer, fullLocalView, partialLocalView};
 }

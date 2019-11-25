@@ -168,7 +168,7 @@ makeTiledViews(OpBuilder &b, Location loc, LinalgOp linalgOp,
   for (unsigned viewIndex = 0; viewIndex < linalgOp.getNumInputsAndOutputs();
        ++viewIndex) {
     Value *view = *(viewIteratorBegin + viewIndex);
-    unsigned rank = view->getType().cast<MemRefType>().getRank();
+    unsigned rank = view->getType().cast<RankedMemRefType>().getRank();
     auto map = loopToOperandRangesMaps(linalgOp)[viewIndex];
     // If the view is not tiled, we can use it as is.
     if (!isTiled(map, tileSizes)) {

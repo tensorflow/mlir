@@ -53,7 +53,7 @@ public:
   PatternMatchResult
   matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
                   ConversionPatternRewriter &rewriter) const override {
-    auto memRefType = (*op->operand_type_begin()).cast<MemRefType>();
+    auto memRefType = (*op->operand_type_begin()).cast<RankedMemRefType>();
     auto memRefShape = memRefType.getShape();
     auto loc = op->getLoc();
     auto *llvmDialect =

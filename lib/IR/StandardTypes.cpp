@@ -178,7 +178,7 @@ ArrayRef<int64_t> ShapedType::getShape() const {
   case StandardTypes::RankedTensor:
     return cast<RankedTensorType>().getShape();
   case StandardTypes::MemRef:
-    return cast<MemRefType>().getShape();
+    return cast<RankedMemRefType>().getShape();
   default:
     llvm_unreachable("not a ShapedType or not ranked");
   }
@@ -304,43 +304,45 @@ LogicalResult UnrankedTensorType::verifyConstructionInvariants(
 }
 
 //===----------------------------------------------------------------------===//
-// MemRefType
+// RankedMemRefType
 //===----------------------------------------------------------------------===//
 
-/// Get or create a new MemRefType based on shape, element type, affine
+/// Get or create a new RankedMemRefType based on shape, element type, affine
 /// map composition, and memory space.  Assumes the arguments define a
-/// well-formed MemRef type.  Use getChecked to gracefully handle MemRefType
-/// construction failures.
-MemRefType MemRefType::get(ArrayRef<int64_t> shape, Type elementType,
-                           ArrayRef<AffineMap> affineMapComposition,
-                           unsigned memorySpace) {
+/// well-formed MemRef type.  Use getChecked to gracefully handle
+/// RankedMemRefType construction failures.
+RankedMemRefType RankedMemRefType::get(ArrayRef<int64_t> shape,
+                                       Type elementType,
+                                       ArrayRef<AffineMap> affineMapComposition,
+                                       unsigned memorySpace) {
   auto result = getImpl(shape, elementType, affineMapComposition, memorySpace,
                         /*location=*/llvm::None);
-  assert(result && "Failed to construct instance of MemRefType.");
+  assert(result && "Failed to construct instance of RankedMemRefType.");
   return result;
 }
 
-/// Get or create a new MemRefType based on shape, element type, affine
+/// Get or create a new RankedMemRefType based on shape, element type, affine
 /// map composition, and memory space declared at the given location.
 /// If the location is unknown, the last argument should be an instance of
-/// UnknownLoc.  If the MemRefType defined by the arguments would be
+/// UnknownLoc.  If the RankedMemRefType defined by the arguments would be
 /// ill-formed, emits errors (to the handler registered with the context or to
 /// the error stream) and returns nullptr.
-MemRefType MemRefType::getChecked(ArrayRef<int64_t> shape, Type elementType,
-                                  ArrayRef<AffineMap> affineMapComposition,
-                                  unsigned memorySpace, Location location) {
+RankedMemRefType
+RankedMemRefType::getChecked(ArrayRef<int64_t> shape, Type elementType,
+                             ArrayRef<AffineMap> affineMapComposition,
+                             unsigned memorySpace, Location location) {
   return getImpl(shape, elementType, affineMapComposition, memorySpace,
                  location);
 }
 
-/// Get or create a new MemRefType defined by the arguments.  If the resulting
-/// type would be ill-formed, return nullptr.  If the location is provided,
-/// emit detailed error messages.  To emit errors when the location is unknown,
-/// pass in an instance of UnknownLoc.
-MemRefType MemRefType::getImpl(ArrayRef<int64_t> shape, Type elementType,
-                               ArrayRef<AffineMap> affineMapComposition,
-                               unsigned memorySpace,
-                               Optional<Location> location) {
+/// Get or create a new RankedMemRefType defined by the arguments.  If the
+/// resulting type would be ill-formed, return nullptr.  If the location is
+/// provided, emit detailed error messages.  To emit errors when the location is
+/// unknown, pass in an instance of UnknownLoc.
+RankedMemRefType
+RankedMemRefType::getImpl(ArrayRef<int64_t> shape, Type elementType,
+                          ArrayRef<AffineMap> affineMapComposition,
+                          unsigned memorySpace, Optional<Location> location) {
   auto *context = elementType.getContext();
 
   // Check that memref is formed from allowed types.
@@ -393,13 +395,17 @@ MemRefType MemRefType::getImpl(ArrayRef<int64_t> shape, Type elementType,
                    cleanedAffineMapComposition, memorySpace);
 }
 
-ArrayRef<int64_t> MemRefType::getShape() const { return getImpl()->getShape(); }
+ArrayRef<int64_t> RankedMemRefType::getShape() const {
+  return getImpl()->getShape();
+}
 
-ArrayRef<AffineMap> MemRefType::getAffineMaps() const {
+ArrayRef<AffineMap> RankedMemRefType::getAffineMaps() const {
   return getImpl()->getAffineMaps();
 }
 
-unsigned MemRefType::getMemorySpace() const { return getImpl()->memorySpace; }
+unsigned RankedMemRefType::getMemorySpace() const {
+  return getImpl()->memorySpace;
+}
 
 /// Given MemRef `sizes` that are either static or dynamic, returns the
 /// canonical "contiguous" strides AffineExpr. Strides are multiplicative and
@@ -455,14 +461,14 @@ static void accumulateStrides(MutableArrayRef<int64_t> strides,
     seen[pos] = true;
     return;
   }
-  if (strides[pos] != MemRefType::getDynamicStrideOrOffset())
+  if (strides[pos] != RankedMemRefType::getDynamicStrideOrOffset())
     // Already seen case accumulates unless they are already saturated.
     strides[pos] += val;
 }
 
 // This sums multiple offsets as they are seen. In the particular case of
 // accumulating a dynamic offset with either a static of dynamic one, this
-// saturates to MemRefType::getDynamicStrideOrOffset().
+// saturates to RankedMemRefType::getDynamicStrideOrOffset().
 static void accumulateOffset(int64_t &offset, bool &seenOffset, int64_t val) {
   if (!seenOffset) {
     // Newly seen case, sets value
@@ -470,7 +476,7 @@ static void accumulateOffset(int64_t &offset, bool &seenOffset, int64_t val) {
     seenOffset = true;
     return;
   }
-  if (offset != MemRefType::getDynamicStrideOrOffset())
+  if (offset != RankedMemRefType::getDynamicStrideOrOffset())
     // Already seen case accumulates unless they are already saturated.
     offset += val;
 }
@@ -503,7 +509,7 @@ static void extractStrides(AffineExpr e, MutableArrayRef<int64_t> strides,
     }
     auto cst = bin.getRHS().dyn_cast<AffineConstantExpr>();
     if (!cst) {
-      strides[dim.getPosition()] = MemRefType::getDynamicStrideOrOffset();
+      strides[dim.getPosition()] = RankedMemRefType::getDynamicStrideOrOffset();
       seen[dim.getPosition()] = true;
     } else {
       accumulateStrides(strides, seen, dim.getPosition(), cst.getValue());
@@ -517,7 +523,7 @@ static void extractStrides(AffineExpr e, MutableArrayRef<int64_t> strides,
         accumulateOffset(offset, seenOffset, cst.getValue());
       } else if (auto sym = e.dyn_cast<AffineSymbolExpr>()) {
         // Independent symbols saturate.
-        offset = MemRefType::getDynamicStrideOrOffset();
+        offset = RankedMemRefType::getDynamicStrideOrOffset();
         seenOffset = true;
       } else if (auto dim = e.dyn_cast<AffineDimExpr>()) {
         // Independent symbols cumulate 1.
@@ -544,7 +550,7 @@ static void extractStridesFromTerm(AffineExpr e,
   }
   if (auto sym = e.dyn_cast<AffineSymbolExpr>()) {
     assert(!seenOffset && "unexpected `seen` bit with single term");
-    offset = MemRefType::getDynamicStrideOrOffset();
+    offset = RankedMemRefType::getDynamicStrideOrOffset();
     seenOffset = true;
     return;
   }
@@ -558,7 +564,7 @@ static void extractStridesFromTerm(AffineExpr e,
   llvm_unreachable("unexpected binary operation");
 }
 
-LogicalResult mlir::getStridesAndOffset(MemRefType t,
+LogicalResult mlir::getStridesAndOffset(RankedMemRefType t,
                                         SmallVectorImpl<int64_t> &strides,
                                         int64_t &offset) {
   auto affineMaps = t.getAffineMaps();
@@ -672,7 +678,7 @@ AffineMap mlir::makeStridedLinearLayoutMap(ArrayRef<int64_t> strides,
 
   // AffineExpr for offset.
   // Static case.
-  if (offset != MemRefType::getDynamicStrideOrOffset()) {
+  if (offset != RankedMemRefType::getDynamicStrideOrOffset()) {
     auto cst = getAffineConstantExpr(offset, context);
     expr = cst;
   } else {
@@ -689,7 +695,7 @@ AffineMap mlir::makeStridedLinearLayoutMap(ArrayRef<int64_t> strides,
     auto d = getAffineDimExpr(dim, context);
     AffineExpr mult;
     // Static case.
-    if (stride != MemRefType::getDynamicStrideOrOffset())
+    if (stride != RankedMemRefType::getDynamicStrideOrOffset())
       mult = getAffineConstantExpr(stride, context);
     else
       // Dynamic case, new symbol for each new stride.
@@ -700,7 +706,7 @@ AffineMap mlir::makeStridedLinearLayoutMap(ArrayRef<int64_t> strides,
   return AffineMap::get(strides.size(), nSymbols, expr);
 }
 
-bool mlir::isStrided(MemRefType t) {
+bool mlir::isStrided(RankedMemRefType t) {
   int64_t offset;
   SmallVector<int64_t, 4> stridesAndOffset;
   auto res = getStridesAndOffset(t, stridesAndOffset, offset);

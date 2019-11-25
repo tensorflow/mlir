@@ -167,10 +167,10 @@ public:
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op->getLoc();
     vector::TypeCastOp castOp = cast<vector::TypeCastOp>(op);
-    MemRefType sourceMemRefType =
-        castOp.getOperand()->getType().cast<MemRefType>();
-    MemRefType targetMemRefType =
-        castOp.getResult()->getType().cast<MemRefType>();
+    RankedMemRefType sourceMemRefType =
+        castOp.getOperand()->getType().cast<RankedMemRefType>();
+    RankedMemRefType targetMemRefType =
+        castOp.getResult()->getType().cast<RankedMemRefType>();
 
     // Only static shape casts supported atm.
     if (!sourceMemRefType.hasStaticShape() ||

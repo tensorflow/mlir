@@ -256,7 +256,7 @@ LLVMOpLowering::LLVMOpLowering(StringRef rootOpName, MLIRContext *context,
 /* StructBuilder implementation                                               */
 /*============================================================================*/
 StructBuilder::StructBuilder(Value *value) : value(value) {
-  assert(value != nullptr, "value cannot be null");
+  assert(value != nullptr && "value cannot be null");
   structType = value->getType().cast<LLVM::LLVMType>();
 }
 
@@ -279,7 +279,7 @@ void StructBuilder::setPtr(OpBuilder &builder, Location loc, unsigned pos,
 /// Construct a helper for the given descriptor value.
 MemRefDescriptor::MemRefDescriptor(Value *descriptor)
     : StructBuilder(descriptor) {
-  assert(value != nullptr, "value cannot be null");
+  assert(value != nullptr && "value cannot be null");
   indexType = value->getType().cast<LLVM::LLVMType>().getStructElementType(
       kOffsetPosInMemRefDescriptor);
 }
@@ -1004,6 +1004,13 @@ struct CallOpInterfaceLowering : public LLVMLegalizationPattern<CallOpType> {
     Type packedResult;
     unsigned numResults = callOp.getNumResults();
     auto resultTypes = llvm::to_vector<4>(callOp.getResultTypes());
+
+    for (Type resType : resultTypes) {
+      assert(!resType.isa<UnrankedMemRefType>() &&
+             "Returning unranked memref is not supported. Pass result as an"
+             "argument instead.");
+    }
+
     if (numResults != 0) {
       if (!(packedResult = this->lowering.packFunctionResults(resultTypes)))
         return this->matchFailure();

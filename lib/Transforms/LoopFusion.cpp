@@ -1025,7 +1025,7 @@ static bool canFuseSrcWhichWritesToLiveOut(unsigned srcId, unsigned dstId,
          "Expected only outgoing edges from memref in srcId");
 
   // Return false if 'srcNode' has more than one output edge on 'memref'.
-  if (memrefNumOutEdges != 1)
+  if (memrefNumOutEdges > 1)
     return false;
 
   // Compute MemRefRegion 'srcWriteRegion' for 'srcStoreOp' on 'memref'.

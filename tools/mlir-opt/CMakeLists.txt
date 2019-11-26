@@ -33,6 +33,7 @@ set(LIBS
   MLIRLLVMIR
   MLIRLoopOps
   MLIRNVVMIR
+  MLIROpenMPIR
   MLIROptMain
   MLIRParser
   MLIRPass

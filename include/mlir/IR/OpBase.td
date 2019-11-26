@@ -938,12 +938,18 @@ class IntEnumAttr<I intType, string name, string description,
 class I32EnumAttr<string name, string description,
                   list<I32EnumAttrCase> cases> :
     IntEnumAttr<I32, name, description, cases> {
+  let returnType = cppNamespace # "::" # name;
   let underlyingType = "uint32_t";
+  let convertFromStorage = "static_cast<" # returnType # ">($_self.getInt())";
+  let constBuilderCall = "$_builder.getI32IntegerAttr(static_cast<int32_t>($0))";
 }
 class I64EnumAttr<string name, string description,
                   list<I64EnumAttrCase> cases> :
     IntEnumAttr<I64, name, description, cases> {
+  let returnType = cppNamespace # "::" # name;
   let underlyingType = "uint64_t";
+  let convertFromStorage = "static_cast<" # returnType # ">($_self.getInt())";
+  let constBuilderCall = "$_builder.getI64IntegerAttr(static_cast<int64_t>($0))";
 }
 
 // A bit enum stored with 32-bit IntegerAttr.
@@ -963,7 +969,10 @@ class BitEnumAttr<string name, string description,
           ")))">
   ]>;
 
+  let returnType = cppNamespace # "::" # name;
   let underlyingType = "uint32_t";
+  let convertFromStorage = "static_cast<" # returnType # ">($_self.getInt())";
+  let constBuilderCall = "$_builder.getI32IntegerAttr(static_cast<int32_t>($0))";
 
   // We need to return a string because we may concatenate symbols for multiple
   // bits together.
@@ -1229,6 +1238,10 @@ class IntMinValue<int n> : AttrConstraint<
 class ArrayMinCount<int n> : AttrConstraint<
     CPred<"$_self.cast<ArrayAttr>().size() >= " # n>,
     "with at least " # n # " elements">;
+
+class ArrayCount<int n> : AttrConstraint<
+    CPred<"$_self.cast<ArrayAttr>().size() == " #n>,
+    "with exactly " # n # " elements">;
 
 class IntArrayNthElemEq<int index, int value> : AttrConstraint<
     And<[
@@ -1667,6 +1680,12 @@ class TCOpResIsShapedTypePred<int i, int j> : And<[
       IsShapedTypePred>,
     SubstLeaves<"$_self", "$_op.getOperand(" # j # ")->getType()",
       IsShapedTypePred>]>;
+
+// Predicate to verify that the i'th result and the j'th operand have the same
+// type.
+class TCresIsSameAsOpBase<int i, int j> :
+    CPred<"$_op.getResult(" # i # ")->getType() == "
+          "$_op.getOperand(" # j # ")->getType()">;
 
 // Basic Predicate to verify that the i'th result and the j'th operand have the
 // same elemental type.

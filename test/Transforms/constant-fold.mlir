@@ -50,6 +50,34 @@ func @addf_splat_tensor() -> tensor<4xf32> {
 
 // -----
 
+// CHECK-LABEL: func @addf_dense_tensor
+func @addf_dense_tensor() -> tensor<4xf32> {
+  %0 = constant dense<[1.5, 2.5, 3.5, 4.5]> : tensor<4xf32>
+  %1 = constant dense<[1.5, 2.5, 3.5, 4.5]> : tensor<4xf32>
+
+  // CHECK-NEXT: [[C:%.+]] = constant dense<[3.{{0*}}e+00, 5.{{0*}}e+00, 7.{{0*}}e+00, 9.{{0*}}e+00]> : tensor<4xf32>
+  %2 = addf %0, %1 : tensor<4xf32>
+
+  // CHECK-NEXT: return [[C]]
+  return %2 : tensor<4xf32>
+}
+
+// -----
+
+// CHECK-LABEL: func @addf_dense_and_splat_tensors
+func @addf_dense_and_splat_tensors() -> tensor<4xf32> {
+  %0 = constant dense<[1.5, 2.5, 3.5, 4.5]> : tensor<4xf32>
+  %1 = constant dense<1.5> : tensor<4xf32>
+
+  // CHECK-NEXT: [[C:%.+]] = constant dense<[3.{{0*}}e+00, 4.{{0*}}e+00, 5.{{0*}}e+00, 6.{{0*}}e+00]> : tensor<4xf32>
+  %2 = addf %0, %1 : tensor<4xf32>
+
+  // CHECK-NEXT: return [[C]]
+  return %2 : tensor<4xf32>
+}
+
+// -----
+
 // CHECK-LABEL: func @simple_addi
 func @simple_addi() -> i32 {
   %0 = constant 1 : i32
@@ -185,11 +213,14 @@ func @mulf_splat_tensor() -> tensor<4xf32> {
 // -----
 
 // CHECK-LABEL: func @simple_divis
-func @simple_divis() -> (i32, i32) {
+func @simple_divis() -> (i32, i32, i32) {
+  // CHECK-DAG: [[C0:%.+]] = constant 0
+  %z = constant 0 : i32
+  // CHECK-DAG: [[C6:%.+]] = constant 6
   %0 = constant 6 : i32
   %1 = constant 2 : i32
 
-  // CHECK-NEXT:[[C3:%.+]] = constant 3 : i32
+  // CHECK-NEXT: [[C3:%.+]] = constant 3 : i32
   %2 = divis %0, %1 : i32
 
   %3 = constant -2 : i32
@@ -197,28 +228,87 @@ func @simple_divis() -> (i32, i32) {
   // CHECK-NEXT: [[CM3:%.+]] = constant -3 : i32
   %4 = divis %0, %3 : i32
 
-  // CHECK-NEXT: return [[C3]], [[CM3]]
-  return %2, %4 : i32, i32
+  // CHECK-NEXT: [[XZ:%.+]] = divis [[C6]], [[C0]]
+  %5 = divis %0, %z : i32
+
+  // CHECK-NEXT: return [[C3]], [[CM3]], [[XZ]]
+  return %2, %4, %5 : i32, i32, i32
+}
+
+// -----
+
+// CHECK-LABEL: func @divis_splat_tensor
+func @divis_splat_tensor() -> (tensor<4xi32>, tensor<4xi32>, tensor<4xi32>) {
+  // CHECK-DAG: [[C0:%.+]] = constant dense<0>
+  %z = constant dense<0> : tensor<4xi32>
+  // CHECK-DAG: [[C6:%.+]] = constant dense<6>
+  %0 = constant dense<6> : tensor<4xi32>
+  %1 = constant dense<2> : tensor<4xi32>
+
+  // CHECK-NEXT: [[C3:%.+]] = constant dense<3> : tensor<4xi32>
+  %2 = divis %0, %1 : tensor<4xi32>
+
+  %3 = constant dense<-2> : tensor<4xi32>
+
+  // CHECK-NEXT: [[CM3:%.+]] = constant dense<-3> : tensor<4xi32>
+  %4 = divis %0, %3 : tensor<4xi32>
+
+  // CHECK-NEXT: [[XZ:%.+]] = divis [[C6]], [[C0]]
+  %5 = divis %0, %z : tensor<4xi32>
+
+  // CHECK-NEXT: return [[C3]], [[CM3]], [[XZ]]
+  return %2, %4, %5 : tensor<4xi32>, tensor<4xi32>, tensor<4xi32>
 }
 
 // -----
 
 // CHECK-LABEL: func @simple_diviu
-func @simple_diviu() -> (i32, i32) {
+func @simple_diviu() -> (i32, i32, i32) {
+  %z = constant 0 : i32
+  // CHECK-DAG: [[C6:%.+]] = constant 6
   %0 = constant 6 : i32
   %1 = constant 2 : i32
 
-  // CHECK-NEXT:[[C3:%.+]] = constant 3 : i32
+  // CHECK-DAG: [[C3:%.+]] = constant 3 : i32
   %2 = diviu %0, %1 : i32
 
   %3 = constant -2 : i32
 
   // Unsigned division interprets -2 as 2^32-2, so the result is 0.
-  // CHECK-NEXT:[[C0:%.+]] = constant 0 : i32
+  // CHECK-DAG: [[C0:%.+]] = constant 0 : i32
   %4 = diviu %0, %3 : i32
 
-  // CHECK-NEXT: return [[C3]], [[C0]]
-  return %2, %4 : i32, i32
+  // CHECK-NEXT: [[XZ:%.+]] = diviu [[C6]], [[C0]]
+  %5 = diviu %0, %z : i32
+
+  // CHECK-NEXT: return [[C3]], [[C0]], [[XZ]]
+  return %2, %4, %5 : i32, i32, i32
+}
+
+
+// -----
+
+// CHECK-LABEL: func @diviu_splat_tensor
+func @diviu_splat_tensor() -> (tensor<4xi32>, tensor<4xi32>, tensor<4xi32>) {
+  %z = constant dense<0> : tensor<4xi32>
+  // CHECK-DAG: [[C6:%.+]] = constant dense<6>
+  %0 = constant dense<6> : tensor<4xi32>
+  %1 = constant dense<2> : tensor<4xi32>
+
+  // CHECK-DAG: [[C3:%.+]] = constant dense<3> : tensor<4xi32>
+  %2 = diviu %0, %1 : tensor<4xi32>
+
+  %3 = constant dense<-2> : tensor<4xi32>
+
+  // Unsigned division interprets -2 as 2^32-2, so the result is 0.
+  // CHECK-DAG: [[C0:%.+]] = constant dense<0> : tensor<4xi32>
+  %4 = diviu %0, %3 : tensor<4xi32>
+
+  // CHECK-NEXT: [[XZ:%.+]] = diviu [[C6]], [[C0]]
+  %5 = diviu %0, %z : tensor<4xi32>
+
+  // CHECK-NEXT: return [[C3]], [[C0]], [[XZ]]
+  return %2, %4, %5 : tensor<4xi32>, tensor<4xi32>, tensor<4xi32>
 }
 
 // -----

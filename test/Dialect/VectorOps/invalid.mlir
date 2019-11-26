@@ -31,15 +31,50 @@ func @extractelement_position_rank_overflow_generic(%arg0: vector<4x8x16xf32>) {
 // -----
 
 func @extractelement_position_overflow(%arg0: vector<4x8x16xf32>) {
-  // expected-error@+1 {{expected position attribute #2 to be a positive integer smaller than the corresponding vector dimension}}
+  // expected-error@+1 {{expected position attribute #2 to be a non-negative integer smaller than the corresponding vector dimension}}
   %1 = vector.extractelement %arg0[0 : i32, 43 : i32, 0 : i32] : vector<4x8x16xf32>
 }
 
 // -----
 
 func @extractelement_position_overflow(%arg0: vector<4x8x16xf32>) {
-  // expected-error@+1 {{expected position attribute #3 to be a positive integer smaller than the corresponding vector dimension}}
+  // expected-error@+1 {{expected position attribute #3 to be a non-negative integer smaller than the corresponding vector dimension}}
   %1 = vector.extractelement %arg0[0 : i32, 0 : i32, -1 : i32] : vector<4x8x16xf32>
+}
+
+// -----
+
+func @insert_element_vector_type(%a: f32, %b: vector<4x8x16xf32>) {
+  // expected-error@+1 {{expected non-empty position attribute}}
+  %1 = vector.insertelement %a, %b[] : f32 into vector<4x8x16xf32>
+}
+
+// -----
+
+func @insert_element_vector_type(%a: f32, %b: vector<4x8x16xf32>) {
+  // expected-error@+1 {{expected position attribute of rank smaller than dest vector rank}}
+  %1 = vector.insertelement %a, %b[3 : i32,3 : i32,3 : i32,3 : i32,3 : i32,3 : i32] : f32 into vector<4x8x16xf32>
+}
+
+// -----
+
+func @insert_element_vector_type(%a: vector<4xf32>, %b: vector<4x8x16xf32>) {
+  // expected-error@+1 {{expected position attribute rank + source rank to match dest vector rank}}
+  %1 = vector.insertelement %a, %b[3 : i32] : vector<4xf32> into vector<4x8x16xf32>
+}
+
+// -----
+
+func @insert_element_vector_type(%a: f32, %b: vector<4x8x16xf32>) {
+  // expected-error@+1 {{expected position attribute rank to match the dest vector rank}}
+  %1 = vector.insertelement %a, %b[3 : i32,3 : i32] : f32 into vector<4x8x16xf32>
+}
+
+// -----
+
+func @insertelement_position_overflow(%a: f32, %b: vector<4x8x16xf32>) {
+  // expected-error@+1 {{expected position attribute #3 to be a non-negative integer smaller than the corresponding dest vector dimension}}
+  %1 = vector.insertelement %a, %b[0 : i32, 0 : i32, -1 : i32] : f32 into vector<4x8x16xf32>
 }
 
 // -----
@@ -243,6 +278,48 @@ func @test_vector.transfer_write(%arg0: memref<?x?x?xf32>) {
 
 // -----
 
+func @insert_strided_slice(%a: vector<4x4xf32>, %b: vector<4x8x16xf32>) {
+  // expected-error@+1 {{expected offsets of same size as destination vector rank}}
+  %1 = vector.insert_strided_slice %a, %b {offsets = [100], strides = [1, 1]} : vector<4x4xf32> into vector<4x8x16xf32>
+}
+
+// -----
+
+func @insert_strided_slice(%a: vector<4x4xf32>, %b: vector<4x8x16xf32>) {
+  // expected-error@+1 {{expected strides of same size as source vector rank}}
+  %1 = vector.insert_strided_slice %a, %b {offsets = [2, 2, 2], strides = [1]} : vector<4x4xf32> into vector<4x8x16xf32>
+}
+
+// -----
+
+func @insert_strided_slice(%a: vector<4x4xf32>, %b: vector<4x8x16xf32>) {
+  // expected-error@+1 {{expected source rank to be smaller than destination rank}}
+  %1 = vector.insert_strided_slice %b, %a {offsets = [2, 2], strides = [1, 1, 1]} : vector<4x8x16xf32> into vector<4x4xf32>
+}
+
+// -----
+
+func @insert_strided_slice(%a: vector<4x4xf32>, %b: vector<4x8x16xf32>) {
+  // expected-error@+1 {{op expected offsets dimension 0 to be confined to [0, 4)}}
+  %1 = vector.insert_strided_slice %a, %b {offsets = [100,100,100], strides = [1, 1]} : vector<4x4xf32> into vector<4x8x16xf32>
+}
+
+// -----
+
+func @insert_strided_slice(%a: vector<4x4xf32>, %b: vector<4x8x16xf32>) {
+  // expected-error@+1 {{op expected strides to be confined to [1, 2)}}
+  %1 = vector.insert_strided_slice %a, %b {offsets = [2, 2, 2], strides = [100, 100]} : vector<4x4xf32> into vector<4x8x16xf32>
+}
+
+// -----
+
+func @insert_strided_slice(%a: vector<4x4xf32>, %b: vector<4x8x16xf32>) {
+  // expected-error@+1 {{op expected sum(offsets, source vector shape) dimension 1 to be confined to [1, 9)}}
+  %1 = vector.insert_strided_slice %a, %b {offsets = [2, 7, 2], strides = [1, 1]} : vector<4x4xf32> into vector<4x8x16xf32>
+}
+
+// -----
+
 func @strided_slice(%arg0: vector<4x8x16xf32>) {
   // expected-error@+1 {{expected offsets, sizes and strides attributes of same size}}
   %1 = vector.strided_slice %arg0 {offsets = [100], sizes = [2, 2], strides = [1, 1]} : vector<4x8x16xf32> to vector<2x2x16xf32>
@@ -265,14 +342,14 @@ func @strided_slice(%arg0: vector<4x8x16xf32>) {
 // -----
 
 func @strided_slice(%arg0: vector<4x8x16xf32>) {
-  // expected-error@+1 {{op expected offsets to be confined to [0, 4)}}
+  // expected-error@+1 {{op expected offsets dimension 0 to be confined to [0, 4)}}
   %1 = vector.strided_slice %arg0 {offsets = [100], sizes = [100], strides = [100]} : vector<4x8x16xf32> to vector<100x8x16xf32>
 }
 
 // -----
 
 func @strided_slice(%arg0: vector<4x8x16xf32>) {
-  // expected-error@+1 {{op expected sizes to be confined to [1, 5)}}
+  // expected-error@+1 {{op expected sizes dimension 0 to be confined to [1, 5)}}
   %1 = vector.strided_slice %arg0 {offsets = [2], sizes = [100], strides = [100]} : vector<4x8x16xf32> to vector<100x8x16xf32>
 }
 
@@ -293,7 +370,7 @@ func @strided_slice(%arg0: vector<4x8x16xf32>) {
 // -----
 
 func @strided_slice(%arg0: vector<4x8x16xf32>) {
-  // expected-error@+1 {{op expected sum(offsets, sizes) to be confined to [1, 5)}}
+  // expected-error@+1 {{op expected sum(offsets, sizes) dimension 0 to be confined to [1, 5)}}
   %1 = vector.strided_slice %arg0 {offsets = [2], sizes = [3], strides = [1]} : vector<4x8x16xf32> to vector<3x8x16xf32>
 }
 
@@ -306,56 +383,196 @@ func @strided_slice(%arg0: vector<4x8x16xf32>) {
 
 // -----
 
+#contraction_accesses = [
+  (b0, f0, f1, c0, c1) -> (c0, b0, c1, f0),
+  (b0, f0, f1, c0, c1) -> (b0, c1, c0, f1),
+  (b0, f0, f1, c0, c1) -> (b0, f0, f1),
+  (b0, f0, f1, c0, c1) -> (b0, f0, f1)
+]
+#contraction_trait = {
+  indexing_maps = #contraction_accesses,
+  iterator_types = ["parallel", "parallel", "parallel", "reduction", "reduction"]
+}
+func @contraction(%arg0: vector<7x8x16x15xf32>, %arg1: vector<8x16x7x5xf32>,
+                  %arg2: vector<8x15x5xf32>, %arg3 :  vector<8x15x8x5xf32>,
+                  %arg4 : index) {
+  // expected-error@+1 {{expected an indexing map for each vector operand}}
+  %0 = vector.contract #contraction_trait %arg0, %arg1, %arg2
+      : vector<7x8x16x15xf32>, vector<8x16x7x5xf32> into vector<8x15x5xf32>
+  return
+}
+
+// -----
+
+#contraction_accesses = [
+  (b0, f0, f1, c0, c1) -> (c0, c0, c1, f0),
+  (b0, f0, f1, c0, c1) -> (b0, c1, c0, f1),
+  (b0, f0, f1, c0, c1) -> (b0, f0, f1)
+]
+#contraction_trait = {
+  indexing_maps = #contraction_accesses,
+  iterator_types = ["parallel", "parallel", "parallel", "reduction", "reduction"]
+}
+func @contraction(%arg0: vector<7x8x16x15xf32>, %arg1: vector<8x16x7x5xf32>,
+                  %arg2: vector<8x15x5xf32>, %arg3 :  vector<8x15x8x5xf32>,
+                  %arg4 : index) {
+  // expected-error@+1 {{expected indexing map 0 to be a projected permutation of its inputs}}
+  %0 = vector.contract #contraction_trait %arg0, %arg1, %arg2
+      : vector<7x8x16x15xf32>, vector<8x16x7x5xf32> into vector<8x15x5xf32>
+  return
+}
+
+// -----
+
+#contraction_accesses = [
+  (b0, f0, f1, c0, c1) -> (c0, b0, c1, f0),
+  (b0, f0, f1, c0, c1)[s0] -> (b0, s0, c0, f1),
+  (b0, f0, f1, c0, c1) -> (b0, f0, f1)
+]
+#contraction_trait = {
+  indexing_maps = #contraction_accesses,
+  iterator_types = ["parallel", "parallel", "parallel", "reduction", "reduction"]
+}
+func @contraction(%arg0: vector<7x8x16x15xf32>, %arg1: vector<8x16x7x5xf32>,
+                  %arg2: vector<8x15x5xf32>, %arg3 :  vector<8x15x8x5xf32>,
+                  %arg4 : index) {
+  // expected-error@+1 {{op expected indexing map 1 to have no symbols}}
+  %0 = vector.contract #contraction_trait %arg0, %arg1, %arg2
+      : vector<7x8x16x15xf32>, vector<8x16x7x5xf32> into vector<8x15x5xf32>
+  return
+}
+
+// -----
+
+#contraction_accesses = [
+  (b0, f0, f1, c0, c1) -> (c0, b0, c1, f0),
+  (b0, f0, f1, c0, c1) -> (b0, c1, c0, f1),
+  (b0, f0, f1, c1) -> (b0, f0, f1)
+]
+#contraction_trait = {
+  indexing_maps = #contraction_accesses,
+  iterator_types = ["parallel", "parallel", "parallel", "reduction", "reduction"]
+}
+func @contraction(%arg0: vector<7x8x16x15xf32>, %arg1: vector<8x16x7x5xf32>,
+                  %arg2: vector<8x15x5xf32>, %arg3 :  vector<8x15x8x5xf32>,
+                  %arg4 : index) {
+  // expected-error@+1 {{expected indexing map 2 to have 5 number of inputs}}
+  %0 = vector.contract #contraction_trait %arg0, %arg1, %arg2
+      : vector<7x8x16x15xf32>, vector<8x16x7x5xf32> into vector<8x15x5xf32>
+  return
+}
+
+// -----
+
+#contraction_accesses = [
+  (b0, f0, f1, c0, c1) -> (c0, b0, c1, f0),
+  (b0, f0, f1, c0, c1) -> (b0, c1, f1),
+  (b0, f0, f1, c0, c1) -> (b0, f0, f1)
+]
+#contraction_trait = {
+  indexing_maps = #contraction_accesses,
+  iterator_types = ["parallel", "parallel", "parallel", "reduction", "reduction"]
+}
+func @contraction(%arg0: vector<7x8x16x15xf32>, %arg1: vector<8x16x7x5xf32>,
+                  %arg2: vector<8x15x5xf32>, %arg3 :  vector<8x15x8x5xf32>,
+                  %arg4 : index) {
+  // expected-error@+1 {{expected indexing map 1 to have 4 number of outputs}}
+  %0 = vector.contract #contraction_trait %arg0, %arg1, %arg2
+      : vector<7x8x16x15xf32>, vector<8x16x7x5xf32> into vector<8x15x5xf32>
+  return
+}
+
+// -----
+
+#contraction_accesses = [
+  (b0, f0, f1, b1, b2) -> (b1, b0, b2, f0),
+  (b0, f0, f1, b1, b2) -> (b0, b2, b1, f1),
+  (b0, f0, f1, b1, b2) -> (b0, f0, f1)
+]
+#contraction_trait = {
+  indexing_maps = #contraction_accesses,
+  iterator_types = ["parallel", "parallel", "parallel", "parallel", "parallel"]
+}
 func @contraction(%arg0: vector<7x8x16x15xf32>, %arg1: vector<8x16x7x5xf32>,
                   %arg2: vector<8x15x5xf32>, %arg3 :  vector<8x15x8x5xf32>,
                   %arg4 : index) {
   // expected-error@+1 {{op expected at least one contracting dimension pair}}
-  %0 = vector.contract %arg0, %arg1, %arg2
-    { batch_dim_map = [[1, 0]] }
+  %0 = vector.contract #contraction_trait %arg0, %arg1, %arg2
       : vector<7x8x16x15xf32>, vector<8x16x7x5xf32> into vector<8x15x5xf32>
   return
 }
 
 // -----
 
+#contraction_accesses = [
+  (b0, f0, f1, c0, c1) -> (c1, b0, c0, f0),
+  (b0, f0, f1, c0, c1) -> (b0, c1, c0, f1),
+  (b0, f0, f1, c0, c1) -> (b0, f0, f1)
+]
+#contraction_trait = {
+  indexing_maps = #contraction_accesses,
+  iterator_types = ["parallel", "parallel", "parallel", "reduction", "reduction"]
+}
 func @contraction(%arg0: vector<7x8x16x15xf32>, %arg1: vector<8x16x7x5xf32>,
                   %arg2: vector<8x15x5xf32>, %arg3 :  vector<8x15x8x5xf32>,
                   %arg4 : index) {
   // expected-error@+1 {{invalid contracting dimension map}}
-  %0 = vector.contract %arg0, %arg1, %arg2
-    { batch_dim_map = [[1, 0]], contracting_dim_map = [[1, 2], [2, 1]] }
+  %0 = vector.contract #contraction_trait %arg0, %arg1, %arg2
       : vector<7x8x16x15xf32>, vector<8x16x7x5xf32> into vector<8x15x5xf32>
   return
 }
 
 // -----
 
+#contraction_accesses = [
+  (b0, f0, f1, c0, c1) -> (c0, b0, c1, f0),
+  (b0, f0, f1, c0, c1) -> (f1, c1, c0, b0),
+  (b0, f0, f1, c0, c1) -> (b0, f0, f1)
+]
+#contraction_trait = {
+  indexing_maps = #contraction_accesses,
+  iterator_types = ["parallel", "parallel", "parallel", "reduction", "reduction"]
+}
 func @contraction(%arg0: vector<7x8x16x15xf32>, %arg1: vector<8x16x7x5xf32>,
                   %arg2: vector<8x15x5xf32>, %arg3 :  vector<8x15x8x5xf32>,
                   %arg4 : index) {
   // expected-error@+1 {{invalid batch dimension map}}
-  %0 = vector.contract %arg0, %arg1, %arg2
-    { batch_dim_map = [[1, 2]], contracting_dim_map = [[0, 2], [2, 1]] }
+  %0 = vector.contract #contraction_trait %arg0, %arg1, %arg2
       : vector<7x8x16x15xf32>, vector<8x16x7x5xf32> into vector<8x15x5xf32>
-
   return
 }
 
 // -----
 
+#contraction_accesses = [
+  (b0, f0, f1, c0, c1) -> (c0, b0, c1, f0),
+  (b0, f0, f1, c0, c1) -> (b0, c1, c0, f1),
+  (b0, f0, f1, c0, c1) -> (b0, f0, f1)
+]
+#contraction_trait = {
+  indexing_maps = #contraction_accesses,
+  iterator_types = ["parallel", "parallel", "parallel", "reduction", "reduction"]
+}
 func @contraction(%arg0: vector<7x8x16x15xf32>, %arg1: vector<8x16x7x5xf32>,
-                  %arg2: vector<8x15x88xf32>, %arg3 :  vector<8x15x8x5xf32>,
+                  %arg2: vector<88x15x5xf32>, %arg3 :  vector<8x15x8x5xf32>,
                   %arg4 : index) {
   // expected-error@+1 {{invalid accumulator/result vector shape}}
-  %0 = vector.contract %arg0, %arg1, %arg2
-    { batch_dim_map = [[1, 0]], contracting_dim_map = [[0, 2], [2, 1]] }
-      : vector<7x8x16x15xf32>, vector<8x16x7x5xf32> into vector<8x15x88xf32>
-
+  %0 = vector.contract #contraction_trait %arg0, %arg1, %arg2
+      : vector<7x8x16x15xf32>, vector<8x16x7x5xf32> into vector<88x15x5xf32>
   return
 }
 
 // -----
 
+#contraction_accesses = [
+  (b0, f0, f1, c0, c1) -> (c0, b0, c1, f0),
+  (b0, f0, f1, c0, c1) -> (b0, c1, c0, f1),
+  (b0, f0, f1, c0, c1) -> (b0, f0, f1)
+]
+#contraction_trait = {
+  indexing_maps = #contraction_accesses,
+  iterator_types = ["parallel", "parallel", "parallel", "reduction", "reduction"]
+}
 func @contraction(%arg0: vector<7x8x16x15xf32>, %arg1: vector<8x16x7x5xf32>,
                   %arg2: vector<8x15x5xf32>, %arg3 :  vector<8x15x8x5xf32>,
                   %arg4 : index) {
@@ -364,10 +581,7 @@ func @contraction(%arg0: vector<7x8x16x15xf32>, %arg1: vector<8x16x7x5xf32>,
   %rhs_mask = vector.make_index_tuple %arg4, %arg4, %arg4, %arg4
     : tuple<index, index, index, index>
   // expected-error@+1 {{expected zero or exactly 2 vector mask operands}}
-  %0 = vector.contract %arg0, %arg1, %arg2, %lhs_mask
-    { batch_dim_map = [[1, 0]], contracting_dim_map = [[0, 2], [2, 1]] }
+  %0 = vector.contract #contraction_trait %arg0, %arg1, %arg2, %lhs_mask
       : vector<7x8x16x15xf32>, vector<8x16x7x5xf32> into vector<8x15x5xf32>
   return
 }
-
-

@@ -97,15 +97,13 @@ descriptor that contains:
 
 Dynamic ranked memrefs should be used only to pass arguments to external library calls
 that expect a unified memref type. The called functions can parse any unranked memref
-descriptor by reading the rank and parsing the enclosed ranked descriptor.
+descriptor by reading the rank and parsing the enclosed ranked descriptor pointer.
 
 Examples:
 
 ```mlir {.mlir}
-// unranked descriptor containing a 0-D memref
-memref<*xf32> -> !llvm.type<"{i64,{ float*, float*, i64 }*}">  
-// unranked descriptor containing a 2-D memref
-memref<*xf32> -> !llvm.type<"{i64,{ float*, float*, i64, [2 x i64], [2 x i64] }*}">  
+// unranked descriptor
+memref<*xf32> -> !llvm.type<"{i64, i8*}">  
 ```
 
 ### Function Types

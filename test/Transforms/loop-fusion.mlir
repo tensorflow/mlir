@@ -2392,10 +2392,12 @@ func @mul_add_0(%arg0: memref<3x4xf32>, %arg1: memref<4x3xf32>, %arg2: memref<3x
   return
 }
 
+// -----
+
 // Verify that 'fuseProducerConsumerNodes' doesn't fuse a producer loop with
 // multiple outgoing edges. Sibling loop fusion is disabled to properly test
 // producer-consumer fusion in isolation.
-// CHECK-LABEL: func @should_not_fuse_multi_outgoing_edge_store_producer
+// NOSIBLING-LABEL: func @should_not_fuse_multi_outgoing_edge_store_producer
 func @should_not_fuse_multi_outgoing_edge_store_producer() {
   %cst = constant 0.000000e+00 : f32
   %0 = alloc() : memref<1xf32>

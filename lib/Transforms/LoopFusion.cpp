@@ -1470,8 +1470,8 @@ public:
   // *) Third pass fuses any remaining producer nodes into their users.
   void run() {
     // TODO(andydavis) Run this repeatedly until a fixed-point is reached.
+    fuseProducerConsumerNodes(/*maxSrcUserCount=*/1);
     if (clSiblingFusion) {
-      fuseProducerConsumerNodes(/*maxSrcUserCount=*/1);
       fuseSiblingNodes();
     }
     fuseProducerConsumerNodes(

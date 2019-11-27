@@ -373,12 +373,25 @@ public:
   }
 };
 
+/// Base MemRef for Ranked and Unranked variants
+class BaseMemRefType : public ShapedType {
+public:
+  using ShapedType::ShapedType;
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast.
+  static bool classof(Type type) {
+    return type.getKind() == StandardTypes::MemRef ||
+           type.getKind() == StandardTypes::UnrankedMemRef;
+  }
+};
+
+
 /// MemRef types represent a region of memory that have a shape with a fixed
 /// number of dimensions. Each shape element can be a non-negative integer or
 /// unknown (represented by any negative integer). MemRef types also have an
 /// affine map composition, represented as an array AffineMap pointers.
 class MemRefType
-    : public Type::TypeBase<MemRefType, ShapedType, detail::MemRefTypeStorage> {
+    : public Type::TypeBase<MemRefType, BaseMemRefType, detail::MemRefTypeStorage> {
 public:
   using Base::Base;
 
@@ -432,7 +445,7 @@ private:
 /// Unranked MemRef type represent multi-dimensional MemRefs that
 /// have an unknown rank.
 class UnrankedMemRefType
-    : public Type::TypeBase<UnrankedMemRefType, ShapedType,
+    : public Type::TypeBase<UnrankedMemRefType, BaseMemRefType,
                             detail::UnrankedMemRefTypeStorage> {
 public:
   using Base::Base;
@@ -455,6 +468,8 @@ public:
                                unsigned memorySpace);
 
   ArrayRef<int64_t> getShape() const { return llvm::None; }
+
+  /// Returns the memory space in which data referred to by this memref resides.
   unsigned getMemorySpace() const;
   static bool kindof(unsigned kind) {
     return kind == StandardTypes::UnrankedMemRef;

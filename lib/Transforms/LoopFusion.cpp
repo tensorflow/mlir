@@ -57,11 +57,6 @@ static llvm::cl::opt<bool>
                         llvm::cl::desc("Enables maximal loop fusion"),
                         llvm::cl::cat(clOptionsCategory));
 
-static llvm::cl::opt<bool> clSiblingFusion(
-    "sibling-fusion", llvm::cl::init(true),
-    llvm::cl::desc("Enables fusion of sibling loops (enabled by default)"),
-    llvm::cl::cat(clOptionsCategory));
-
 /// A threshold in percent of additional computation allowed when fusing.
 static llvm::cl::opt<double> clFusionAddlComputeTolerance(
     "fusion-compute-tolerance",
@@ -1471,9 +1466,7 @@ public:
   void run() {
     // TODO(andydavis) Run this repeatedly until a fixed-point is reached.
     fuseProducerConsumerNodes(/*maxSrcUserCount=*/1);
-    if (clSiblingFusion) {
-      fuseSiblingNodes();
-    }
+    fuseSiblingNodes();
     fuseProducerConsumerNodes(
         /*maxSrcUserCount=*/std::numeric_limits<unsigned>::max());
     eraseUnusedMemRefAllocations();

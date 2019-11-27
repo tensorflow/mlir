@@ -385,13 +385,12 @@ public:
   }
 };
 
-
 /// MemRef types represent a region of memory that have a shape with a fixed
 /// number of dimensions. Each shape element can be a non-negative integer or
 /// unknown (represented by any negative integer). MemRef types also have an
 /// affine map composition, represented as an array AffineMap pointers.
-class MemRefType
-    : public Type::TypeBase<MemRefType, BaseMemRefType, detail::MemRefTypeStorage> {
+class MemRefType : public Type::TypeBase<MemRefType, BaseMemRefType,
+                                         detail::MemRefTypeStorage> {
 public:
   using Base::Base;
 

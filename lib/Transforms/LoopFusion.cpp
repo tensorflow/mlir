@@ -1015,12 +1015,8 @@ static bool canFuseSrcWhichWritesToLiveOut(unsigned srcId, unsigned dstId,
   assert(srcLiveOutStoreOp && "Expected a valid store op");
   auto *dstNode = mdg->getNode(dstId);
   Value *memref = srcLiveOutStoreOp.getMemRef();
-  unsigned memrefNumOutEdges = mdg->getOutEdgeCount(srcId, memref);
-  assert(mdg->getOutEdgeCount(srcId) == memrefNumOutEdges &&
-         "Expected only outgoing edges from memref in srcId");
-
   // Return false if 'srcNode' has more than one output edge on 'memref'.
-  if (memrefNumOutEdges > 1)
+  if (mdg->getOutEdgeCount(srcId, memref) > 1)
     return false;
 
   // Compute MemRefRegion 'srcWriteRegion' for 'srcStoreOp' on 'memref'.

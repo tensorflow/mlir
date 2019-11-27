@@ -1,6 +1,5 @@
 // RUN: mlir-opt %s -affine-loop-fusion -split-input-file | FileCheck %s
 // RUN: mlir-opt %s -affine-loop-fusion -fusion-maximal -split-input-file | FileCheck %s --check-prefix=MAXIMAL
-// RUN: mlir-opt %s -affine-loop-fusion -sibling-fusion=false -split-input-file | FileCheck %s --check-prefix=NOSIBLING
 
 // TODO(andydavis) Add more tests:
 // *) Add nested fusion test cases when non-constant loop bound support is
@@ -2395,25 +2394,53 @@ func @mul_add_0(%arg0: memref<3x4xf32>, %arg1: memref<4x3xf32>, %arg2: memref<3x
 // -----
 
 // Verify that 'fuseProducerConsumerNodes' doesn't fuse a producer loop with
-// multiple outgoing edges. Sibling loop fusion is disabled to properly test
-// producer-consumer fusion in isolation.
-// NOSIBLING-LABEL: func @should_not_fuse_multi_outgoing_edge_store_producer
-func @should_not_fuse_multi_outgoing_edge_store_producer() {
+// a store that has multiple outgoing edges. Sibling loop fusion should not fuse
+// any of these loops due to dependencies on external memref '%a'.
+
+// CHECK-LABEL: func @should_not_fuse_multi_outgoing_edge_store_producer1
+func @should_not_fuse_multi_outgoing_edge_store_producer1(%a : memref<1xf32>) {
   %cst = constant 0.000000e+00 : f32
-  %0 = alloc() : memref<1xf32>
   affine.for %arg0 = 0 to 1 {
-    affine.store %cst, %0[%arg0] : memref<1xf32>
+    affine.store %cst, %a[%arg0] : memref<1xf32>
   }
 
   affine.for %arg0 = 0 to 1 {
-    %1 = affine.load %0[%arg0] : memref<1xf32>
+    %0 = affine.load %a[%arg0] : memref<1xf32>
   }
 
   affine.for %arg0 = 0 to 1 {
-    %2 = affine.load %0[%arg0] : memref<1xf32>
+    %0 = affine.load %a[%arg0] : memref<1xf32>
   }
-  // NOSIBLING: affine.for %{{.*}} = 0 to 1
-  // NOSIBLING: affine.for %{{.*}} = 0 to 1
-  // NOSIBLING: affine.for %{{.*}} = 0 to 1
+  // CHECK: affine.for %{{.*}} = 0 to 1
+  // CHECK: affine.for %{{.*}} = 0 to 1
+  // CHECK: affine.for %{{.*}} = 0 to 1
+  return
+}
+
+// -----
+
+// Verify that 'fuseProducerConsumerNodes' fuses a producer loop that: 1) has
+// multiple outgoing edges, 2) producer store has a single outgoing edge.
+// Sibling loop fusion should not fuse any of these loops due to
+// dependencies on external memrefs '%a' and '%b'.
+
+// CHECK-LABEL: func @should_fuse_producer_with_multi_outgoing_edges
+func @should_fuse_producer_with_multi_outgoing_edges(%a : memref<1xf32>, %b : memref<1xf32>) {
+  %cst = constant 0.000000e+00 : f32
+  affine.for %arg0 = 0 to 1 {
+    %0 = affine.load %a[%arg0] : memref<1xf32>
+    affine.store %cst, %b[%arg0] : memref<1xf32>
+  }
+
+  affine.for %arg0 = 0 to 1 {
+    affine.store %cst, %a[%arg0] : memref<1xf32>
+    %1 = affine.load %b[%arg0] : memref<1xf32>
+  }
+  // CHECK: affine.for %{{.*}} = 0 to 1
+  // CHECK-NEXT: affine.load %[[A:.*]][{{.*}}]
+  // CHECK-NEXT: affine.store %{{.*}}, %[[B:.*]][{{.*}}]
+  // CHECK-NEXT: affine.store %{{.*}}, %[[A]]
+  // CHECK-NEXT: affine.load %[[B]]
+  // CHECK-NOT: affine.for %{{.*}}
   return
 }

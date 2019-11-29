@@ -53,7 +53,7 @@ nothing is better than walking through an example to get a better understanding:
 
 ```Toy {.toy}
 def main() {
-  # Define a variable `a` with shape <3, 2>, initialized with the literal value.
+  # Define a variable `a` with shape <2, 3>, initialized with the literal value.
   # The shape is inferred from the supplied literal.
   var a = [[1, 2, 3], [4, 5, 6]];
 

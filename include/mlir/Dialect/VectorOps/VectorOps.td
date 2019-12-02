@@ -162,6 +162,49 @@ def Vector_ContractionOp :
   }];
 }
 
+def Vector_BroadcastOp :
+  Vector_Op<"broadcast", [NoSideEffect,
+     PredOpTrait<"source operand and result have same element type",
+                 TCresVTEtIsSameAsOpBase<0, 0>>]>,
+    Arguments<(ins AnyType:$source)>,
+    Results<(outs AnyVector:$vector)> {
+  let summary = "broadcast operation";
+  let description = [{
+    Broadcasts the scalar or k-D vector value in the source operand
+    to a n-D result vector such that the broadcast makes sense, i.e.,
+    the source operand is duplicated to match the given rank and sizes
+    in the result vector. The legality rules are:
+    * the source operand must have the same element type as the result type
+    * a k-D vector <s_1 x .. x s_k x type> can be broadcast to
+      a n-D vector <t_1 x .. x t_n x type> if
+       * k <= n, and
+       * the sizes in the trailing dimensions n-k < i <= n with j=i+k-n
+          match exactly as s_j = t_i or s_j = 1:
+       ```
+           t_1 x   ..  t_n-k x t_n-k+1 x .. x t_i x .. x t_n
+                               s_1     x .. x s_j x .. x s_k
+               <duplication>         <potential stretch>
+       ```
+    The source operand is duplicated over all the missing leading dimensions
+    and streched over the trailing dimensions where the source has a non-equal
+    dimension of 1. These rules imply that any scalar broadcast (k=0) to any
+    shaped vector with the same element type is always legal.
+
+    Examples:
+    ```
+      %0 = constant 0.0 : f32
+      %1 = vector.broadcast %0 : f32 to vector<16xf32>
+      %2 = vector.broadcast %1 : vector<16xf32> to vector<4x16xf32>
+    ```
+  }];
+  let extraClassDeclaration = [{
+    Type getSourceType() { return source()->getType(); }
+    VectorType getVectorType() {
+      return vector()->getType().cast<VectorType>();
+    }
+  }];
+}
+
 def Vector_ExtractElementOp :
   Vector_Op<"extractelement", [NoSideEffect,
      PredOpTrait<"operand and result have same element type",

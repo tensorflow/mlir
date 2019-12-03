@@ -468,6 +468,72 @@ TEST_FUNC(insertion_in_block) {
   f.erase();
 }
 
+TEST_FUNC(zeroextendi_op_i1_to_i8) {
+  using namespace edsc;
+  using namespace edsc::intrinsics;
+  using namespace edsc::op;
+  auto i1Type = IntegerType::get(1, &globalContext());
+  auto i8Type = IntegerType::get(8, &globalContext());
+  auto memrefType = MemRefType::get({-1, -1}, i1Type, {}, 0);
+  auto f = makeFunction("zero_extendi_op", {}, {memrefType});
+
+  OpBuilder builder(f.getBody());
+  ScopedContext scope(builder, f.getLoc());
+  // clang-format off
+  ValueHandle zero = constant_index(0), one = constant_index(1);
+  MemRefView vA(f.getArgument(0));
+  IndexedValue A(f.getArgument(0));
+  IndexHandle i, j;
+  AffineLoopNestBuilder({&i, &j}, {zero, zero}, {one, one}, {1, 1})([&]{
+    // This test exercises IndexedValue::operator Value*.
+    // Without it, one must force conversion to ValueHandle as such:
+    // edsc::intrinsics::zero_extendi(ValueHandle(ValueA(i, j), i8Type)
+    edsc::intrinsics::zero_extendi(*A(i, j), i8Type);
+  });
+
+  // CHECK-LABEL: @zero_extendi_op
+  //      CHECK: affine.for %{{.*}} = 0 to 1 {
+  // CHECK-NEXT:   affine.for %{{.*}} = 0 to 1 {
+  // CHECK-NEXT:     %[[SRC:.*]] = affine.load
+  //      CHECK:     zexti %[[SRC]] : i1 to i8
+  // clang-format on
+  f.print(llvm::outs());
+  f.erase();
+}
+
+TEST_FUNC(signextendi_op_i1_to_i8) {
+  using namespace edsc;
+  using namespace edsc::intrinsics;
+  using namespace edsc::op;
+  auto i1Type = IntegerType::get(1, &globalContext());
+  auto i8Type = IntegerType::get(8, &globalContext());
+  auto memrefType = MemRefType::get({-1, -1}, i1Type, {}, 0);
+  auto f = makeFunction("sign_extendi_op", {}, {memrefType});
+
+  OpBuilder builder(f.getBody());
+  ScopedContext scope(builder, f.getLoc());
+  // clang-format off
+  ValueHandle zero = constant_index(0), one = constant_index(1);
+  MemRefView vA(f.getArgument(0));
+  IndexedValue A(f.getArgument(0));
+  IndexHandle i, j;
+  AffineLoopNestBuilder({&i, &j}, {zero, zero}, {one, one}, {1, 1})([&]{
+    // This test exercises IndexedValue::operator Value*.
+    // Without it, one must force conversion to ValueHandle as such:
+    // edsc::intrinsics::sign_extendi(ValueHandle(ValueA(i, j), i8Type)
+    edsc::intrinsics::sign_extendi(*A(i, j), i8Type);
+  });
+
+  // CHECK-LABEL: @sign_extendi_op
+  //      CHECK: affine.for %{{.*}} = 0 to 1 {
+  // CHECK-NEXT:   affine.for %{{.*}} = 0 to 1 {
+  // CHECK-NEXT:     %[[SRC:.*]] = affine.load
+  //      CHECK:     sexti %[[SRC]] : i1 to i8
+  // clang-format on
+  f.print(llvm::outs());
+  f.erase();
+}
+
 TEST_FUNC(select_op_i32) {
   using namespace edsc;
   using namespace edsc::intrinsics;

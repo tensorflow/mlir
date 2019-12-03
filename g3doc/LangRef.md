@@ -780,8 +780,8 @@ tensor types. Note that `memref<f32>`, `memref<0 x f32>`, `memref<1 x 0 x f32>`,
 and `memref<0 x 1 x f32>` are all different types. 
 
 A `memref` is allowed to have an unknown rank (e.g. `memref<*xf32>`). 
-The purpose of unranked memrefs is to allow external library function to 
-receive Memref arguments of any rank without versioning the functions
+The purpose of unranked memrefs is to allow external library functions to 
+receive memref arguments of any rank without versioning the functions
 based on the rank. Other uses of this type are disallowed or will have
 undefined behavior. 
 
@@ -803,7 +803,7 @@ C++ library and implementing rank-agnostic logic there is expected to be
 significantly simpler.
 
 Unranked memrefs may provide expressiveness gains in the future and help bridge 
-the gap with unranked tensors. Unranked memrefs will still not expected to 
+the gap with unranked tensors. Unranked memrefs will not be expected to 
 be exposed to codegen but one may query the rank of an unranked memref 
 (a special op will be needed for this purpose) and perform a switch and cast to 
 a ranked memref as a prerequisite to codegen.

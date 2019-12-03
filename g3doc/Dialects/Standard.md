@@ -769,10 +769,9 @@ elements. The types are equivalent if
 1. they both have the same static rank, same element type, same mappings, 
 same address space. The operation is invalid if converting to a mismatching 
 constant dimension, or
-2. exactly one of the operands have a dynamic rank, and they both have the 
-same element type and same address space. 
-The operation is invalid if both operands are of dynamic rank or if converting 
-to a mismatching static rank.
+2. exactly one of the operands have an unknown rank, and they both have the 
+same element type and same address space. The operation is invalid if both 
+operands are of dynamic rank or if converting to a mismatching static rank.
 
 ### 'mulf' operation
 

@@ -780,31 +780,32 @@ tensor types. Note that `memref<f32>`, `memref<0 x f32>`, `memref<1 x 0 x f32>`,
 and `memref<0 x 1 x f32>` are all different types. 
 
 A `memref` is allowed to have an unknown rank (e.g. `memref<*xf32>`). 
-The purpose of unranked Memrefs is to allow external library function to 
+The purpose of unranked memrefs is to allow external library function to 
 receive Memref arguments of any rank without versioning the functions
 based on the rank. Other uses of this type are disallowed or will have
 undefined behavior. 
 
 ##### Codegen of Unranked Memref
-Using unranked Memref in codegen besides the case mentioned above is 
+Using unranked memref in codegen besides the case mentioned above is 
 highly discouraged. Codegen is concerned with generating loop nests 
-and specialized instructions for high-performance, unranked Memref is 
+and specialized instructions for high-performance, unranked memref is 
 concerned with hiding the rank and thus, the number of enclosing loops 
 required to iterate over the data. However, if there is a need to code-gen 
-unranked Memref, one possible path is to cast into a static ranked type based 
+unranked memref, one possible path is to cast into a static ranked type based 
 on the dynamic rank. Another possible path is to emit a single while loop 
-conditioned on a linear index and perform delinearization of the linear index to a dynamic array containing 
-the (unranked) indices. While this is possible, it is expected to not be a good 
-idea to perform this during codegen: the cost of the translations is expected to be 
-prohibitive and optimizations at this level are not expected to be worthwhile. 
-If expressiveness is the main concern, irrespective of performance, passing 
-unranked memrefs to an external C++ library and implementing rank-agnostic 
-logic there, is expected to be significantly simpler.
+conditioned on a linear index and perform delinearization of the linear index 
+to a dynamic array containing the (unranked) indices. While this is possible, 
+it is expected to not be a good idea to perform this during codegen as 
+the cost of the translations is expected to be prohibitive and optimizations 
+at this level are not expected to be worthwhile. If expressiveness is the main 
+concern, irrespective of performance, passing unranked memrefs to an external 
+C++ library and implementing rank-agnostic logic there is expected to be 
+significantly simpler.
 
 Unranked memrefs may provide expressiveness gains in the future and help bridge 
 the gap with unranked tensors. Unranked memrefs will still not expected to 
 be exposed to codegen but one may query the rank of an unranked memref 
-(a special op will be needed for this purpose) and perform a switch + cast to 
+(a special op will be needed for this purpose) and perform a switch and cast to 
 a ranked memref as a prerequisite to codegen.
 
 Example

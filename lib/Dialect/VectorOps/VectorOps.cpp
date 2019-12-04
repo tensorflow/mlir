@@ -271,6 +271,44 @@ getDimMap(ArrayRef<AffineMap> indexingMaps, ArrayAttr iteratorTypes,
   return dimMap;
 }
 
+void ContractionOp::getIterationBounds(
+    SmallVectorImpl<int64_t> &iterationBounds) {
+  auto lhsShape = getLhsType().getShape();
+  auto resShape = getResultType().getShape();
+  SmallVector<AffineMap, 4> indexingMaps(getIndexingMaps());
+  SmallVector<int64_t, 2> iterationShape;
+  for (auto it : llvm::enumerate(iterator_types())) {
+    // Search lhs/rhs map results for 'targetExpr'.
+    auto targetExpr = getAffineDimExpr(it.index(), getContext());
+    auto iteratorTypeName = it.value().cast<StringAttr>().getValue();
+    if (iteratorTypeName == getReductionIteratorTypeName()) {
+      // Get reduction dim size from lhs shape (same size in rhsShape).
+      int64_t lhsDimIndex = getResultIndex(indexingMaps[0], targetExpr);
+      assert(lhsDimIndex >= 0);
+      iterationBounds.push_back(lhsShape[lhsDimIndex]);
+      continue;
+    }
+    // Get parallel dimension size from result shape.
+    int64_t resDimIndex = getResultIndex(indexingMaps[2], targetExpr);
+    assert(resDimIndex >= 0);
+    iterationBounds.push_back(resShape[resDimIndex]);
+  }
+}
+
+void ContractionOp::getIterationIndexMap(
+    std::vector<DenseMap<int64_t, int64_t>> &iterationIndexMap) {
+  unsigned numMaps = indexing_maps().getValue().size();
+  iterationIndexMap.resize(numMaps);
+  for (auto it : llvm::enumerate(indexing_maps())) {
+    auto index = it.index();
+    auto map = it.value().cast<AffineMapAttr>().getValue();
+    for (unsigned i = 0, e = map.getNumResults(); i < e; ++i) {
+      auto dim = map.getResult(i).cast<AffineDimExpr>();
+      iterationIndexMap[index][dim.getPosition()] = i;
+    }
+  }
+}
+
 std::vector<std::pair<int64_t, int64_t>> ContractionOp::getContractingDimMap() {
   SmallVector<AffineMap, 4> indexingMaps(getIndexingMaps());
   return getDimMap(indexingMaps, iterator_types(),
@@ -992,6 +1030,37 @@ static LogicalResult verify(TypeCastOp &op) {
   auto resultType = inferVectorTypeCastResultType(op.getMemRefType());
   if (op.getResultMemRefType() != resultType)
     return op.emitOpError("expects result type to be: ") << resultType;
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// CreateMaskOp
+//===----------------------------------------------------------------------===//
+
+ParseResult parseCreateMaskOp(OpAsmParser &parser, OperationState &result) {
+  auto indexType = parser.getBuilder().getIndexType();
+  Type resultType;
+  SmallVector<OpAsmParser::OperandType, 4> operandInfo;
+  return failure(
+      parser.parseOperandList(operandInfo) ||
+      parser.parseOptionalAttrDict(result.attributes) ||
+      parser.parseColonType(resultType) ||
+      parser.resolveOperands(operandInfo, indexType, result.operands) ||
+      parser.addTypeToList(resultType, result.types));
+}
+
+static void print(OpAsmPrinter &p, CreateMaskOp &op) {
+  p << op.getOperationName() << ' ';
+  p.printOperands(op.operands());
+  p << " : " << op.getResult()->getType();
+}
+
+static LogicalResult verify(CreateMaskOp &op) {
+  // Verify that an operand was specified for each result vector each dimension.
+  if (op.getNumOperands() !=
+      op.getResult()->getType().cast<VectorType>().getRank())
+    return op.emitOpError(
+        "must specify an operand for each result vector dimension");
   return success();
 }
 

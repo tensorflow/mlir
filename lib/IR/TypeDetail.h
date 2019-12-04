@@ -255,7 +255,6 @@ struct MemRefTypeStorage : public ShapedTypeStorage {
 /// Unranked MemRef is a MemRef with unknown rank.
 /// Only element type and memory space are known
 struct UnrankedMemRefTypeStorage : public ShapedTypeStorage {
-
   UnrankedMemRefTypeStorage(Type elementType, const unsigned memorySpace)
       : ShapedTypeStorage(elementType), memorySpace(memorySpace) {}
 
@@ -264,7 +263,6 @@ struct UnrankedMemRefTypeStorage : public ShapedTypeStorage {
   bool operator==(const KeyTy &key) const {
     return key == KeyTy(elementType, memorySpace);
   }
-
   /// Construction.
   static UnrankedMemRefTypeStorage *construct(TypeStorageAllocator &allocator,
                                               const KeyTy &key) {

@@ -209,7 +209,6 @@ public:
   /// Builds IR creating an `undef` value of the descriptor type.
   static UnrankedMemRefDescriptor undef(OpBuilder &builder, Location loc,
                                         Type descriptorType);
-
   /// Builds IR extracting the rank from the descriptor
   Value *rank(OpBuilder &builder, Location loc);
   /// Builds IR setting the rank in the descriptor

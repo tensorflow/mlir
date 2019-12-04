@@ -287,7 +287,6 @@ MemRefDescriptor::MemRefDescriptor(Value *descriptor)
 /// Builds IR creating an `undef` value of the descriptor type.
 MemRefDescriptor MemRefDescriptor::undef(OpBuilder &builder, Location loc,
                                          Type descriptorType) {
-
   Value *descriptor =
       builder.create<LLVM::UndefOp>(loc, descriptorType.cast<LLVM::LLVMType>());
   return MemRefDescriptor(descriptor);
@@ -1124,7 +1123,6 @@ struct MemRefCastOpLowering : public LLVMLegalizationPattern<MemRefCastOp> {
                ConversionPatternRewriter &rewriter) const override {
     auto memRefCastOp = cast<MemRefCastOp>(op);
     OperandAdaptor<MemRefCastOp> transformed(operands);
-
     auto srcType = memRefCastOp.getOperand()->getType();
     auto dstType = memRefCastOp.getType();
     auto targetStructType = lowering.convertType(memRefCastOp.getType());
@@ -1161,7 +1159,6 @@ struct MemRefCastOpLowering : public LLVMLegalizationPattern<MemRefCastOp> {
       // d2 = InsertValueOp d1, voidptr, 1
       memRefDesc.setMemRefDescPtr(rewriter, loc, voidPtr);
       rewriter.replaceOp(op, (Value *)memRefDesc);
-
     } else if (srcType.isa<UnrankedMemRefType>() && dstType.isa<MemRefType>()) {
       // Casting from unranked type to ranked.
       // The operation is assumed to be doing a correct cast. If the destination
@@ -1172,7 +1169,6 @@ struct MemRefCastOpLowering : public LLVMLegalizationPattern<MemRefCastOp> {
       // castPtr = BitCastOp i8* to structTy*
       Value *castPtr = rewriter.create<LLVM::BitcastOp>(
           loc, targetStructType.cast<LLVM::LLVMType>().getPointerTo(), ptr);
-
       // struct = LoadOp castPtr
       Value *loadOp = rewriter.create<LLVM::LoadOp>(loc, castPtr);
       rewriter.replaceOp(op, loadOp);

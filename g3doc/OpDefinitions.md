@@ -65,10 +65,10 @@ allowed in a TableGen file (typically with filename suffix `.td`) can be found
   a TableGen `class` (e.g., `def MyDef : MyClass<...>;`) or completely
   independently (e.g., `def MyDef;`). It cannot be further templated or
   subclassed.
-* TableGen `dag` is a dedicated type for directed graph of elements. A `dag`
-  has one operator and zero or more arguments. Its syntax is `(operator arg0,
-  arg1, argN)`. The operator can be any TableGen `def`; an argument can be
-  anything, including `dag` itself. We can have names attached to both the
+* TableGen `dag` is a dedicated type for directed acyclic graph of elements. A
+  `dag` has one operator and zero or more arguments. Its syntax is `(operator
+  arg0, arg1, argN)`. The operator can be any TableGen `def`; an argument can
+  be anything, including `dag` itself. We can have names attached to both the
   operator and the arguments like `(MyOp:$op_name MyArg:$arg_name)`.
 
 Please see the [language introduction][TableGenIntro] to learn about all the
@@ -215,7 +215,7 @@ To declare a variadic operand, wrap the `TypeConstraint` for the operand with
 `Variadic<...>`.
 
 Normally operations have no variadic operands or just one variadic operand.
-For the latter case, it is easily deduce which dynamic operands are for the
+For the latter case, it is easy to deduce which dynamic operands are for the
 static variadic operand definition. But if an operation has more than one
 variadic operands, it would be impossible to attribute dynamic operands to the
 corresponding static variadic operand definitions without further information
@@ -776,7 +776,7 @@ duplication, which is being worked on right now.
 ### Enum attributes
 
 Some attributes can only take values from an predefined enum, e.g., the
-comparsion kind of a comparsion op. To define such attributes, ODS provides
+comparison kind of a comparison op. To define such attributes, ODS provides
 several mechanisms: `StrEnumAttr`, `IntEnumAttr`, and `BitEnumAttr`.
 
 *   `StrEnumAttr`: each enum case is a string, the attribute is stored as a
@@ -1056,7 +1056,7 @@ requirements that were desirable:
   generate C++ classes and utility functions
   (builder/verifier/parser/printer).
   * TableGen is a modelling specification language used by LLVM's backends
-    and fits in well with trait based modelling. This is an implementation
+    and fits in well with trait-based modelling. This is an implementation
     decision and there are alternative ways of doing this. But the
     specification language is good for the requirements of modelling the
     traits (as seen from usage in LLVM processor backend modelling) and easy

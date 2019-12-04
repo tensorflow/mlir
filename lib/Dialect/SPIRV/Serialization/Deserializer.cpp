@@ -270,7 +270,7 @@ private:
   /// the block argument from the predecessors. We use the following approach:
   ///
   /// 1. For each OpPhi instruction, add a block argument to the current block
-  ///    in construction. Record the block argment in `valueMap` so its uses
+  ///    in construction. Record the block argument in `valueMap` so its uses
   ///    can be resolved. For the list of (value, predecessor) pairs, update
   ///    `blockPhiInfo` for bookkeeping.
   /// 2. After processing all blocks, loop over `blockPhiInfo` to fix up each

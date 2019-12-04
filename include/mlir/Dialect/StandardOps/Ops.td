@@ -136,9 +136,10 @@ class FloatArithmeticOp<string mnemonic, list<OpTrait> traits = []> :
 def AbsFOp : FloatUnaryOp<"absf"> {
   let summary = "floating point absolute-value operation";
   let description = [{
-    The `absf` operation takes one operand and returns one result of the same
-    type. This type may be a float scalar type, a vector whose element type is
-    float, or a tensor of floats. It has no standard attributes.
+    The `absf` operation computes the absolute value. It takes one operand and
+    returns one result of the same type. This type may be a float scalar type,
+    a vector whose element type is float, or a tensor of floats. It has no
+    standard attributes.
   }];
 }
 
@@ -357,9 +358,10 @@ def CallIndirectOp : Std_Op<"call_indirect", [CallOpInterface]> {
 def CeilFOp : FloatUnaryOp<"ceilf"> {
   let summary = "ceiling of the specified value";
   let description = [{
-    The `ceilf` operation takes one operand and returns one result of the same
-    type. This type may be a float scalar type, a vector whose element type is
-    float, or a tensor of floats. It has no standard attributes.
+    The `ceilf` operation computes the ceiling of a given value. It takes one
+    operand and returns one result of the same type. This type may be a float
+    scalar type, a vector whose element type is float, or a tensor of floats.
+    It has no standard attributes.
   }];
 }
 
@@ -622,18 +624,20 @@ def ConstantOp : Std_Op<"constant", [NoSideEffect]> {
 def CopySignOp : FloatArithmeticOp<"copysign"> {
   let summary = "A copysign operation";
   let description = [{
-    The `copysign` operation takes two operands and returns one result of the
-    same type. This type may be a float scalar type, a vector whose element
-    type is float, or a tensor of floats. It has no standard attributes.
+    The `copysign` operation computes the copysign of the given values. It
+    takes one operand and returns one result of the same type. This type may be
+    a float scalar type, a vector whose element type is float, or a tensor of
+    floats. It has no standard attributes.
   }];
 }
 
 def CosOp : FloatUnaryOp<"cos"> {
   let summary = "cosine of the specified value";
   let description = [{
-    The `cos` operation takes one operand and returns one result of the same
-    type. This type may be a float scalar type, a vector whose element type is
-    float, or a tensor of floats. It has no standard attributes.
+    The `cos` operation computes the cosine of a given value. It takes one
+    operand and returns one result of the same type. This type may be a float
+    scalar type, a vector whose element type is float, or a tensor of floats.
+    It has no standard attributes.
   }];
 }
 
@@ -894,9 +898,10 @@ def MulIOp : IntArithmeticOp<"muli", [Commutative]> {
 def NegFOp : FloatUnaryOp<"negf"> {
   let summary = "floating point negation";
   let description = [{
-    The `negf` operation takes one operand and returns one result of the same
-    type. This type may be a float scalar type, a vector whose element type is
-    float, or a tensor of floats. It has no standard attributes.
+    The `negf` operation computes the negation of a given value. It takes one
+    operand and returns one result of the same type. This type may be a float
+    scalar type, a vector whose element type is float, or a tensor of floats.
+    It has no standard attributes.
   }];
 }
 
@@ -1112,9 +1117,10 @@ def StoreOp : Std_Op<"store"> {
 def TanhOp : FloatUnaryOp<"tanh"> {
   let summary = "hyperbolic tangent of the specified value";
   let description = [{
-    The `tanh` operation takes one operand and returns one result of the same
-    type. This type may be a float scalar type, a vector whose element type is
-    float, or a tensor of floats. It has no standard attributes.
+    The `tanh` operation computes the hyperbolic tangent. It takes one operand
+    and returns one result of the same type. This type may be a float scalar
+    type, a vector whose element type is float, or a tensor of floats. It has
+    no standard attributes.
   }];
 }
 

@@ -182,12 +182,12 @@ Type LLVMTypeConverter::convertMemRefType(MemRefType type) {
   return LLVM::LLVMType::getStructTy(ptrTy, ptrTy, indexTy);
 }
 
-// Converts UnrankedMemRefType to LLVMType. The result is a descriptor which
-// contains:
-// 1. int64_t rank, the dynamic rank of this MemRef
-// 2. void* ptr, pointer to the static ranked MemRef descriptor. This will be
-//    stack allocated (alloca) copy of a MemRef descriptor that got casted to
-//    be unranked.
+/// Converts UnrankedMemRefType to LLVMType. The result is a descriptor which
+/// contains:
+/// 1. int64_t rank, the dynamic rank of this MemRef
+/// 2. void* ptr, pointer to the static ranked MemRef descriptor. This will be
+///    stack allocated (alloca) copy of a MemRef descriptor that got casted to
+///    be unranked.
 
 static constexpr unsigned kRankInUnrankedMemRefDescriptor = 0;
 static constexpr unsigned kPtrInUnrankedMemRefDescriptor = 1;
@@ -1142,14 +1142,13 @@ struct MemRefCastOpLowering : public LLVMLegalizationPattern<MemRefCastOp> {
       auto srcMemRefType = srcType.cast<MemRefType>();
       int64_t rank = srcMemRefType.getRank();
       // ptr = AllocaOp sizeof(MemRefDescriptor)
-      auto ptr = lowering.promoteOneMemRefDescriptor(loc, transformed.source(),
-                                                     rewriter);
+      Value *ptr = lowering.promoteOneMemRefDescriptor(
+          loc, transformed.source(), rewriter);
       // voidptr = BitCastOp srcType* to void*
-      auto voidPtr =
-          rewriter.create<LLVM::BitcastOp>(loc, getVoidPtrType(), ptr)
-              .getResult();
+      Value *voidPtr =
+          rewriter.create<LLVM::BitcastOp>(loc, getVoidPtrType(), ptr);
       // rank = ConstantOp srcRank
-      auto rankVal = rewriter.create<LLVM::ConstantOp>(
+      Value *rankVal = rewriter.create<LLVM::ConstantOp>(
           loc, lowering.convertType(rewriter.getIntegerType(64)),
           rewriter.getI64IntegerAttr(rank));
       // undef = UndefOp
@@ -1167,17 +1166,14 @@ struct MemRefCastOpLowering : public LLVMLegalizationPattern<MemRefCastOp> {
       // type mismatches the unranked the type, it is undefined behavior.
       UnrankedMemRefDescriptor memRefDesc(transformed.source());
       // ptr = ExtractValueOp src, 1
-      auto ptr = memRefDesc.memRefDescPtr(rewriter, loc);
+      Value *ptr = memRefDesc.memRefDescPtr(rewriter, loc);
       // castPtr = BitCastOp i8* to structTy*
-      auto castPtr =
-          rewriter
-              .create<LLVM::BitcastOp>(
-                  loc, targetStructType.cast<LLVM::LLVMType>().getPointerTo(),
-                  ptr)
-              .getResult();
+      Value *castPtr = rewriter.create<LLVM::BitcastOp>(
+          loc, targetStructType.cast<LLVM::LLVMType>().getPointerTo(), ptr);
+
       // struct = LoadOp castPtr
-      auto loadOp = rewriter.create<LLVM::LoadOp>(loc, castPtr);
-      rewriter.replaceOp(op, loadOp.getResult());
+      Value *loadOp = rewriter.create<LLVM::LoadOp>(loc, castPtr);
+      rewriter.replaceOp(op, loadOp);
     } else {
       llvm_unreachable("Unsuppored unranked memref to unranked memref cast");
     }

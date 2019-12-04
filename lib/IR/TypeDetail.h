@@ -268,7 +268,6 @@ struct UnrankedMemRefTypeStorage : public ShapedTypeStorage {
   /// Construction.
   static UnrankedMemRefTypeStorage *construct(TypeStorageAllocator &allocator,
                                               const KeyTy &key) {
-
     // Initialize the memory using placement new.
     return new (allocator.allocate<UnrankedMemRefTypeStorage>())
         UnrankedMemRefTypeStorage(std::get<0>(key), std::get<1>(key));

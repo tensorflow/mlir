@@ -1768,10 +1768,8 @@ void LoadOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 bool MemRefCastOp::areCastCompatible(Type a, Type b) {
   auto aT = a.dyn_cast<MemRefType>();
   auto bT = b.dyn_cast<MemRefType>();
-
   auto uaT = a.dyn_cast<UnrankedMemRefType>();
   auto ubT = b.dyn_cast<UnrankedMemRefType>();
-
   if (aT && bT) {
     if (aT.getElementType() != bT.getElementType())
       return false;

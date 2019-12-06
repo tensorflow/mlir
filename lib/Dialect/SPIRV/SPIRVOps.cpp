@@ -2053,7 +2053,7 @@ void spirv::ModuleOp::build(Builder *builder, OperationState &state,
     state.addAttribute("extensions", extensions);
   if (extended_instruction_sets)
     state.addAttribute("extended_instruction_sets", extended_instruction_sets);
-  ensureTerminator(*state.addRegion(), *builder, state.location);
+  build(builder, state);
 }
 
 static ParseResult parseModuleOp(OpAsmParser &parser, OperationState &state) {

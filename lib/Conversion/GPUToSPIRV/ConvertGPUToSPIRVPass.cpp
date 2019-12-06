@@ -67,31 +67,18 @@ void GPUToSPIRVPass::runOnModule() {
   auto context = &getContext();
   auto module = getModule();
 
-  SmallVector<Operation *, 4> spirvModules;
-  module.walk([&module, &spirvModules](FuncOp funcOp) {
-    if (!gpu::GPUDialect::isKernel(funcOp)) {
-      return;
-    }
-    OpBuilder builder(funcOp.getOperation());
-    // Create a new spirv::ModuleOp for this function, and clone the
-    // function into it.
-    // TODO : Generalize this to account for different extensions,
-    // capabilities, extended_instruction_sets, other addressing models
-    // and memory models.
-    auto spvModule = builder.create<spirv::ModuleOp>(
-        funcOp.getLoc(),
-        builder.getI32IntegerAttr(
-            static_cast<int32_t>(spirv::AddressingModel::Logical)),
-        builder.getI32IntegerAttr(
-            static_cast<int32_t>(spirv::MemoryModel::GLSL450)),
-        builder.getStrArrayAttr(
-            spirv::stringifyCapability(spirv::Capability::Shader)),
-        builder.getStrArrayAttr(spirv::stringifyExtension(
-            spirv::Extension::SPV_KHR_storage_buffer_storage_class)));
-    // Hardwire the capability to be Shader.
-    OpBuilder moduleBuilder(spvModule.getOperation()->getRegion(0));
-    moduleBuilder.clone(*funcOp.getOperation());
-    spirvModules.push_back(spvModule);
+  SmallVector<Operation *, 4> conversionTargets;
+  module.walk([&module, &conversionTargets](ModuleOp moduleOp) {
+                if (!moduleOp.getAttrOfType<UnitAttr>(gpu::GPUDialect::getKernelModuleAttrName())) {
+                  return;
+                }
+                // Create a new spir-vkernel module and clone the gpu.kernel_module
+                // operations into this module. Still need to keep the original
+                // module around cause the gpu.launch needs the launch function
+                // to be still present.
+
+    OpBuilder builder(moduleOp.getOperation());
+    conversionTargets.push_back(builder.clone(*moduleOp.getOperation()));
   });
 
   /// Dialect conversion to lower the functions with the spirv::ModuleOps.
@@ -105,7 +92,7 @@ void GPUToSPIRVPass::runOnModule() {
   target.addDynamicallyLegalOp<FuncOp>(
       [&](FuncOp op) { return typeConverter.isSignatureLegal(op.getType()); });
 
-  if (failed(applyFullConversion(spirvModules, target, patterns,
+  if (failed(applyFullConversion(conversionTargets, target, patterns,
                                  &typeConverter))) {
     return signalPassFailure();
   }

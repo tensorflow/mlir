@@ -23,6 +23,7 @@
 #include "mlir/Dialect/SPIRV/SPIRVDialect.h"
 #include "mlir/Dialect/SPIRV/SPIRVLowering.h"
 #include "mlir/Dialect/SPIRV/SPIRVOps.h"
+#include "mlir/IR/Module.h"
 
 using namespace mlir;
 
@@ -71,7 +72,35 @@ private:
   SmallVector<int32_t, 3> workGroupSizeAsInt32;
 };
 
+/// Pattern to convert a kernel module (a ModuleOp with gpu.kernel_module"
+/// attribute) to a SPIR-V module
+class KernelModuleConversion final : public SPIRVOpLowering<ModuleOp> {
+public:
+  using SPIRVOpLowering<ModuleOp>::SPIRVOpLowering;
+
+  PatternMatchResult
+  matchAndRewrite(ModuleOp moduleOp, ArrayRef<Value *> operands,
+                  ConversionPatternRewriter &rewriter) const override;
+};
+
+/// Pattern to convert module terminator
+// TODO(ravishankarm) : Make this a DRR, but needs ODS definition for
+// ModuleTerminatorOp
+class ModuleTerminatorOpConversion final
+    : public SPIRVOpLowering<ModuleTerminatorOp> {
+public:
+  using SPIRVOpLowering<ModuleTerminatorOp>::SPIRVOpLowering;
+
+  PatternMatchResult
+  matchAndRewrite(ModuleTerminatorOp, ArrayRef<Value *> operands,
+                  ConversionPatternRewriter &rewriter) const override;
+};
+
 } // namespace
+
+//===----------------------------------------------------------------------===//
+// loop::ForOp
+//===----------------------------------------------------------------------===//
 
 PatternMatchResult
 ForOpConversion::matchAndRewrite(loop::ForOp forOp, ArrayRef<Value *> operands,
@@ -142,6 +171,10 @@ ForOpConversion::matchAndRewrite(loop::ForOp forOp, ArrayRef<Value *> operands,
   return matchSuccess();
 }
 
+//===----------------------------------------------------------------------===//
+// Builtins
+//===----------------------------------------------------------------------===//
+
 template <typename SourceOp, spirv::BuiltIn builtin>
 PatternMatchResult LaunchConfigConversion<SourceOp, builtin>::matchAndRewrite(
     SourceOp op, ArrayRef<Value *> operands,
@@ -170,6 +203,10 @@ PatternMatchResult LaunchConfigConversion<SourceOp, builtin>::matchAndRewrite(
   return this->matchSuccess();
 }
 
+//===----------------------------------------------------------------------===//
+// FuncOp
+//===----------------------------------------------------------------------===//
+
 PatternMatchResult
 KernelFnConversion::matchAndRewrite(FuncOp funcOp, ArrayRef<Value *> operands,
                                     ConversionPatternRewriter &rewriter) const {
@@ -196,6 +233,57 @@ KernelFnConversion::matchAndRewrite(FuncOp funcOp, ArrayRef<Value *> operands,
   return matchSuccess();
 }
 
+//===----------------------------------------------------------------------===//
+// ModuleOp
+//===----------------------------------------------------------------------===//
+
+PatternMatchResult KernelModuleConversion::matchAndRewrite(
+    ModuleOp moduleOp, ArrayRef<Value *> operands,
+    ConversionPatternRewriter &rewriter) const {
+  if (!moduleOp.getAttrOfType<UnitAttr>(
+          gpu::GPUDialect::getKernelModuleAttrName())) {
+    return matchFailure();
+  }
+
+  // TODO : Generalize this to account for different extensions, capabilities,
+  // extended_instruction_sets, other addressing models and memory models.
+  auto spvModule = rewriter.create<spirv::ModuleOp>(
+      moduleOp.getLoc(),
+      rewriter.getI32IntegerAttr(
+          static_cast<int32_t>(spirv::AddressingModel::Logical)),
+      rewriter.getI32IntegerAttr(
+          static_cast<int32_t>(spirv::MemoryModel::GLSL450)),
+      rewriter.getStrArrayAttr(
+          spirv::stringifyCapability(spirv::Capability::Shader)),
+      rewriter.getStrArrayAttr(spirv::stringifyExtension(
+          spirv::Extension::SPV_KHR_storage_buffer_storage_class)));
+  Region &spvModuleRegion = spvModule.getOperation()->getRegion(0);
+  rewriter.inlineRegionBefore(moduleOp.getBodyRegion(), spvModuleRegion,
+                              spvModuleRegion.begin());
+  // Delete the originally added block ,the module terminator will be legalized
+  // correctly later.
+  // TODO: The block being deleted was just added. Avoid the unnecessary
+  // creation/deletion.
+  spvModuleRegion.back().erase();
+  rewriter.replaceOp(moduleOp.getOperation(), llvm::None);
+  return matchSuccess();
+}
+
+//===----------------------------------------------------------------------===//
+// ModuleTerminatorOp
+//===----------------------------------------------------------------------===//
+
+PatternMatchResult ModuleTerminatorOpConversion::matchAndRewrite(
+    ModuleTerminatorOp terminatorOp, ArrayRef<Value *> operands,
+    ConversionPatternRewriter &rewriter) const {
+  rewriter.replaceOpWithNewOp<spirv::ModuleEndOp>(terminatorOp);
+  return matchSuccess();
+}
+
+//===----------------------------------------------------------------------===//
+// GPU to SPIRV patterns.
+//===----------------------------------------------------------------------===//
+
 namespace mlir {
 void populateGPUToSPIRVPatterns(MLIRContext *context,
                                 SPIRVTypeConverter &typeConverter,
@@ -203,12 +291,12 @@ void populateGPUToSPIRVPatterns(MLIRContext *context,
                                 ArrayRef<int64_t> workGroupSize) {
   patterns.insert<KernelFnConversion>(context, typeConverter, workGroupSize);
   patterns.insert<
-      ForOpConversion,
+      ForOpConversion, KernelModuleConversion,
       LaunchConfigConversion<gpu::BlockDimOp, spirv::BuiltIn::WorkgroupSize>,
       LaunchConfigConversion<gpu::BlockIdOp, spirv::BuiltIn::WorkgroupId>,
       LaunchConfigConversion<gpu::GridDimOp, spirv::BuiltIn::NumWorkgroups>,
       LaunchConfigConversion<gpu::ThreadIdOp,
-                             spirv::BuiltIn::LocalInvocationId>>(context,
-                                                                 typeConverter);
+                             spirv::BuiltIn::LocalInvocationId>,
+      ModuleTerminatorOpConversion>(context, typeConverter);
 }
 } // namespace mlir

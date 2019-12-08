@@ -338,7 +338,7 @@ public:
                              const char *separator = ", ") const;
 
   // Splits the given `symbol` into a value pack name and an index. Returns the
-  // value pack name and writes the index to `index` on sucess. Returns `symbol`
+  // value pack name and writes the index to `index` on success. Returns `symbol`
   // itself if it does not contain an index.
   //
   // We can use `name__N` to access the `N`-th value in the value pack bound to

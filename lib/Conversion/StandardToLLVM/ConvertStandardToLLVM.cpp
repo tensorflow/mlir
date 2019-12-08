@@ -1110,9 +1110,8 @@ struct CallOpInterfaceLowering : public LLVMLegalizationPattern<CallOpType> {
         return this->matchFailure();
     }
 
-    SmallVector<Value *, 4> opOperands(op->getOperands());
     auto promoted = this->lowering.promoteMemRefDescriptors(
-        op->getLoc(), opOperands, operands, rewriter);
+        op->getLoc(), /*opOperands=*/op->getOperands(), operands, rewriter);
     auto newOp = rewriter.create<LLVM::CallOp>(op->getLoc(), packedResult,
                                                promoted, op->getAttrs());
 
@@ -2079,7 +2078,7 @@ Value *LLVMTypeConverter::promoteOneMemRefDescriptor(Location loc,
 }
 
 SmallVector<Value *, 4> LLVMTypeConverter::promoteMemRefDescriptors(
-    Location loc, ArrayRef<Value *> opOperands, ArrayRef<Value *> operands,
+    Location loc, ValueRange opOperands, ValueRange operands,
     OpBuilder &builder) {
   SmallVector<Value *, 4> promotedOperands;
   promotedOperands.reserve(operands.size());

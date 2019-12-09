@@ -90,6 +90,11 @@ LogicalResult linalgOpToAffineLoops(PatternRewriter &rewriter, Operation *op);
 // Rewrite a linalg.generic into a suitable vector.contraction op.
 LogicalResult vectorizeGenericOp(PatternRewriter &rewriter, Operation *op);
 
+// Emits a `generic` or `indexed_generic` operation with the `indexing_maps` and
+// `iterator_types` permutated according to `permutation`.
+LogicalResult permuteGenericLinalgOp(PatternRewriter &rewriter, Operation *op,
+                                     ArrayRef<unsigned> permutation,
+                                     StringRef linalgMarker);
 } // namespace linalg
 } // namespace mlir
 

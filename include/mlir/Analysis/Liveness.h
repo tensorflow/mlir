@@ -26,18 +26,18 @@
 #ifndef MLIR_ANALYSIS_LIVENESS_H
 #define MLIR_ANALYSIS_LIVENESS_H
 
-#include <vector>
+#include "mlir/Support/LLVM.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/SmallPtrSet.h"
+#include <vector>
 
 namespace mlir {
 class Block;
+class LivenessBlockInfo;
+class Operation;
 class Region;
 class Value;
-class Operation;
-
-class LivenessBlockInfo;
 
 /// Represents an analysis for computing liveness information from a
 /// given top-level operation. The analysis iterates over all associated
@@ -46,16 +46,16 @@ class LivenessBlockInfo;
 /// included in the mentioned regions. It relies on a fixpoint iteration
 /// to compute all live-in and live-out values of all included blocks.
 /// Sample usage:
-/// Liveness liveness(topLevelOp);
-/// auto &allInValues = liveness.getLiveIn(block);
-/// auto &allOutValues = liveness.getLiveOut(block);
-/// auto allOperationsInWhichValueIsLive = liveness.resolveLiveness(value);
-/// bool lastUse = liveness.isLastUse(value, operation);
+///   Liveness liveness(topLevelOp);
+///   auto &allInValues = liveness.getLiveIn(block);
+///   auto &allOutValues = liveness.getLiveOut(block);
+///   auto allOperationsInWhichValueIsLive = liveness.resolveLiveness(value);
+///   bool lastUse = liveness.isLastUse(value, operation);
 class Liveness {
 public:
   using OperationListT = std::vector<Operation *>;
-  using BlockMapT = llvm::DenseMap<Block *, LivenessBlockInfo>;
-  using ValueSetT = llvm::SmallDenseSet<Value *, 16>;
+  using BlockMapT = DenseMap<Block *, LivenessBlockInfo>;
+  using ValueSetT = SmallPtrSet<Value *, 16>;
 
 public:
   /// Creates a new Liveness analysis that computes liveness
@@ -67,7 +67,9 @@ public:
 
   /// Gets liveness info (if any) for the given value.
   /// This includes all operations in which the given value is live.
-  /// Note that the operations in this list are not ordered.
+  /// Note that the operations in this list are not ordered and the current
+  /// implementation is computationally expensive (as it iterates over all
+  /// blocks in which the given value is live).
   OperationListT resolveLiveness(Value *value) const;
 
   /// Gets liveness info (if any) for the block.
@@ -87,11 +89,11 @@ public:
   void dump() const;
 
   /// Dumps the liveness information to the given stream.
-  void print(llvm::raw_ostream &os) const;
+  void print(raw_ostream &os) const;
 
 private:
   /// Initializes the internal mappings.
-  void build(llvm::MutableArrayRef<Region> regions);
+  void build(MutableArrayRef<Region> regions);
 
 private:
   /// The operation this analysis was constructed from.
@@ -125,8 +127,10 @@ public:
   /// Returns true if the given value is in the live-out set.
   bool isLiveOut(Value *value) const;
 
-  /// Gets the start operation for the given value
-  /// (must be referenced in this block).
+  /// Gets the start operation for the given value. This is the first operation
+  /// the given value is considered to be live. This could either be the start
+  /// operation of the current block (in case the value is live-in) or the
+  /// operation that defines the given value (must be referenced in this block).
   Operation *getStartOperation(Value *value) const;
 
   /// Gets the end operation for the given value using the start operation

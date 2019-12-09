@@ -24,6 +24,7 @@
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Region.h"
 #include "mlir/IR/Value.h"
+#include "llvm/ADT/SetOperations.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -33,11 +34,11 @@ using namespace mlir;
 struct BlockInfoBuilder {
   using ValueSetT = Liveness::ValueSetT;
 
-  /// Fills the block builder with initial liveness information.
-  void build(Block *block) {
-    // Store block for further processing.
-    this->block = block;
+  /// Constructs an empty block builder.
+  BlockInfoBuilder() : block(nullptr) {}
 
+  /// Fills the block builder with initial liveness information.
+  BlockInfoBuilder(Block *block) : block(block) {
     // Mark all block arguments (phis) as defined.
     for (BlockArgument *argument : block->getArguments())
       defValues.insert(argument);
@@ -46,7 +47,6 @@ struct BlockInfoBuilder {
     // are inside this block or not (see outValues).
     for (Operation &operation : *block)
       for (Value *result : operation.getResults()) {
-        // Mark as defined
         defValues.insert(result);
 
         // Check whether this value will be in the outValues
@@ -63,8 +63,12 @@ struct BlockInfoBuilder {
 
     // Check all operations for used operands.
     for (Operation &operation : block->getOperations())
-      for (Value *operand : operation.getOperands())
-        useValues.insert(operand);
+      for (Value *operand : operation.getOperands()) {
+        // If the operand is already defined in the scope of this
+        // block, we can skip the value in the use set.
+        if (!defValues.count(operand))
+          useValues.insert(operand);
+      }
   }
 
   /// Updates live-in information of the current block.
@@ -74,11 +78,12 @@ struct BlockInfoBuilder {
   /// false otherwise.
   bool updateLiveIn() {
     ValueSetT newIn = useValues;
-    newIn.insert(outValues.begin(), outValues.end());
-    // Subtract defValues
-    for (Value *defValue : defValues)
-      newIn.erase(defValue);
+    llvm::set_union(newIn, outValues);
+    llvm::set_subtract(newIn, defValues);
 
+    // It is sufficient to check the set sizes (instead of their contents)
+    // since the live-in set can only grow monotonically during all update
+    // operations.
     if (newIn.size() == inValues.size())
       return false;
 
@@ -93,7 +98,7 @@ struct BlockInfoBuilder {
   void updateLiveOut(SourceT &source) {
     for (Block *succ : block->getSuccessors()) {
       BlockInfoBuilder &builder = source[succ];
-      outValues.insert(builder.inValues.begin(), builder.inValues.end());
+      llvm::set_union(outValues, builder.inValues);
     }
   }
 
@@ -114,18 +119,17 @@ struct BlockInfoBuilder {
 };
 
 /// Builds the internal liveness block mapping.
-static void
-buildBlockMapping(MutableArrayRef<Region> regions,
-                  llvm::DenseMap<Block *, BlockInfoBuilder> &builders) {
+static void buildBlockMapping(MutableArrayRef<Region> regions,
+                              DenseMap<Block *, BlockInfoBuilder> &builders) {
   llvm::SetVector<Block *> toProcess;
 
   // Initialize all block structures
   for (Region &region : regions)
     for (Block &block : region) {
-      auto &blockBuilder = builders[&block];
-      blockBuilder.build(&block);
+      BlockInfoBuilder &builder =
+          builders.try_emplace(&block, &block).first->second;
 
-      if (blockBuilder.updateLiveIn())
+      if (builder.updateLiveIn())
         toProcess.insert(block.pred_begin(), block.pred_end());
     }
 
@@ -155,7 +159,7 @@ Liveness::Liveness(Operation *op) : operation(op) { build(op->getRegions()); }
 void Liveness::build(MutableArrayRef<Region> regions) {
 
   // Build internal block mapping.
-  llvm::DenseMap<Block *, BlockInfoBuilder> builders;
+  DenseMap<Block *, BlockInfoBuilder> builders;
   buildBlockMapping(regions, builders);
 
   // Store internal block data.
@@ -172,8 +176,8 @@ void Liveness::build(MutableArrayRef<Region> regions) {
 /// Gets liveness info (if any) for the given value.
 Liveness::OperationListT Liveness::resolveLiveness(Value *value) const {
   OperationListT result;
-  llvm::SmallDenseSet<Block *, 32> visited;
-  llvm::SmallVector<Block *, 8> toProcess;
+  SmallPtrSet<Block *, 32> visited;
+  SmallVector<Block *, 8> toProcess;
 
   // Start with the defining block
   Block *currentBlock;
@@ -258,9 +262,9 @@ void Liveness::print(raw_ostream &os) const {
   os << "// ---- Liveness -----\n";
 
   // Builds unique block/value mappings for testing purposes.
-  llvm::DenseMap<Block *, size_t> blockIds;
-  llvm::DenseMap<Operation *, size_t> operationIds;
-  llvm::DenseMap<Value *, size_t> valueIds;
+  DenseMap<Block *, size_t> blockIds;
+  DenseMap<Operation *, size_t> operationIds;
+  DenseMap<Value *, size_t> valueIds;
   for (Region &region : operation->getRegions())
     for (Block &block : region) {
       blockIds[&block] = blockIds.size();

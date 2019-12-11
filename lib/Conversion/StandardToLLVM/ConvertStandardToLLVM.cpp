@@ -1026,6 +1026,51 @@ struct DeallocOpLowering : public LLVMLegalizationPattern<DeallocOp> {
   }
 };
 
+// A `tanh` is converted into a call to the `tanh` function.
+struct TanhOpLowering : public LLVMLegalizationPattern<TanhOp> {
+  using LLVMLegalizationPattern<TanhOp>::LLVMLegalizationPattern;
+
+  PatternMatchResult
+  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    using LLVMFuncOpT = LLVM::LLVMFuncOp;
+    using LLVMTypeT = LLVM::LLVMType;
+
+    assert(operands.size() == 1 && "tanh takes one operand");
+
+    OperandAdaptor<TanhOp> transformed(operands);
+    LLVMTypeT operandType =
+      transformed.operand()->getType().dyn_cast_or_null<LLVM::LLVMType>();
+
+    if (!operandType)
+      return matchFailure();
+
+    std::string function_name;
+    if(operandType.isFloatTy()) //f32
+      function_name = "tanhf";
+    else if(operandType.isDoubleTy()) //f64
+      function_name = "tanh";
+    else
+      return matchFailure();
+
+    // Insert the `tanh` declaration if it is not already present.
+    auto tanhFunc =
+      op->getParentOfType<ModuleOp>().lookupSymbol<LLVMFuncOpT>(function_name);
+    if (!tanhFunc) {
+      OpBuilder moduleBuilder(op->getParentOfType<ModuleOp>().getBodyRegion());
+      tanhFunc = moduleBuilder.create<LLVMFuncOpT>(
+          rewriter.getUnknownLoc(), function_name,
+          LLVMTypeT::getFunctionTy(
+            operandType,operandType,/*isVarArg=*/false));
+    }
+    rewriter.replaceOpWithNewOp<LLVM::CallOp>(
+      op, operandType, rewriter.getSymbolRefAttr(tanhFunc),
+      transformed.operand());
+    return matchSuccess();
+  }
+};
+
 struct MemRefCastOpLowering : public LLVMLegalizationPattern<MemRefCastOp> {
   using LLVMLegalizationPattern<MemRefCastOp>::LLVMLegalizationPattern;
 
@@ -1757,6 +1802,7 @@ void mlir::populateStdToLLVMConversionPatterns(
       SubFOpLowering,
       SubIOpLowering,
       SubViewOpLowering,
+      TanhOpLowering,
       TruncateIOpLowering,
       ViewOpLowering,
       XOrOpLowering,

@@ -423,6 +423,18 @@ func @ops(f32, f32, i32, i32) -> (f32, i32) {
   %13 = xor %arg2, %arg3 : i32
 // CHECK-NEXT: %13 = "llvm.intr.exp"(%arg0) : (!llvm.float) -> !llvm.float
   %14 = std.exp %arg0 : f32
+// CHECK-NEXT: %14 = "llvm.intr.fabs"(%arg0) : (!llvm.float) -> !llvm.float
+  %15 = std.absf %arg0 : f32
+// CHECK-NEXT: %15 = "llvm.intr.ceil"(%arg0) : (!llvm.float) -> !llvm.float
+  %16 = std.ceilf %arg0 : f32
+// CHECK-NEXT: %16 = "llvm.intr.cos"(%arg0) : (!llvm.float) -> !llvm.float
+  %17 = std.cos %arg0 : f32
+// CHECK-NEXT: %17 = llvm.call @tanhf(%arg0) : (!llvm.float) -> !llvm.float
+  %18 = std.tanh %arg0 : f32
+// CHECK-NEXT: %18 = llvm.mlir.constant(7.900000e-01 : f64) : !llvm.double
+  %19 = constant 7.9e-01 : f64
+// CHECK-NEXT: %19 = llvm.call @tanh(%18) : (!llvm.double) -> !llvm.double
+  %20 = std.tanh %19 : f64
 
   return %0, %4 : f32, i32
 }

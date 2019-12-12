@@ -1041,38 +1041,39 @@ struct TanhOpLowering : public LLVMLegalizationPattern<TanhOp> {
 
     OperandAdaptor<TanhOp> transformed(operands);
     LLVMTypeT operandType =
-      transformed.operand()->getType().dyn_cast_or_null<LLVM::LLVMType>();
+        transformed.operand()->getType().dyn_cast_or_null<LLVM::LLVMType>();
 
     if (!operandType)
       return matchFailure();
 
     std::string functionName;
-    if(operandType.isFloatTy()) //f32
+    if (operandType.isFloatTy())
       functionName = "tanhf";
-    else if(operandType.isDoubleTy()) //f64
+    else if (operandType.isDoubleTy())
       functionName = "tanh";
     else
       return matchFailure();
 
     // Get a reference to the tanh function, inserting it if necessary.
     Operation *tanhFunc =
-      SymbolTable::lookupNearestSymbolFrom(op, functionName);
-    
+        SymbolTable::lookupNearestSymbolFrom(op, functionName);
+
     LLVMFuncOpT tanhLLVMFunc;
-    if(tanhFunc)
+    if (tanhFunc) {
       tanhLLVMFunc = llvm::cast<LLVMFuncOpT>(tanhFunc);
-    else{
+    } else {
       PatternRewriter::InsertionGuard insertGuard(rewriter);
       auto module = op->getParentOfType<ModuleOp>();
       rewriter.setInsertionPointToStart(module.getBody());
       tanhLLVMFunc = rewriter.create<LLVMFuncOpT>(
-        module.getLoc(), functionName, LLVMTypeT::getFunctionTy(
-            operandType,operandType,/*isVarArg=*/false));
+          module.getLoc(), functionName,
+          LLVMTypeT::getFunctionTy(operandType, operandType,
+                                   /*isVarArg=*/false));
     }
 
     rewriter.replaceOpWithNewOp<LLVM::CallOp>(
-      op, operandType, rewriter.getSymbolRefAttr(tanhLLVMFunc),
-      transformed.operand());
+        op, operandType, rewriter.getSymbolRefAttr(tanhLLVMFunc),
+        transformed.operand());
     return matchSuccess();
   }
 };

@@ -433,7 +433,6 @@ func @ops(f32, f32, i32, i32) -> (f32, i32) {
   return %0, %4 : f32, i32
 }
 
-
 // Checking conversion of index types to integers using i1, assuming no target
 // system would have a 1-bit address space.  Otherwise, we would have had to
 // make this test dependent on the pointer size on the target system.

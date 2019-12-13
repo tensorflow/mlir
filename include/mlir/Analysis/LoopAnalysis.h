@@ -32,7 +32,7 @@ class AffineExpr;
 class AffineForOp;
 class AffineMap;
 class MemRefType;
-class NestedPattern;
+struct NestedPattern;
 class Operation;
 class Value;
 

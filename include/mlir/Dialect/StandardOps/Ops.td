@@ -698,12 +698,12 @@ def DivFOp : FloatArithmeticOp<"divf"> {
   let summary = "floating point division operation";
 }
 
-def DivISOp : IntArithmeticOp<"divis"> {
+def SignedDivIOp : IntArithmeticOp<"divi_signed"> {
   let summary = "signed integer division operation";
   let hasFolder = 1;
 }
 
-def DivIUOp : IntArithmeticOp<"diviu"> {
+def UnsignedDivIOp : IntArithmeticOp<"divi_unsigned"> {
   let summary = "unsigned integer division operation";
   let hasFolder = 1;
 }
@@ -953,12 +953,12 @@ def RemFOp : FloatArithmeticOp<"remf"> {
   let summary = "floating point division remainder operation";
 }
 
-def RemISOp : IntArithmeticOp<"remis"> {
+def SignedRemIOp : IntArithmeticOp<"remi_signed"> {
   let summary = "signed integer division remainder operation";
   let hasFolder = 1;
 }
 
-def RemIUOp : IntArithmeticOp<"remiu"> {
+def UnsignedRemIOp : IntArithmeticOp<"remi_unsigned"> {
   let summary = "unsigned integer division remainder operation";
   let hasFolder = 1;
 }

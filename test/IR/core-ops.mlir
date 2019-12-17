@@ -448,6 +448,52 @@ func @standard_instrs(tensor<4x4x?xf32>, f32, i32, index, i64, f16) {
 
   // CHECK: %{{[0-9]+}} = tanh %arg0 : tensor<4x4x?xf32>
   %123 = tanh %t : tensor<4x4x?xf32>
+
+  // CHECK: %{{[0-9]+}} = shift_left %arg2, %arg2 : i32
+  %124 = "std.shift_left"(%i, %i) : (i32, i32) -> i32
+
+  // CHECK:%{{[0-9]+}} = shift_left %4, %4 : i32
+  %125 = shift_left %i2, %i2 : i32
+
+  // CHECK: %{{[0-9]+}} = shift_left %arg3, %arg3 : index
+  %126 = shift_left %idx, %idx : index
+
+  // CHECK: %{{[0-9]+}} = shift_left %cst_5, %cst_5 : vector<42xi32>
+  %127 = shift_left %vci32, %vci32 : vector<42 x i32>
+
+  // CHECK: %{{[0-9]+}} = shift_left %cst_4, %cst_4 : tensor<42xi32>
+  %128 = shift_left %tci32, %tci32 : tensor<42 x i32>
+
+  // CHECK: %{{[0-9]+}} = shift_right_signed %arg2, %arg2 : i32
+  %129 = "std.shift_right_signed"(%i, %i) : (i32, i32) -> i32
+
+  // CHECK:%{{[0-9]+}} = shift_right_signed %4, %4 : i32
+  %130 = shift_right_signed %i2, %i2 : i32
+
+  // CHECK: %{{[0-9]+}} = shift_right_signed %arg3, %arg3 : index
+  %131 = shift_right_signed %idx, %idx : index
+
+  // CHECK: %{{[0-9]+}} = shift_right_signed %cst_5, %cst_5 : vector<42xi32>
+  %132 = shift_right_signed %vci32, %vci32 : vector<42 x i32>
+
+  // CHECK: %{{[0-9]+}} = shift_right_signed %cst_4, %cst_4 : tensor<42xi32>
+  %133 = shift_right_signed %tci32, %tci32 : tensor<42 x i32>
+
+  // CHECK: %{{[0-9]+}} = shift_right_unsigned %arg2, %arg2 : i32
+  %134 = "std.shift_right_unsigned"(%i, %i) : (i32, i32) -> i32
+ 
+  // CHECK:%{{[0-9]+}} = shift_right_unsigned %4, %4 : i32
+  %135 = shift_right_unsigned %i2, %i2 : i32
+
+  // CHECK: %{{[0-9]+}} = shift_right_unsigned %arg3, %arg3 : index
+  %136 = shift_right_unsigned %idx, %idx : index
+
+  // CHECK: %{{[0-9]+}} = shift_right_unsigned %cst_5, %cst_5 : vector<42xi32>
+  %137 = shift_right_unsigned %vci32, %vci32 : vector<42 x i32>
+
+  // CHECK: %{{[0-9]+}} = shift_right_unsigned %cst_4, %cst_4 : tensor<42xi32>
+  %138 = shift_right_unsigned %tci32, %tci32 : tensor<42 x i32>
+
   return
 }
 

@@ -851,6 +851,18 @@ struct ConstLLVMOpLowering
     : public OneToOneLLVMOpLowering<ConstantOp, LLVM::ConstantOp> {
   using Super::Super;
 };
+struct ShiftLeftOpLowering
+    : public OneToOneLLVMOpLowering<ShiftLeftOp, LLVM::ShlOp> {
+  using Super::Super;
+};
+struct SignedShiftRightOpLowering
+    : public OneToOneLLVMOpLowering<SignedShiftRightOp, LLVM::AShrOp> {
+  using Super::Super;
+};
+struct UnsignedShiftRightOpLowering
+    : public OneToOneLLVMOpLowering<UnsignedShiftRightOp, LLVM::LShrOp> {
+  using Super::Super;
+};
 
 // Check if the MemRefType `type` is supported by the lowering. We currently
 // only support memrefs with identity maps.
@@ -2054,13 +2066,16 @@ void mlir::populateStdToLLVMNonMemoryConversionPatterns(
       ReturnOpLowering,
       SIToFPLowering,
       SelectOpLowering,
+      ShiftLeftOpLowering,
       SignExtendIOpLowering,
+      SignedShiftRightOpLowering,
       SplatOpLowering,
       SplatNdOpLowering,
       SubFOpLowering,
       SubIOpLowering,
       TanhOpLowering,
       TruncateIOpLowering,
+      UnsignedShiftRightOpLowering,
       XOrOpLowering,
       ZeroExtendIOpLowering>(*converter.getDialect(), converter);
   // clang-format on

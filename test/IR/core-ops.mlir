@@ -481,7 +481,7 @@ func @standard_instrs(tensor<4x4x?xf32>, f32, i32, index, i64, f16) {
 
   // CHECK: %{{[0-9]+}} = shift_right_unsigned %arg2, %arg2 : i32
   %134 = "std.shift_right_unsigned"(%i, %i) : (i32, i32) -> i32
- 
+
   // CHECK:%{{[0-9]+}} = shift_right_unsigned %4, %4 : i32
   %135 = shift_right_unsigned %i2, %i2 : i32
 

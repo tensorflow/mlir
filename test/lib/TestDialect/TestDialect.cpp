@@ -42,13 +42,14 @@ struct TestOpAsmInterface : public OpAsmDialectInterface {
       setNameFn(asmOp, "result");
   }
 
-  void getRegionArgumentName(BlockArgument *arg, raw_ostream &os) const final {
-    Operation *op = arg->getOwner()->getParentOp();
+  void getAsmBlockArgumentNames(Block *block,
+                                OpAsmSetValueNameFn setNameFn) const final {
+    auto op = block->getParentOp();
     if (auto arrayAttr = op->getAttrOfType<ArrayAttr>("arg_names")) {
-      if (arrayAttr.size() > arg->getArgNumber()) {
-        if (auto strAttr = arrayAttr.getValue()[arg->getArgNumber()]
-                               .dyn_cast<StringAttr>()) {
-          os << strAttr.getValue();
+      auto args = block->getArguments();
+      for (unsigned i = 0; i < std::min(arrayAttr.size(), args.size()); i++) {
+        if (auto strAttr = arrayAttr.getValue()[i].dyn_cast<StringAttr>()) {
+          setNameFn(args[i], strAttr.getValue());
         }
       }
     }

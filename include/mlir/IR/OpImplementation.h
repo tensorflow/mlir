@@ -658,11 +658,9 @@ public:
                                  OpAsmSetValueNameFn setNameFn) const {}
 
   /// Get a special name to use when printing the entry block arguments of the
-  /// region contained by an operation in this dialect.  The desired name should
-  /// be streamed into 'os'.  If the result is empty, the default name will be
-  /// used.
-  virtual void getRegionArgumentName(BlockArgument *arg,
-                                     raw_ostream &os) const {}
+  /// region contained by an operation in this dialect.
+  virtual void getAsmBlockArgumentNames(Block *block,
+                                        OpAsmSetValueNameFn setNameFn) const {}
 };
 
 //===--------------------------------------------------------------------===//

@@ -41,6 +41,18 @@ struct TestOpAsmInterface : public OpAsmDialectInterface {
     if (auto asmOp = dyn_cast<AsmDialectInterfaceOp>(op))
       setNameFn(asmOp, "result");
   }
+
+  void getRegionArgumentName(BlockArgument *arg, raw_ostream &os) const final {
+    Operation *op = arg->getOwner()->getParentOp();
+    if (auto arrayAttr = op->getAttrOfType<ArrayAttr>("arg_names")) {
+      if (arrayAttr.size() > arg->getArgNumber()) {
+        if (auto strAttr = arrayAttr.getValue()[arg->getArgNumber()]
+                               .dyn_cast<StringAttr>()) {
+          os << strAttr.getValue();
+        }
+      }
+    }
+  }
 };
 
 struct TestOpFolderDialectInterface : public OpFolderDialectInterface {

@@ -567,7 +567,8 @@ public:
   virtual ParseResult parseColonType(Type &result) = 0;
 
   /// Parse a colon followed by a type of a specific kind, e.g. a FunctionType.
-  template <typename TypeType> ParseResult parseColonType(TypeType &result) {
+  template <typename TypeType>
+  ParseResult parseColonType(TypeType &result) {
     llvm::SMLoc loc = getCurrentLocation();
 
     // Parse any kind of type.
@@ -655,6 +656,13 @@ public:
   /// OpAsmInterface.td#getAsmResultNames for usage details and documentation.
   virtual void getAsmResultNames(Operation *op,
                                  OpAsmSetValueNameFn setNameFn) const {}
+
+  /// Get a special name to use when printing the entry block arguments of the
+  /// region contained by an operation in this dialect.  The desired name should
+  /// be streamed into 'os'.  If the result is empty, the default name will be
+  /// used.
+  virtual void getRegionArgumentName(BlockArgument *arg,
+                                     raw_ostream &os) const {}
 };
 
 //===--------------------------------------------------------------------===//

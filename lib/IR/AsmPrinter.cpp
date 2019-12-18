@@ -1623,12 +1623,22 @@ void OperationPrinter::numberValuesInBlock(Block &block) {
 
   // Number the block arguments. We give entry block arguments a special name
   // 'arg'.
-  SmallString<32> specialNameBuffer(isEntryBlock ? "arg" : "");
-  llvm::raw_svector_ostream specialName(specialNameBuffer);
+  const OpAsmDialectInterface *interface = nullptr;
+  if (isEntryBlock && state) {
+    if (auto *op = block.getParentOp()) {
+      interface = state->getOpAsmInterface(op->getDialect());
+    }
+  }
   for (auto *arg : block.getArguments()) {
+    SmallString<32> specialNameBuffer;
+    llvm::raw_svector_ostream specialName(specialNameBuffer);
     if (isEntryBlock) {
-      specialNameBuffer.resize(strlen("arg"));
-      specialName << nextArgumentID++;
+      if (interface) {
+        interface->getRegionArgumentName(arg, specialName);
+      }
+      if (specialName.str().empty()) {
+        specialName << "arg" << nextArgumentID++;
+      }
     }
     setValueName(arg, specialName.str());
   }

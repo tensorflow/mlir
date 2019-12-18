@@ -45,13 +45,14 @@ struct TestOpAsmInterface : public OpAsmDialectInterface {
   void getAsmBlockArgumentNames(Block *block,
                                 OpAsmSetValueNameFn setNameFn) const final {
     auto op = block->getParentOp();
-    if (auto arrayAttr = op->getAttrOfType<ArrayAttr>("arg_names")) {
-      auto args = block->getArguments();
-      for (unsigned i = 0; i < std::min(arrayAttr.size(), args.size()); i++) {
-        if (auto strAttr = arrayAttr.getValue()[i].dyn_cast<StringAttr>()) {
-          setNameFn(args[i], strAttr.getValue());
-        }
-      }
+    auto arrayAttr = op->getAttrOfType<ArrayAttr>("arg_names");
+    if (!arrayAttr)
+      return;
+    auto args = block->getArguments();
+    auto e = std::min(arrayAttr.size(), args.size());
+    for (unsigned i = 0; i < e; ++i) {
+      if (auto strAttr = arrayAttr.getValue()[i].dyn_cast<StringAttr>())
+        setNameFn(args[i], strAttr.getValue());
     }
   }
 };

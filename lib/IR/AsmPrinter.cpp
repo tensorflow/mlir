@@ -1637,12 +1637,13 @@ void OperationPrinter::numberValuesInBlock(Block &block) {
   // Number the block arguments. We give entry block arguments a special name
   // 'arg'.
   for (auto arg : block.getArguments()) {
+    if (valueIDs.count(arg))
+      continue;
     SmallString<32> specialNameBuffer(isEntryBlock ? "arg" : "");
     llvm::raw_svector_ostream specialName(specialNameBuffer);
     if (isEntryBlock)
       specialName << nextArgumentID++;
-    if (!valueIDs.count(arg))
-      setValueName(arg, specialName.str());
+    setValueName(arg, specialName.str());
   }
 
   // Number the operations in this block.

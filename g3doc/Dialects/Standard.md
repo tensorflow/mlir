@@ -72,10 +72,14 @@ Syntax:
 operation ::= `return` (ssa-use-list `:` type-list-no-parens)?
 ```
 
-The `return` terminator operation represents the completion of a function, and
-produces the result values. The count and types of the operands must match the
-result types of the enclosing function. It is legal for multiple blocks in a
-single function to return.
+The `return` terminator operation represents the transfer of control to its
+parent op, which is the op immediately enclosing the region in which the
+`return' appears.  The semantics of the parent op define where control flows
+next. When the parent op of a `return` is a function op, the `return' represents
+the completion of that function and produces its result values. The count and
+types of the operands must match the result types of that function. In the case
+that the parent op is not a function, the count and types of the return's
+operands must match those of the result values of the parent op.
 
 ## Core Operations
 

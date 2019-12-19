@@ -1012,7 +1012,7 @@ def RemIUOp : IntArithmeticOp<"remiu"> {
   let hasFolder = 1;
 }
 
-def ReturnOp : Std_Op<"return", [Terminator, HasParent<"FuncOp">]> {
+def ReturnOp : Std_Op<"return", [Terminator]> {
   let summary = "return operation";
   let description = [{
     The "return" operation represents a return operation within a function.

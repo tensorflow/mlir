@@ -693,9 +693,9 @@ func @trunci_cast_to_same_width(%arg0 : i16) {
 
 func @return_not_in_function() {
   "foo.region"() ({
-    // expected-error@+1 {{'std.return' op expects parent op 'func'}}
+    // expected-error@+1 {{'std.return' op has 0 operands, but enclosing function returns 1}}
     return
-  }): () -> ()
+  }): () -> (i32)
   return
 }
 

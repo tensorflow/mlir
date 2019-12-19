@@ -1956,21 +1956,35 @@ static void print(OpAsmPrinter &p, ReturnOp op) {
 }
 
 static LogicalResult verify(ReturnOp op) {
-  auto function = cast<FuncOp>(op.getParentOp());
+  auto *parentOp = op.getParentOp();
+  if (!parentOp)
+    // TODO: this path can only be tested via the builder.
+    return op.emitOpError("has no parent op");
 
-  // The operand number and types must match the function signature.
-  const auto &results = function.getType().getResults();
-  if (op.getNumOperands() != results.size())
+  // The operand count and types must be consisntent with the parent op. When
+  // the parent is a FuncOp (which is declarative), check against its return
+  // types; for the rest, check again the number of actual SSA results.
+  SmallVector<Type, 4> retTypes;
+  if (auto funcOp = dyn_cast<FuncOp>(parentOp)) {
+    retTypes.assign(funcOp.getType().getResults().begin(),
+                    funcOp.getType().getResults().end());
+  } else {
+    retTypes.reserve(parentOp->getNumResults());
+    for (auto *result : parentOp->getResults())
+      retTypes.push_back(result->getType());
+  }
+
+  if (op.getNumOperands() != retTypes.size())
     return op.emitOpError("has ")
            << op.getNumOperands()
-           << " operands, but enclosing function returns " << results.size();
+           << " operands, but enclosing function returns " << retTypes.size();
 
-  for (unsigned i = 0, e = results.size(); i != e; ++i)
-    if (op.getOperand(i)->getType() != results[i])
+  for (unsigned i = 0, e = retTypes.size(); i != e; ++i)
+    if (op.getOperand(i)->getType() != retTypes[i])
       return op.emitError()
              << "type of return operand " << i << " ("
              << op.getOperand(i)->getType()
-             << ") doesn't match function result type (" << results[i] << ")";
+             << ") doesn't match function result type (" << retTypes[i] << ")";
 
   return success();
 }

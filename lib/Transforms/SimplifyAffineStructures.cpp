@@ -22,6 +22,7 @@
 #include "mlir/Analysis/AffineStructures.h"
 #include "mlir/IR/IntegerSet.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Transforms/LoopLikeInterface.h"
 #include "mlir/Transforms/Passes.h"
 #include "mlir/Transforms/Utils.h"
 
@@ -93,12 +94,12 @@ std::unique_ptr<OpPassBase<FuncOp>> mlir::createSimplifyAffineStructuresPass() {
 void SimplifyAffineStructures::runOnFunction() {
   auto func = getFunction();
   simplifiedAttributes.clear();
-  func.walk([&](Operation *opInst) {
-    for (auto attr : opInst->getAttrs()) {
+  func.walk([&](Operation *op) {
+    for (auto attr : op->getAttrs()) {
       if (auto mapAttr = attr.second.dyn_cast<AffineMapAttr>())
-        simplifyAndUpdateAttribute(opInst, attr.first, mapAttr);
+        simplifyAndUpdateAttribute(op, attr.first, mapAttr);
       else if (auto setAttr = attr.second.dyn_cast<IntegerSetAttr>())
-        simplifyAndUpdateAttribute(opInst, attr.first, setAttr);
+        simplifyAndUpdateAttribute(op, attr.first, setAttr);
     }
   });
 
@@ -110,8 +111,16 @@ void SimplifyAffineStructures::runOnFunction() {
   for (auto allocOp : allocOps) {
     normalizeMemRef(allocOp);
   }
+
+  // Remove zero trip count loops.
+  // TODO: this could be moved to a more appropriate place.
+  func.walk([&](LoopLikeOpInterface loopOp) {
+    if (loopOp.getConstantTripCount() == uint64_t(0))
+      loopOp.erase();
+  });
 }
 
 static PassRegistration<SimplifyAffineStructures>
-    pass("simplify-affine-structures",
-         "Simplify affine expressions in maps/sets and normalize memrefs");
+    pass("simplify-affine-structures", "Simplify expressions in afine map/set "
+                                       "attributes, normalize memrefs, remove "
+                                       "zero trip-count loops");

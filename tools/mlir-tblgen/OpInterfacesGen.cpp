@@ -41,7 +41,10 @@ using mlir::tblgen::OpInterfaceMethod;
 // beginning of the argument list.
 static void emitMethodNameAndArgs(const OpInterfaceMethod &method,
                                   raw_ostream &os, bool addOperationArg) {
-  os << method.getName() << '(';
+  // Whenever an operation argument is added, suffix helper method name with an
+  // underscore to avoid conflicts with free functions of same name on the
+  // concrete ops using this interface.
+  os << method.getName() << (addOperationArg ? "_(" : "(");
   if (addOperationArg)
     os << "Operation *tablegen_opaque_op" << (method.arg_empty() ? "" : ", ");
   interleaveComma(method.getArguments(), os,
@@ -77,9 +80,11 @@ static void emitInterfaceDef(OpInterface &interface, raw_ostream &os) {
     emitMethodNameAndArgs(method, os, /*addOperationArg=*/false);
 
     // Forward to the method on the concrete operation type.
-    os << " {\n      return getImpl()->" << method.getName() << '(';
+    os << " {\n      return getImpl()->" << method.getName();
     if (!method.isStatic())
-      os << "getOperation()" << (method.arg_empty() ? "" : ", ");
+      os << "_(getOperation()" << (method.arg_empty() ? "" : ", ");
+    else
+      os << "(";
     interleaveComma(
         method.getArguments(), os,
         [&](const OpInterfaceMethod::Argument &arg) { os << arg.name; });

@@ -52,6 +52,8 @@ void ensureLoopTerminator(Region &region, Builder &builder, Location loc);
 /// not an induction variable, then return nullptr.
 ForOp getForInductionVarOwner(Value *val);
 
+/// Returns the trip count of the loop if it's a constant, None otherwise.
+Optional<uint64_t> getConstantTripCount(ForOp forOp);
 } // end namespace loop
 } // end namespace mlir
 #endif // MLIR_LOOPOPS_OPS_H_

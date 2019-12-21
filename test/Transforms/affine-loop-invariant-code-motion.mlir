@@ -17,27 +17,23 @@ func @nested_loops_both_having_invariant_code() {
   // CHECK-NEXT: %cst_0 = constant 8.000000e+00 : f32
   // CHECK-NEXT: %1 = addf %cst, %cst_0 : f32
   // CHECK-NEXT: affine.for %arg0 = 0 to 10 {
-  // CHECK-NEXT: affine.store %1, %0[%arg0] : memref<10xf32>
+  // CHECK-NEXT:   affine.store %1, %0[%arg0] : memref<10xf32>
 
   return
 }
 
-// The store-load forwarding can see through affine apply's since it relies on
-// dependence information.
-// CHECK-LABEL: func @store_affine_apply
-func @store_affine_apply() -> memref<10xf32> {
+// CHECK-LABEL: func @store_affine_for
+func @store_affine_for() -> memref<10xf32> {
   %cf7 = constant 7.0 : f32
   %m = alloc() : memref<10xf32>
   affine.for %arg0 = 0 to 10 {
-      %t0 = affine.apply (d1) -> (d1 + 1)(%arg0)
-      affine.store %cf7, %m[%t0] : memref<10xf32>
+    affine.store %cf7, %m[%arg0 + 1] : memref<10xf32>
   }
   return %m : memref<10xf32>
 // CHECK:       %cst = constant 7.000000e+00 : f32
 // CHECK-NEXT:  %0 = alloc() : memref<10xf32>
 // CHECK-NEXT:  affine.for %arg0 = 0 to 10 {
-// CHECK-NEXT:      %1 = affine.apply #map3(%arg0)
-// CHECK-NEXT:      affine.store %cst, %0[%1] : memref<10xf32>
+// CHECK-NEXT:      affine.store %cst, %0[%arg0 + 1] : memref<10xf32>
 // CHECK-NEXT:  }
 // CHECK-NEXT:  return %0 : memref<10xf32>
 }

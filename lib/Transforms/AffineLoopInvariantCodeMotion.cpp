@@ -40,17 +40,17 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 
-#define DEBUG_TYPE "licm"
+#define DEBUG_TYPE "affine-licm"
 
 using namespace mlir;
 
 namespace {
 
-/// Loop invariant code motion (LICM) pass.
+/// Affine loop invariant code motion (LICM) pass.
+/// TODO: This pass should be removed once the new LICM pass can handle its
+///       uses.
 /// TODO(asabne) : The pass is missing zero-trip tests.
 /// TODO(asabne) : Check for the presence of side effects before hoisting.
-/// TODO: This code should be removed once the new LICM pass can handle its
-///       uses.
 struct LoopInvariantCodeMotion : public FunctionPass<LoopInvariantCodeMotion> {
   void runOnFunction() override;
   void runOnAffineForOp(AffineForOp forOp);
@@ -245,4 +245,4 @@ mlir::createAffineLoopInvariantCodeMotionPass() {
 
 static PassRegistration<LoopInvariantCodeMotion>
     pass("affine-loop-invariant-code-motion",
-         "Hoist loop invariant instructions outside of the loop");
+         "Hoist loop invariant operations outside of the loop");

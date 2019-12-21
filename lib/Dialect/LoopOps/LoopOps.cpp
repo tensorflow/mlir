@@ -140,7 +140,7 @@ bool ForOp::isDefinedOutsideOfLoop(Value *value) {
 
 LogicalResult ForOp::moveOutOfLoop(ArrayRef<Operation *> ops) {
   for (auto *op : ops)
-    op->moveBefore(this->getOperation());
+    op->moveBefore(*this);
   return success();
 }
 
@@ -151,6 +151,31 @@ ForOp mlir::loop::getForInductionVarOwner(Value *val) {
   assert(ivArg->getOwner() && "unlinked block argument");
   auto *containingInst = ivArg->getOwner()->getParentOp();
   return dyn_cast_or_null<ForOp>(containingInst);
+}
+
+Optional<uint64_t> mlir::loop::getConstantTripCount(ForOp forOp) {
+  Value *lb = forOp.lowerBound();
+  Value *ub = forOp.upperBound();
+
+  if (lb == ub)
+    return 0;
+
+  IntegerAttr lbCst, ubCst, step;
+  if (!matchPattern(lb, m_Constant(&lbCst)) ||
+      !matchPattern(ub, m_Constant(&ubCst)))
+    return llvm::None;
+
+  int64_t lbConst = lbCst.getValue().getSExtValue();
+  int64_t ubConst = ubCst.getValue().getSExtValue();
+  if (ubConst - lbConst <= 0)
+    return 0;
+
+  if (!matchPattern(forOp.step(), m_Constant(&step)))
+    return llvm::None;
+
+  // Step is guaranteed to be positive.
+  int64_t stepConst = step.getValue().getSExtValue();
+  return llvm::divideCeil(ubConst - lbConst, stepConst);
 }
 
 //===----------------------------------------------------------------------===//

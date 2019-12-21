@@ -62,7 +62,7 @@ static bool canBeHoisted(Operation *op,
   auto thisOpIsSideEffecting = sideEffecting;
   if (thisOpIsSideEffecting != SideEffecting::Never) {
     thisOpIsSideEffecting = interface.isSideEffecting(op);
-    // If the op always has sideeffects, we cannot hoist.
+    // If the op always has side effects, we cannot hoist.
     if (thisOpIsSideEffecting == SideEffecting::Always)
       return false;
   }
@@ -70,9 +70,7 @@ static bool canBeHoisted(Operation *op,
   // can be hoisted.
   for (auto &region : op->getRegions()) {
     for (auto &block : region.getBlocks()) {
-      for (auto &innerOp : block) {
-        if (innerOp.isKnownTerminator())
-          continue;
+      for (auto &innerOp : block.without_terminator()) {
         if (!canBeHoisted(&innerOp, definedOutside, thisOpIsSideEffecting,
                           interface))
           return false;
@@ -112,7 +110,7 @@ static LogicalResult moveLoopInvariantCode(LoopLikeOpInterface looplike,
     }
   }
 
-  // For all instructions that we found to be invariant, move outside of the
+  // For all operations that we found to be invariant, move outside of the
   // loop.
   auto result = looplike.moveOutOfLoop(opsToMove);
   LLVM_DEBUG(looplike.print(llvm::dbgs() << "Modified loop\n"));
@@ -126,12 +124,16 @@ void LoopInvariantCodeMotion::runOnOperation() {
   // Walk through all loops in a function in innermost-loop-first order. This
   // way, we first LICM from the inner loop, and place the ops in
   // the outer loop, which in turn can be further LICM'ed.
-  getOperation()->walk([&](Operation *op) {
-    if (auto looplike = dyn_cast<LoopLikeOpInterface>(op)) {
-      LLVM_DEBUG(op->print(llvm::dbgs() << "\nOriginal loop\n"));
-      if (failed(moveLoopInvariantCode(looplike, interface)))
-        signalPassFailure();
-    }
+  getOperation()->walk([&](LoopLikeOpInterface loopLikeOp) {
+    // Skip zero trip count loops. For unknown trip counts, we still move
+    // invariant code since it is side-effect free, and in general profitable.
+    // TODO: when necessary, we could only move when the trip count is
+    // guaranteed to be at least one.
+    if (loopLikeOp.getConstantTripCount() == uint64_t(0))
+      return;
+    LLVM_DEBUG(loopLikeOp.print(llvm::dbgs() << "\nOriginal loop\n"));
+    if (failed(moveLoopInvariantCode(loopLikeOp, interface)))
+      signalPassFailure();
   });
 }
 
@@ -146,4 +148,4 @@ std::unique_ptr<Pass> mlir::createLoopInvariantCodeMotionPass() {
 
 static PassRegistration<LoopInvariantCodeMotion>
     pass("loop-invariant-code-motion",
-         "Hoist loop invariant instructions outside of the loop");
+         "Hoist loop invariant operations outside of the loop");

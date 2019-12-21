@@ -199,10 +199,54 @@ func @invariant_affine_nested_if_else() {
   // CHECK-NEXT: }
   // CHECK-NEXT: }
 
+  return
+}
+
+// CHECK-LABEL: func @zero_trip_count_affine
+func @zero_trip_count_affine() {
+  %m = alloc() : memref<10xf32>
+  %cf7 = constant 7.0 : f32
+  %N = constant 0 : index
+
+  affine.for %arg0 = 0 to %N {
+    affine.for %arg1 = 0 to 10 {
+      %v0 = addf %cf7, %cf7 : f32
+    }
+  }
+  // CHECK:      alloc() : memref<10xf32>
+  // CHECK-NEXT: %cst = constant 7.000000e+00 : f32
+  // CHECK-NEXT: %c0 = constant 0 : index
+  // CHECK-NEXT: affine.for
+  // CHECK-NEXT:   addf
+  // CHECK-NEXT:   affine.for
 
   return
 }
 
+// CHECK-LABEL: func @zero_trip_count_loop
+func @zero_trip_count_loop(%N : index) {
+  %m = alloc() : memref<10xf32>
+  %cf7 = constant 7.0 : f32
+  %c1 = constant 1 : index
+  %c5 = constant 5 : index
+
+  loop.for %i = %N to %N step %c1 {
+    loop.for %j = %c5 to %c5 step %c1 {
+      addf %cf7, %cf7 : f32
+    }
+  }
+  // CHECK:      alloc() : memref<10xf32>
+  // CHECK-NEXT: %cst = constant 7.000000e+00 : f32
+  // CHECK-NEXT: %c1 = constant 1 : index
+  // CHECK-NEXT: %c5 = constant 5 : index
+  // CHECK-NEXT: loop.for
+  // CHECK-NEXT:   loop.for
+  // CHECK-NEXT:     addf
+
+  return
+}
+
+// CHECK-LABEL: func @invariant_loop_dialect
 func @invariant_loop_dialect() {
   %ci0 = constant 0 : index
   %ci10 = constant 10 : index
@@ -211,7 +255,7 @@ func @invariant_loop_dialect() {
   %cf7 = constant 7.0 : f32
   %cf8 = constant 8.0 : f32
   loop.for %arg0 = %ci0 to %ci10 step %ci1 {
-    loop.for %arg1 = %ci0 to %ci10 step %ci1 {
+    loop.for %arg1 = %ci0 to %ci1 step %ci10 {
       %v0 = addf %cf7, %cf8 : f32
     }
   }
@@ -237,8 +281,8 @@ func @variant_loop_dialect() {
 
   // CHECK: %0 = alloc() : memref<10xf32>
   // CHECK-NEXT: loop.for
-  // CHECK-NEXT: loop.for
-  // CHECK-NEXT: addi
+  // CHECK-NEXT:   loop.for
+  // CHECK-NEXT:     addi
 
   return
 }

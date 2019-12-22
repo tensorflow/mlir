@@ -531,6 +531,22 @@ func @sitofp_f32_to_i32(%arg0 : f32) {
 
 // -----
 
+func @uitofp_i32_to_i64(%arg0 : i32) {
+  // expected-error@+1 {{are cast incompatible}}
+  %0 = uitofp %arg0 : i32 to i64
+  return
+}
+
+// -----
+
+func @uitofp_f32_to_i32(%arg0 : f32) {
+  // expected-error@+1 {{are cast incompatible}}
+  %0 = uitofp %arg0 : f32 to i32
+  return
+}
+
+// -----
+
 func @fpext_f32_to_f16(%arg0 : f32) {
   // expected-error@+1 {{are cast incompatible}}
   %0 = fpext %arg0 : f32 to f16

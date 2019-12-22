@@ -1985,6 +1985,15 @@ bool SIToFPOp::areCastCompatible(Type a, Type b) {
 }
 
 //===----------------------------------------------------------------------===//
+// UIToFPOp
+//===----------------------------------------------------------------------===//
+
+// uitofp is applicable from integer types to float types.
+bool UIToFPOp::areCastCompatible(Type a, Type b) {
+  return SIToFPOp::areCastCompatible(a, b);
+}
+
+//===----------------------------------------------------------------------===//
 // SelectOp
 //===----------------------------------------------------------------------===//
 

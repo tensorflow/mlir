@@ -494,6 +494,18 @@ func @standard_instrs(tensor<4x4x?xf32>, f32, i32, index, i64, f16) {
   // CHECK: %{{[0-9]+}} = shift_right_unsigned %cst_4, %cst_4 : tensor<42xi32>
   %138 = shift_right_unsigned %tci32, %tci32 : tensor<42 x i32>
 
+  // CHECK: = uitofp {{.*}} : i32 to f32
+  %139 = uitofp %i : i32 to f32
+
+  // CHECK: = uitofp {{.*}} : i32 to f64
+  %140 = uitofp %i : i32 to f64
+
+  // CHECK: = uitofp {{.*}} : i64 to f32
+  %141 = uitofp %j : i64 to f32
+
+  // CHECK: = uitofp {{.*}} : i64 to f64
+  %142 = uitofp %j : i64 to f64
+
   return
 }
 

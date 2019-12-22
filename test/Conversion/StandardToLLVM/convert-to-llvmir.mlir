@@ -457,8 +457,8 @@ func @index_cast(%arg0: index, %arg1: i1) {
 }
 
 // Checking conversion of integer types to floating point.
-// CHECK-LABEL: @sitofp
-func @sitofp(%arg0 : i32, %arg1 : i64) {
+// CHECK-LABEL: @sitofp_uitofp
+func @sitofp_uitofp(%arg0 : i32, %arg1 : i64) {
 // CHECK-NEXT: = llvm.sitofp {{.*}} : !llvm.i{{.*}} to !llvm.float
   %0 = sitofp %arg0: i32 to f32
 // CHECK-NEXT: = llvm.sitofp {{.*}} : !llvm.i{{.*}} to !llvm.double
@@ -467,6 +467,15 @@ func @sitofp(%arg0 : i32, %arg1 : i64) {
   %2 = sitofp %arg1: i64 to f32
 // CHECK-NEXT: = llvm.sitofp {{.*}} : !llvm.i{{.*}} to !llvm.double
   %3 = sitofp %arg1: i64 to f64
+
+// CHECK-NEXT: = llvm.uitofp {{.*}} : !llvm.i{{.*}} to !llvm.float
+  %4 = uitofp %arg0: i32 to f32
+// CHECK-NEXT: = llvm.uitofp {{.*}} : !llvm.i{{.*}} to !llvm.double
+  %5 = uitofp %arg0: i32 to f64
+// CHECK-NEXT: = llvm.uitofp {{.*}} : !llvm.i{{.*}} to !llvm.float
+  %6 = uitofp %arg1: i64 to f32
+// CHECK-NEXT: = llvm.uitofp {{.*}} : !llvm.i{{.*}} to !llvm.double
+  %7 = uitofp %arg1: i64 to f64
   return
 }
 

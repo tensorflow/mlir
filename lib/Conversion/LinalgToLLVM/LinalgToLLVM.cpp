@@ -117,32 +117,33 @@ namespace {
 /// EDSC-compatible wrapper for MemRefDescriptor.
 class BaseViewConversionHelper {
 public:
-  BaseViewConversionHelper(Type type)
-      : d(MemRefDescriptor::undef(rewriter(), loc(), type)) {}
+  BaseViewConversionHelper(Type type, LLVMTypeConverter &typeConverter)
+      : d(typeConverter.buildMemRefDescriptor(rewriter(), loc(), type)) {}
 
-  BaseViewConversionHelper(ValuePtr v) : d(v) {}
+  BaseViewConversionHelper(ValuePtr v, LLVMTypeConverter &typeConverter)
+      : d(typeConverter.createMemRefDescriptor(v)) {}
 
   /// Wrappers around MemRefDescriptor that use EDSC builder and location.
-  ValuePtr allocatedPtr() { return d.allocatedPtr(rewriter(), loc()); }
-  void setAllocatedPtr(ValuePtr v) { d.setAllocatedPtr(rewriter(), loc(), v); }
-  ValuePtr alignedPtr() { return d.alignedPtr(rewriter(), loc()); }
-  void setAlignedPtr(ValuePtr v) { d.setAlignedPtr(rewriter(), loc(), v); }
-  ValuePtr offset() { return d.offset(rewriter(), loc()); }
-  void setOffset(ValuePtr v) { d.setOffset(rewriter(), loc(), v); }
-  ValuePtr size(unsigned i) { return d.size(rewriter(), loc(), i); }
-  void setSize(unsigned i, ValuePtr v) { d.setSize(rewriter(), loc(), i, v); }
-  ValuePtr stride(unsigned i) { return d.stride(rewriter(), loc(), i); }
+  ValuePtr allocatedPtr() { return d->allocatedPtr(rewriter(), loc()); }
+  void setAllocatedPtr(ValuePtr v) { d->setAllocatedPtr(rewriter(), loc(), v); }
+  ValuePtr alignedPtr() { return d->alignedPtr(rewriter(), loc()); }
+  void setAlignedPtr(ValuePtr v) { d->setAlignedPtr(rewriter(), loc(), v); }
+  ValuePtr offset() { return d->offset(rewriter(), loc()); }
+  void setOffset(ValuePtr v) { d->setOffset(rewriter(), loc(), v); }
+  ValuePtr size(unsigned i) { return d->size(rewriter(), loc(), i); }
+  void setSize(unsigned i, ValuePtr v) { d->setSize(rewriter(), loc(), i, v); }
+  ValuePtr stride(unsigned i) { return d->stride(rewriter(), loc(), i); }
   void setStride(unsigned i, ValuePtr v) {
-    d.setStride(rewriter(), loc(), i, v);
+    d->setStride(rewriter(), loc(), i, v);
   }
 
-  operator ValuePtr() { return d; }
+  operator ValuePtr() { return d->getValue(); }
 
 private:
   OpBuilder &rewriter() { return ScopedContext::getBuilder(); }
   Location loc() { return ScopedContext::getLocation(); }
 
-  MemRefDescriptor d;
+  std::unique_ptr<MemRefDescriptor> d;
 };
 } // namespace
 
@@ -190,14 +191,15 @@ public:
                   ConversionPatternRewriter &rewriter) const override {
     edsc::ScopedContext context(rewriter, op->getLoc());
     SliceOpOperandAdaptor adaptor(operands);
-    BaseViewConversionHelper baseDesc(adaptor.view());
+    BaseViewConversionHelper baseDesc(adaptor.view(), lowering);
 
     auto sliceOp = cast<SliceOp>(op);
     auto memRefType = sliceOp.getBaseViewType();
     auto int64Ty = lowering.convertType(rewriter.getIntegerType(64))
                        .cast<LLVM::LLVMType>();
 
-    BaseViewConversionHelper desc(lowering.convertType(sliceOp.getViewType()));
+    BaseViewConversionHelper desc(lowering.convertType(sliceOp.getViewType()),
+                                  lowering);
 
     // TODO(ntv): extract sizes and emit asserts.
     SmallVector<ValuePtr, 4> strides(memRefType.getRank());
@@ -282,7 +284,7 @@ public:
     // Initialize the common boilerplate and alloca at the top of the FuncOp.
     edsc::ScopedContext context(rewriter, op->getLoc());
     TransposeOpOperandAdaptor adaptor(operands);
-    BaseViewConversionHelper baseDesc(adaptor.view());
+    BaseViewConversionHelper baseDesc(adaptor.view(), lowering);
 
     auto transposeOp = cast<TransposeOp>(op);
     // No permutation, early exit.
@@ -290,7 +292,7 @@ public:
       return rewriter.replaceOp(op, {baseDesc}), matchSuccess();
 
     BaseViewConversionHelper desc(
-        lowering.convertType(transposeOp.getViewType()));
+        lowering.convertType(transposeOp.getViewType()), lowering);
 
     // Copy the base and aligned pointers from the old descriptor to the new
     // one.

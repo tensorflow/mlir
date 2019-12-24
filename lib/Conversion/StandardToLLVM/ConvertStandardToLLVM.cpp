@@ -1058,7 +1058,7 @@ struct AllocOpLowering : public LLVMLegalizationPattern<AllocOp> {
       int64_t index = nStrides - 1 - indexedStride.index();
       if (strides[index] == MemRefType::getDynamicStrideOrOffset())
         // Identity layout map is enforced in the match function, so we compute:
-        //   `runningStride *= sizes[index]`
+        //   `runningStride *= sizes[index + 1]`
         runningStride =
             runningStride
                 ? rewriter.create<LLVM::MulOp>(loc, runningStride,

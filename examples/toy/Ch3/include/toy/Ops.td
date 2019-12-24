@@ -1,19 +1,10 @@
 //===- Ops.td - Toy dialect operation definitions ----------*- tablegen -*-===//
 //
-// Copyright 2019 The MLIR Authors.
+// Part of the MLIR Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// =============================================================================
+//===----------------------------------------------------------------------===//
 //
 // Defines the operations of the Toy dialect.
 //
@@ -98,7 +89,7 @@ def AddOp : Toy_Op<"add", [NoSideEffect]> {
 
   // Allow building an AddOp with from the two input operands.
   let builders = [
-    OpBuilder<"Builder *b, OperationState &state, ValuePtr lhs, ValuePtr rhs">
+    OpBuilder<"Builder *b, OperationState &state, Value lhs, Value rhs">
   ];
 }
 
@@ -129,7 +120,7 @@ def GenericCallOp : Toy_Op<"generic_call"> {
   // Add custom build methods for the generic call operation.
   let builders = [
     OpBuilder<"Builder *builder, OperationState &state, "
-              "StringRef callee, ArrayRef<ValuePtr> arguments">
+              "StringRef callee, ArrayRef<Value> arguments">
   ];
 }
 
@@ -145,7 +136,7 @@ def MulOp : Toy_Op<"mul", [NoSideEffect]> {
 
   // Allow building a MulOp with from the two input operands.
   let builders = [
-    OpBuilder<"Builder *b, OperationState &state, ValuePtr lhs, ValuePtr rhs">
+    OpBuilder<"Builder *b, OperationState &state, Value lhs, Value rhs">
   ];
 }
 
@@ -225,7 +216,7 @@ def TransposeOp : Toy_Op<"transpose", [NoSideEffect]> {
 
   // Allow building a TransposeOp with from the input operand.
   let builders = [
-    OpBuilder<"Builder *b, OperationState &state, ValuePtr input">
+    OpBuilder<"Builder *b, OperationState &state, Value input">
   ];
 
   // Invoke a static verify method to verify this transpose operation.

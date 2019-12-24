@@ -1,19 +1,10 @@
 //====- LowerToLLVM.cpp - Lowering from Toy+Affine+Std to LLVM ------------===//
 //
-// Copyright 2019 The MLIR Authors.
+// Part of the MLIR Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// =============================================================================
+//===----------------------------------------------------------------------===//
 //
 // This file implements a partial lowering of Toy operations to a combination of
 // affine loops and standard operations. This lowering expects that all calls
@@ -51,7 +42,7 @@ public:
       : ConversionPattern(toy::PrintOp::getOperationName(), 1, context) {}
 
   PatternMatchResult
-  matchAndRewrite(Operation *op, ArrayRef<ValuePtr> operands,
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
     auto memRefType = (*op->operand_type_begin()).cast<MemRefType>();
     auto memRefShape = memRefType.getShape();
@@ -64,14 +55,14 @@ public:
 
     // Get a symbol reference to the printf function, inserting it if necessary.
     auto printfRef = getOrInsertPrintf(rewriter, parentModule, llvmDialect);
-    ValuePtr formatSpecifierCst = getOrCreateGlobalString(
+    Value formatSpecifierCst = getOrCreateGlobalString(
         loc, rewriter, "frmt_spec", StringRef("%f \0", 4), parentModule,
         llvmDialect);
-    ValuePtr newLineCst = getOrCreateGlobalString(
+    Value newLineCst = getOrCreateGlobalString(
         loc, rewriter, "nl", StringRef("\n\0", 2), parentModule, llvmDialect);
 
     // Create a loop for each of the dimensions within the shape.
-    SmallVector<ValuePtr, 4> loopIvs;
+    SmallVector<Value, 4> loopIvs;
     for (unsigned i = 0, e = memRefShape.size(); i != e; ++i) {
       auto lowerBound = rewriter.create<ConstantIndexOp>(loc, 0);
       auto upperBound = rewriter.create<ConstantIndexOp>(loc, memRefShape[i]);
@@ -95,9 +86,8 @@ public:
     // Generate a call to printf for the current element of the loop.
     auto printOp = cast<toy::PrintOp>(op);
     auto elementLoad = rewriter.create<LoadOp>(loc, printOp.input(), loopIvs);
-    rewriter.create<CallOp>(
-        loc, printfRef, rewriter.getIntegerType(32),
-        ArrayRef<ValuePtr>({formatSpecifierCst, elementLoad}));
+    rewriter.create<CallOp>(loc, printfRef, rewriter.getIntegerType(32),
+                            ArrayRef<Value>({formatSpecifierCst, elementLoad}));
 
     // Notify the rewriter that this operation has been removed.
     rewriter.eraseOp(op);
@@ -130,10 +120,10 @@ private:
 
   /// Return a value representing an access into a global string with the given
   /// name, creating the string if necessary.
-  static ValuePtr getOrCreateGlobalString(Location loc, OpBuilder &builder,
-                                          StringRef name, StringRef value,
-                                          ModuleOp module,
-                                          LLVM::LLVMDialect *llvmDialect) {
+  static Value getOrCreateGlobalString(Location loc, OpBuilder &builder,
+                                       StringRef name, StringRef value,
+                                       ModuleOp module,
+                                       LLVM::LLVMDialect *llvmDialect) {
     // Create the global at the entry of the module.
     LLVM::GlobalOp global;
     if (!(global = module.lookupSymbol<LLVM::GlobalOp>(name))) {
@@ -147,13 +137,13 @@ private:
     }
 
     // Get the pointer to the first character in the global string.
-    ValuePtr globalPtr = builder.create<LLVM::AddressOfOp>(loc, global);
-    ValuePtr cst0 = builder.create<LLVM::ConstantOp>(
+    Value globalPtr = builder.create<LLVM::AddressOfOp>(loc, global);
+    Value cst0 = builder.create<LLVM::ConstantOp>(
         loc, LLVM::LLVMType::getInt64Ty(llvmDialect),
         builder.getIntegerAttr(builder.getIndexType(), 0));
     return builder.create<LLVM::GEPOp>(
         loc, LLVM::LLVMType::getInt8PtrTy(llvmDialect), globalPtr,
-        ArrayRef<ValuePtr>({cst0, cst0}));
+        ArrayRef<Value>({cst0, cst0}));
   }
 };
 } // end anonymous namespace

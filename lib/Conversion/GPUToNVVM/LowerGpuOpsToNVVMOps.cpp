@@ -614,9 +614,10 @@ struct GPUFuncOpLowering : LLVMOpLowering {
         // and canonicalize that away later.
         ValuePtr attribution = gpuFuncOp.getWorkgroupAttributions()[en.index()];
         auto type = attribution->getType().cast<MemRefType>();
-        auto descr = MemRefDescriptor::fromStaticShape(rewriter, loc, lowering,
-                                                       type, memory);
-        signatureConversion.remapInput(numProperArguments + en.index(), descr);
+        auto descr =
+            lowering.buildStaticMemRefDescriptor(rewriter, loc, type, memory);
+        signatureConversion.remapInput(numProperArguments + en.index(),
+                                       descr->getValue());
       }
 
       // Rewrite private memory attributions to alloca'ed buffers.
@@ -640,10 +641,11 @@ struct GPUFuncOpLowering : LLVMOpLowering {
             rewriter.getI64IntegerAttr(type.getNumElements()));
         ValuePtr allocated = rewriter.create<LLVM::AllocaOp>(
             gpuFuncOp.getLoc(), ptrType, numElements, /*alignment=*/0);
-        auto descr = MemRefDescriptor::fromStaticShape(rewriter, loc, lowering,
-                                                       type, allocated);
+        auto descr = lowering.buildStaticMemRefDescriptor(rewriter, loc, type,
+                                                          allocated);
         signatureConversion.remapInput(
-            numProperArguments + numWorkgroupAttributions + en.index(), descr);
+            numProperArguments + numWorkgroupAttributions + en.index(),
+            descr->getValue());
       }
     }
 

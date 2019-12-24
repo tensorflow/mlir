@@ -265,74 +265,36 @@ void StructBuilder::setPtr(OpBuilder &builder, Location loc, unsigned pos,
                                               builder.getI64ArrayAttr(pos));
 }
 /*============================================================================*/
-/* MemRefDescriptor implementation                                            */
+/* DefaultMemRefDescriptor implementation                                     */
 /*============================================================================*/
 
 /// Construct a helper for the given descriptor value.
-MemRefDescriptor::MemRefDescriptor(ValuePtr descriptor)
+DefaultMemRefDescriptor::DefaultMemRefDescriptor(ValuePtr descriptor)
     : StructBuilder(descriptor) {
   assert(value != nullptr && "value cannot be null");
   indexType = value->getType().cast<LLVM::LLVMType>().getStructElementType(
       kOffsetPosInMemRefDescriptor);
 }
 
-/// Builds IR creating an `undef` value of the descriptor type.
-MemRefDescriptor MemRefDescriptor::undef(OpBuilder &builder, Location loc,
-                                         Type descriptorType) {
-
-  ValuePtr descriptor =
-      builder.create<LLVM::UndefOp>(loc, descriptorType.cast<LLVM::LLVMType>());
-  return MemRefDescriptor(descriptor);
-}
-
-/// Builds IR creating a MemRef descriptor that represents `type` and
-/// populates it with static shape and stride information extracted from the
-/// type.
-MemRefDescriptor
-MemRefDescriptor::fromStaticShape(OpBuilder &builder, Location loc,
-                                  LLVMTypeConverter &typeConverter,
-                                  MemRefType type, ValuePtr memory) {
-  assert(type.hasStaticShape() && "unexpected dynamic shape");
-  assert(type.getAffineMaps().empty() && "unexpected layout map");
-
-  auto convertedType = typeConverter.convertType(type);
-  assert(convertedType && "unexpected failure in memref type conversion");
-
-  auto descr = MemRefDescriptor::undef(builder, loc, convertedType);
-  descr.setAllocatedPtr(builder, loc, memory);
-  descr.setAlignedPtr(builder, loc, memory);
-  descr.setConstantOffset(builder, loc, 0);
-
-  // Fill in sizes and strides, in reverse order to simplify stride
-  // calculation.
-  uint64_t runningStride = 1;
-  for (unsigned i = type.getRank(); i > 0; --i) {
-    unsigned dim = i - 1;
-    descr.setConstantSize(builder, loc, dim, type.getDimSize(dim));
-    descr.setConstantStride(builder, loc, dim, runningStride);
-    runningStride *= type.getDimSize(dim);
-  }
-  return descr;
-}
-
 /// Builds IR extracting the allocated pointer from the descriptor.
-ValuePtr MemRefDescriptor::allocatedPtr(OpBuilder &builder, Location loc) {
+ValuePtr DefaultMemRefDescriptor::allocatedPtr(OpBuilder &builder,
+                                               Location loc) {
   return extractPtr(builder, loc, kAllocatedPtrPosInMemRefDescriptor);
 }
 
 /// Builds IR inserting the allocated pointer into the descriptor.
-void MemRefDescriptor::setAllocatedPtr(OpBuilder &builder, Location loc,
+void DefaultMemRefDescriptor::setAllocatedPtr(OpBuilder &builder, Location loc,
                                        ValuePtr ptr) {
   setPtr(builder, loc, kAllocatedPtrPosInMemRefDescriptor, ptr);
 }
 
 /// Builds IR extracting the aligned pointer from the descriptor.
-ValuePtr MemRefDescriptor::alignedPtr(OpBuilder &builder, Location loc) {
+ValuePtr DefaultMemRefDescriptor::alignedPtr(OpBuilder &builder, Location loc) {
   return extractPtr(builder, loc, kAlignedPtrPosInMemRefDescriptor);
 }
 
 /// Builds IR inserting the aligned pointer into the descriptor.
-void MemRefDescriptor::setAlignedPtr(OpBuilder &builder, Location loc,
+void DefaultMemRefDescriptor::setAlignedPtr(OpBuilder &builder, Location loc,
                                      ValuePtr ptr) {
   setPtr(builder, loc, kAlignedPtrPosInMemRefDescriptor, ptr);
 }
@@ -346,14 +308,14 @@ static ValuePtr createIndexAttrConstant(OpBuilder &builder, Location loc,
 }
 
 /// Builds IR extracting the offset from the descriptor.
-ValuePtr MemRefDescriptor::offset(OpBuilder &builder, Location loc) {
+ValuePtr DefaultMemRefDescriptor::offset(OpBuilder &builder, Location loc) {
   return builder.create<LLVM::ExtractValueOp>(
       loc, indexType, value,
       builder.getI64ArrayAttr(kOffsetPosInMemRefDescriptor));
 }
 
 /// Builds IR inserting the offset into the descriptor.
-void MemRefDescriptor::setOffset(OpBuilder &builder, Location loc,
+void DefaultMemRefDescriptor::setOffset(OpBuilder &builder, Location loc,
                                  ValuePtr offset) {
   value = builder.create<LLVM::InsertValueOp>(
       loc, structType, value, offset,
@@ -361,22 +323,22 @@ void MemRefDescriptor::setOffset(OpBuilder &builder, Location loc,
 }
 
 /// Builds IR inserting the offset into the descriptor.
-void MemRefDescriptor::setConstantOffset(OpBuilder &builder, Location loc,
+void DefaultMemRefDescriptor::setConstantOffset(OpBuilder &builder, Location loc,
                                          uint64_t offset) {
   setOffset(builder, loc,
             createIndexAttrConstant(builder, loc, indexType, offset));
 }
 
 /// Builds IR extracting the pos-th size from the descriptor.
-ValuePtr MemRefDescriptor::size(OpBuilder &builder, Location loc,
-                                unsigned pos) {
+ValuePtr DefaultMemRefDescriptor::size(OpBuilder &builder, Location loc,
+                                       unsigned pos) {
   return builder.create<LLVM::ExtractValueOp>(
       loc, indexType, value,
       builder.getI64ArrayAttr({kSizePosInMemRefDescriptor, pos}));
 }
 
 /// Builds IR inserting the pos-th size into the descriptor
-void MemRefDescriptor::setSize(OpBuilder &builder, Location loc, unsigned pos,
+void DefaultMemRefDescriptor::setSize(OpBuilder &builder, Location loc, unsigned pos,
                                ValuePtr size) {
   value = builder.create<LLVM::InsertValueOp>(
       loc, structType, value, size,
@@ -384,22 +346,22 @@ void MemRefDescriptor::setSize(OpBuilder &builder, Location loc, unsigned pos,
 }
 
 /// Builds IR inserting the pos-th size into the descriptor
-void MemRefDescriptor::setConstantSize(OpBuilder &builder, Location loc,
+void DefaultMemRefDescriptor::setConstantSize(OpBuilder &builder, Location loc,
                                        unsigned pos, uint64_t size) {
   setSize(builder, loc, pos,
           createIndexAttrConstant(builder, loc, indexType, size));
 }
 
 /// Builds IR extracting the pos-th size from the descriptor.
-ValuePtr MemRefDescriptor::stride(OpBuilder &builder, Location loc,
-                                  unsigned pos) {
+ValuePtr DefaultMemRefDescriptor::stride(OpBuilder &builder, Location loc,
+                                unsigned pos) {
   return builder.create<LLVM::ExtractValueOp>(
       loc, indexType, value,
       builder.getI64ArrayAttr({kStridePosInMemRefDescriptor, pos}));
 }
 
 /// Builds IR inserting the pos-th stride into the descriptor
-void MemRefDescriptor::setStride(OpBuilder &builder, Location loc, unsigned pos,
+void DefaultMemRefDescriptor::setStride(OpBuilder &builder, Location loc, unsigned pos,
                                  ValuePtr stride) {
   value = builder.create<LLVM::InsertValueOp>(
       loc, structType, value, stride,
@@ -407,13 +369,13 @@ void MemRefDescriptor::setStride(OpBuilder &builder, Location loc, unsigned pos,
 }
 
 /// Builds IR inserting the pos-th stride into the descriptor
-void MemRefDescriptor::setConstantStride(OpBuilder &builder, Location loc,
+void DefaultMemRefDescriptor::setConstantStride(OpBuilder &builder, Location loc,
                                          unsigned pos, uint64_t stride) {
   setStride(builder, loc, pos,
             createIndexAttrConstant(builder, loc, indexType, stride));
 }
 
-LLVM::LLVMType MemRefDescriptor::getElementType() {
+LLVM::LLVMType DefaultMemRefDescriptor::getElementType() {
   return value->getType().cast<LLVM::LLVMType>().getStructElementType(
       kAlignedPtrPosInMemRefDescriptor);
 }
@@ -1018,9 +980,10 @@ struct AllocOpLowering : public LLVMLegalizationPattern<AllocOp> {
 
     // Create the MemRef descriptor.
     auto structType = lowering.convertType(type);
-    auto memRefDescriptor = MemRefDescriptor::undef(rewriter, loc, structType);
+    auto memRefDescriptor =
+        lowering.buildMemRefDescriptor(rewriter, loc, structType);
     // Field 1: Allocated pointer, used for malloc/free.
-    memRefDescriptor.setAllocatedPtr(rewriter, loc, bitcastAllocated);
+    memRefDescriptor->setAllocatedPtr(rewriter, loc, bitcastAllocated);
 
     // Field 2: Actual aligned pointer to payload.
     ValuePtr bitcastAligned = bitcastAllocated;
@@ -1040,15 +1003,15 @@ struct AllocOpLowering : public LLVMLegalizationPattern<AllocOp> {
       bitcastAligned = rewriter.create<LLVM::BitcastOp>(
           loc, elementPtrType, ArrayRef<ValuePtr>(aligned));
     }
-    memRefDescriptor.setAlignedPtr(rewriter, loc, bitcastAligned);
+    memRefDescriptor->setAlignedPtr(rewriter, loc, bitcastAligned);
 
     // Field 3: Offset in aligned pointer.
-    memRefDescriptor.setOffset(rewriter, loc,
-                               createIndexConstant(rewriter, loc, offset));
+    memRefDescriptor->setOffset(rewriter, loc,
+                                createIndexConstant(rewriter, loc, offset));
 
     if (type.getRank() == 0)
       // No size/stride descriptor in memref, return the descriptor value.
-      return rewriter.replaceOp(op, {memRefDescriptor});
+      return rewriter.replaceOp(op, {memRefDescriptor->getValue()});
 
     // Fields 4 and 5: Sizes and strides of the strided MemRef.
     // Store all sizes in the descriptor. Only dynamic sizes are passed in as
@@ -1073,12 +1036,12 @@ struct AllocOpLowering : public LLVMLegalizationPattern<AllocOp> {
     // Fill size and stride descriptors in memref.
     for (auto indexedSize : llvm::enumerate(sizes)) {
       int64_t index = indexedSize.index();
-      memRefDescriptor.setSize(rewriter, loc, index, indexedSize.value());
-      memRefDescriptor.setStride(rewriter, loc, index, strideValues[index]);
+      memRefDescriptor->setSize(rewriter, loc, index, indexedSize.value());
+      memRefDescriptor->setStride(rewriter, loc, index, strideValues[index]);
     }
 
     // Return the final value of the descriptor.
-    rewriter.replaceOp(op, {memRefDescriptor});
+    rewriter.replaceOp(op, {memRefDescriptor->getValue()});
   }
 
   bool useAlloca;
@@ -1184,10 +1147,10 @@ struct DeallocOpLowering : public LLVMLegalizationPattern<DeallocOp> {
                                         /*isVarArg=*/false));
     }
 
-    MemRefDescriptor memref(transformed.memref());
+    auto memref = lowering.createMemRefDescriptor(transformed.memref());
     ValuePtr casted = rewriter.create<LLVM::BitcastOp>(
         op->getLoc(), getVoidPtrType(),
-        memref.allocatedPtr(rewriter, op->getLoc()));
+        memref->allocatedPtr(rewriter, op->getLoc()));
     rewriter.replaceOpWithNewOp<LLVM::CallOp>(
         op, ArrayRef<Type>(), rewriter.getSymbolRefAttr(freeFunc), casted);
     return matchSuccess();
@@ -1316,7 +1279,7 @@ struct MemRefCastOpLowering : public LLVMLegalizationPattern<MemRefCastOp> {
       memRefDesc.setRank(rewriter, loc, rankVal);
       // d2 = InsertValueOp d1, voidptr, 1
       memRefDesc.setMemRefDescPtr(rewriter, loc, voidPtr);
-      rewriter.replaceOp(op, (ValuePtr)memRefDesc);
+      rewriter.replaceOp(op, memRefDesc.getValue());
 
     } else if (srcType.isa<UnrankedMemRefType>() && dstType.isa<MemRefType>()) {
       // Casting from unranked type to ranked.
@@ -1356,9 +1319,11 @@ struct DimOpLowering : public LLVMLegalizationPattern<DimOp> {
     auto shape = type.getShape();
     int64_t index = dimOp.getIndex();
     // Extract dynamic size from the memref descriptor.
-    if (ShapedType::isDynamic(shape[index]))
-      rewriter.replaceOp(op, {MemRefDescriptor(transformed.memrefOrTensor())
-                                  .size(rewriter, op->getLoc(), index)});
+    if (ShapedType::isDynamic(shape[index])) {
+      auto memref =
+          lowering.createMemRefDescriptor(transformed.memrefOrTensor());
+      rewriter.replaceOp(op, memref->size(rewriter, op->getLoc(), index));
+    }
     else
       // Use constant for static size.
       rewriter.replaceOp(
@@ -1411,21 +1376,19 @@ struct LoadStoreOpLowering : public LLVMLegalizationPattern<Derived> {
   // This is a strided getElementPtr variant that linearizes subscripts as:
   //   `base_offset + index_0 * stride_0 + ... + index_n * stride_n`.
   ValuePtr getStridedElementPtr(Location loc, Type elementTypePtr,
-                                ValuePtr descriptor, ArrayRef<ValuePtr> indices,
+                                MemRefDescriptor *memRefDescriptor,
+                                ArrayRef<ValuePtr> indices,
                                 ArrayRef<int64_t> strides, int64_t offset,
                                 ConversionPatternRewriter &rewriter) const {
-    MemRefDescriptor memRefDescriptor(descriptor);
-
-    ValuePtr base = memRefDescriptor.alignedPtr(rewriter, loc);
-    ValuePtr offsetValue =
-        offset == MemRefType::getDynamicStrideOrOffset()
-            ? memRefDescriptor.offset(rewriter, loc)
-            : this->createIndexConstant(rewriter, loc, offset);
+    ValuePtr base = memRefDescriptor->alignedPtr(rewriter, loc);
+    ValuePtr offsetValue = offset == MemRefType::getDynamicStrideOrOffset()
+                             ? memRefDescriptor->offset(rewriter, loc)
+                             : this->createIndexConstant(rewriter, loc, offset);
 
     for (int i = 0, e = indices.size(); i < e; ++i) {
       ValuePtr stride =
           strides[i] == MemRefType::getDynamicStrideOrOffset()
-              ? memRefDescriptor.stride(rewriter, loc, i)
+              ? memRefDescriptor->stride(rewriter, loc, i)
               : this->createIndexConstant(rewriter, loc, strides[i]);
       ValuePtr additionalOffset =
           rewriter.create<LLVM::MulOp>(loc, indices[i], stride);
@@ -1435,11 +1398,11 @@ struct LoadStoreOpLowering : public LLVMLegalizationPattern<Derived> {
     return rewriter.create<LLVM::GEPOp>(loc, elementTypePtr, base, offsetValue);
   }
 
-  ValuePtr getDataPtr(Location loc, MemRefType type, ValuePtr memRefDesc,
-                      ArrayRef<ValuePtr> indices,
+  ValuePtr getDataPtr(Location loc, MemRefType type,
+                      MemRefDescriptor *memRefDesc, ArrayRef<ValuePtr> indices,
                       ConversionPatternRewriter &rewriter,
                       llvm::Module &module) const {
-    LLVM::LLVMType ptrType = MemRefDescriptor(memRefDesc).getElementType();
+    LLVM::LLVMType ptrType = memRefDesc->getElementType();
     int64_t offset;
     SmallVector<int64_t, 4> strides;
     auto successStrides = getStridesAndOffset(type, strides, offset);
@@ -1462,10 +1425,12 @@ struct LoadOpLowering : public LoadStoreOpLowering<LoadOp> {
     OperandAdaptor<LoadOp> transformed(operands);
     auto type = loadOp.getMemRefType();
 
-    ValuePtr dataPtr = getDataPtr(op->getLoc(), type, transformed.memref(),
-                                  transformed.indices(), rewriter, getModule());
+    auto memrefDesc = lowering.createMemRefDescriptor(transformed.memref());
+    ValuePtr dataPtr =
+        this->getDataPtr(op->getLoc(), type, memrefDesc.get(),
+                         transformed.indices(), rewriter, this->getModule());
     rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, dataPtr);
-    return matchSuccess();
+    return this->matchSuccess();
   }
 };
 
@@ -1480,11 +1445,13 @@ struct StoreOpLowering : public LoadStoreOpLowering<StoreOp> {
     auto type = cast<StoreOp>(op).getMemRefType();
     OperandAdaptor<StoreOp> transformed(operands);
 
-    ValuePtr dataPtr = getDataPtr(op->getLoc(), type, transformed.memref(),
-                                  transformed.indices(), rewriter, getModule());
+    auto memrefDesc = lowering.createMemRefDescriptor(transformed.memref());
+    ValuePtr dataPtr =
+        this->getDataPtr(op->getLoc(), type, memrefDesc.get(),
+                         transformed.indices(), rewriter, this->getModule());
     rewriter.replaceOpWithNewOp<LLVM::StoreOp>(op, transformed.value(),
                                                dataPtr);
-    return matchSuccess();
+    return this->matchSuccess();
   }
 };
 
@@ -1500,7 +1467,8 @@ struct PrefetchOpLowering : public LoadStoreOpLowering<PrefetchOp> {
     OperandAdaptor<PrefetchOp> transformed(operands);
     auto type = prefetchOp.getMemRefType();
 
-    ValuePtr dataPtr = getDataPtr(op->getLoc(), type, transformed.memref(),
+    auto memrefDesc = lowering.createMemRefDescriptor(transformed.memref());
+    ValuePtr dataPtr = getDataPtr(op->getLoc(), type, memrefDesc.get(),
                                   transformed.indices(), rewriter, getModule());
 
     // Replace with llvm.prefetch.
@@ -1841,25 +1809,26 @@ struct SubViewOpLowering : public LLVMLegalizationPattern<SubViewOp> {
       return matchFailure();
 
     // Create the descriptor.
-    MemRefDescriptor sourceMemRef(operands.front());
-    auto targetMemRef = MemRefDescriptor::undef(rewriter, loc, targetDescTy);
+    auto sourceMemRef = lowering.createMemRefDescriptor(operands.front());
+    auto targetMemRef =
+        lowering.buildMemRefDescriptor(rewriter, loc, targetDescTy);
 
     // Copy the buffer pointer from the old descriptor to the new one.
-    ValuePtr extracted = sourceMemRef.allocatedPtr(rewriter, loc);
+    ValuePtr extracted = sourceMemRef->allocatedPtr(rewriter, loc);
     ValuePtr bitcastPtr = rewriter.create<LLVM::BitcastOp>(
         loc, targetElementTy.getPointerTo(), extracted);
-    targetMemRef.setAllocatedPtr(rewriter, loc, bitcastPtr);
+    targetMemRef->setAllocatedPtr(rewriter, loc, bitcastPtr);
 
-    extracted = sourceMemRef.alignedPtr(rewriter, loc);
+    extracted = sourceMemRef->alignedPtr(rewriter, loc);
     bitcastPtr = rewriter.create<LLVM::BitcastOp>(
         loc, targetElementTy.getPointerTo(), extracted);
-    targetMemRef.setAlignedPtr(rewriter, loc, bitcastPtr);
+    targetMemRef->setAlignedPtr(rewriter, loc, bitcastPtr);
 
     // Extract strides needed to compute offset.
     SmallVector<ValuePtr, 4> strideValues;
     strideValues.reserve(viewMemRefType.getRank());
     for (int i = 0, e = viewMemRefType.getRank(); i < e; ++i)
-      strideValues.push_back(sourceMemRef.stride(rewriter, loc, i));
+      strideValues.push_back(sourceMemRef->stride(rewriter, loc, i));
 
     // Fill in missing dynamic sizes.
     auto llvmIndexType = lowering.convertType(rewriter.getIndexType());
@@ -1873,18 +1842,18 @@ struct SubViewOpLowering : public LLVMLegalizationPattern<SubViewOp> {
     }
 
     // Offset.
-    ValuePtr baseOffset = sourceMemRef.offset(rewriter, loc);
+    ValuePtr baseOffset = sourceMemRef->offset(rewriter, loc);
     for (int i = 0, e = viewMemRefType.getRank(); i < e; ++i) {
       ValuePtr min = dynamicOffsets[i];
       baseOffset = rewriter.create<LLVM::AddOp>(
           loc, baseOffset,
           rewriter.create<LLVM::MulOp>(loc, min, strideValues[i]));
     }
-    targetMemRef.setOffset(rewriter, loc, baseOffset);
+    targetMemRef->setOffset(rewriter, loc, baseOffset);
 
     // Update sizes and strides.
     for (int i = viewMemRefType.getRank() - 1; i >= 0; --i) {
-      targetMemRef.setSize(rewriter, loc, i, dynamicSizes[i]);
+      targetMemRef->setSize(rewriter, loc, i, dynamicSizes[i]);
       ValuePtr newStride;
       if (dynamicStrides.empty())
         newStride = rewriter.create<LLVM::ConstantOp>(
@@ -1892,10 +1861,10 @@ struct SubViewOpLowering : public LLVMLegalizationPattern<SubViewOp> {
       else
         newStride = rewriter.create<LLVM::MulOp>(loc, dynamicStrides[i],
                                                  strideValues[i]);
-      targetMemRef.setStride(rewriter, loc, i, newStride);
+      targetMemRef->setStride(rewriter, loc, i, newStride);
     }
 
-    rewriter.replaceOp(op, {targetMemRef});
+    rewriter.replaceOp(op, {targetMemRef->getValue()});
     return matchSuccess();
   }
 };
@@ -1965,20 +1934,21 @@ struct ViewOpLowering : public LLVMLegalizationPattern<ViewOp> {
              matchFailure();
 
     // Create the descriptor.
-    MemRefDescriptor sourceMemRef(adaptor.source());
-    auto targetMemRef = MemRefDescriptor::undef(rewriter, loc, targetDescTy);
+    auto sourceMemRef = lowering.createMemRefDescriptor(adaptor.source());
+    auto targetMemRef =
+        lowering.buildMemRefDescriptor(rewriter, loc, targetDescTy);
 
     // Field 1: Copy the allocated pointer, used for malloc/free.
-    ValuePtr extracted = sourceMemRef.allocatedPtr(rewriter, loc);
+    ValuePtr extracted = sourceMemRef->allocatedPtr(rewriter, loc);
     ValuePtr bitcastPtr = rewriter.create<LLVM::BitcastOp>(
         loc, targetElementTy.getPointerTo(), extracted);
-    targetMemRef.setAllocatedPtr(rewriter, loc, bitcastPtr);
+    targetMemRef->setAllocatedPtr(rewriter, loc, bitcastPtr);
 
     // Field 2: Copy the actual aligned pointer to payload.
-    extracted = sourceMemRef.alignedPtr(rewriter, loc);
+    extracted = sourceMemRef->alignedPtr(rewriter, loc);
     bitcastPtr = rewriter.create<LLVM::BitcastOp>(
         loc, targetElementTy.getPointerTo(), extracted);
-    targetMemRef.setAlignedPtr(rewriter, loc, bitcastPtr);
+    targetMemRef->setAlignedPtr(rewriter, loc, bitcastPtr);
 
     // Field 3: Copy the offset in aligned pointer.
     unsigned numDynamicSizes = llvm::size(viewOp.getDynamicSizes());
@@ -1988,14 +1958,14 @@ struct ViewOpLowering : public LLVMLegalizationPattern<ViewOp> {
     assert(llvm::size(sizeAndOffsetOperands) ==
            numDynamicSizes + (hasDynamicOffset ? 1 : 0));
     ValuePtr baseOffset = !hasDynamicOffset
-                              ? createIndexConstant(rewriter, loc, offset)
-                              // TODO(ntv): better adaptor.
-                              : sizeAndOffsetOperands.front();
-    targetMemRef.setOffset(rewriter, loc, baseOffset);
+                            ? createIndexConstant(rewriter, loc, offset)
+                            // TODO(ntv): better adaptor.
+                            : sizeAndOffsetOperands.front();
+    targetMemRef->setOffset(rewriter, loc, baseOffset);
 
     // Early exit for 0-D corner case.
     if (viewMemRefType.getRank() == 0)
-      return rewriter.replaceOp(op, {targetMemRef}), matchSuccess();
+      return rewriter.replaceOp(op, {targetMemRef->getValue()}), matchSuccess();
 
     // Fields 4 and 5: Update sizes and strides.
     if (strides.back() != 1)
@@ -2010,14 +1980,14 @@ struct ViewOpLowering : public LLVMLegalizationPattern<ViewOp> {
       // Update size.
       ValuePtr size =
           getSize(rewriter, loc, viewMemRefType.getShape(), sizeOperands, i);
-      targetMemRef.setSize(rewriter, loc, i, size);
+      targetMemRef->setSize(rewriter, loc, i, size);
       // Update stride.
       stride = getStride(rewriter, loc, strides, nextSize, stride, i);
-      targetMemRef.setStride(rewriter, loc, i, stride);
+      targetMemRef->setStride(rewriter, loc, i, stride);
       nextSize = size;
     }
 
-    rewriter.replaceOp(op, {targetMemRef});
+    rewriter.replaceOp(op, {targetMemRef->getValue()});
     return matchSuccess();
   }
 };
@@ -2171,6 +2141,50 @@ Type LLVMTypeConverter::packFunctionResults(ArrayRef<Type> types) {
   }
 
   return LLVM::LLVMType::getStructTy(llvmDialect, resultTypes);
+}
+
+/// Create a DefaultMemRefDescriptor object for 'value'.
+std::unique_ptr<MemRefDescriptor>
+LLVMTypeConverter::createMemRefDescriptor(ValuePtr value) {
+  return std::make_unique<DefaultMemRefDescriptor>(value);
+}
+
+/// Builds IR creating an `undef` value of the descriptor type.
+std::unique_ptr<MemRefDescriptor>
+LLVMTypeConverter::buildMemRefDescriptor(OpBuilder &builder, Location loc,
+                                         Type descriptorType) {
+  ValuePtr descriptor =
+      builder.create<LLVM::UndefOp>(loc, descriptorType.cast<LLVM::LLVMType>());
+  return std::make_unique<DefaultMemRefDescriptor>(descriptor);
+}
+
+/// Builds IR creating a MemRef descriptor that represents `type` and
+/// populates it with static shape and stride information extracted from the
+/// type.
+std::unique_ptr<MemRefDescriptor>
+LLVMTypeConverter::buildStaticMemRefDescriptor(OpBuilder &builder, Location loc,
+                                               MemRefType type, ValuePtr memory) {
+  assert(type.hasStaticShape() && "unexpected dynamic shape");
+  assert(type.getAffineMaps().empty() && "unexpected layout map");
+
+  auto convertedType = convertType(type);
+  assert(convertedType && "unexpected failure in memref type conversion");
+
+  auto descr = buildMemRefDescriptor(builder, loc, convertedType);
+  descr->setAllocatedPtr(builder, loc, memory);
+  descr->setAlignedPtr(builder, loc, memory);
+  descr->setConstantOffset(builder, loc, 0);
+
+  // Fill in sizes and strides, in reverse order to simplify stride
+  // calculation.
+  uint64_t runningStride = 1;
+  for (unsigned i = type.getRank(); i > 0; --i) {
+    unsigned dim = i - 1;
+    descr->setConstantSize(builder, loc, dim, type.getDimSize(dim));
+    descr->setConstantStride(builder, loc, dim, runningStride);
+    runningStride *= type.getDimSize(dim);
+  }
+  return descr;
 }
 
 ValuePtr LLVMTypeConverter::promoteOneMemRefDescriptor(Location loc,

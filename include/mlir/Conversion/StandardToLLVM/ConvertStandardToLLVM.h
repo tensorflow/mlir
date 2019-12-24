@@ -26,6 +26,7 @@ class Type;
 
 namespace mlir {
 
+class MemRefDescriptor;
 class UnrankedMemRefType;
 
 namespace LLVM {
@@ -47,8 +48,9 @@ public:
   /// Convert a function type.  The arguments and results are converted one by
   /// one and results are packed into a wrapped LLVM IR structure type. `result`
   /// is populated with argument mapping.
-  LLVM::LLVMType convertFunctionSignature(FunctionType type, bool isVariadic,
-                                          SignatureConversion &result);
+  virtual LLVM::LLVMType convertFunctionSignature(FunctionType type,
+                                                  bool isVariadic,
+                                                  SignatureConversion &result);
 
   /// Convert a non-empty list of types to be returned from a function into a
   /// supported LLVM IR type.  In particular, if more than one values is
@@ -61,6 +63,20 @@ public:
 
   /// Returns the LLVM dialect.
   LLVM::LLVMDialect *getDialect() { return llvmDialect; }
+
+  /// Create a DefaultMemRefDescriptor object for 'value'.
+  virtual std::unique_ptr<MemRefDescriptor>
+  createMemRefDescriptor(ValuePtr value);
+
+  /// Builds IR creating an uninitialized value of the descriptor type.
+  virtual std::unique_ptr<MemRefDescriptor>
+  buildMemRefDescriptor(OpBuilder &builder, Location loc, Type descriptorType);
+  /// Builds IR creating a MemRef descriptor that represents `type` and
+  /// populates it with static shape and stride information extracted from the
+  /// type.
+  virtual std::unique_ptr<MemRefDescriptor>
+  buildStaticMemRefDescriptor(OpBuilder &builder, Location loc, MemRefType type,
+                              ValuePtr memory);
 
   /// Promote the LLVM struct representation of all MemRef descriptors to stack
   /// and use pointers to struct to avoid the complexity of the
@@ -80,6 +96,9 @@ protected:
   /// LLVM IR module used to parse/create types.
   llvm::Module *module;
   LLVM::LLVMDialect *llvmDialect;
+
+  // Extract an LLVM IR dialect type.
+  LLVM::LLVMType unwrap(Type type);
 
 private:
   Type convertStandardType(Type type);
@@ -120,9 +139,60 @@ private:
   // Get the LLVM representation of the index type based on the bitwidth of the
   // pointer as defined by the data layout of the module.
   LLVM::LLVMType getIndexType();
+};
 
-  // Extract an LLVM IR dialect type.
-  LLVM::LLVMType unwrap(Type type);
+// Base helper class to lower MemRef type to a descriptor in LLVM. Provides an
+// abstract API to produce LLVM dialect operations that manipulate the MemRef
+// descriptor. Specific MemRef descriptor implementations should inherint from
+// this class and implement the API.
+struct MemRefDescriptor {
+
+  virtual Value *getValue() = 0;
+
+  /// Builds IR extracting the allocated pointer from the descriptor.
+  virtual Value *allocatedPtr(OpBuilder &builder, Location loc) = 0;
+  /// Builds IR inserting the allocated pointer into the descriptor.
+  virtual void setAllocatedPtr(OpBuilder &builder, Location loc,
+                               Value *ptr) = 0;
+
+  /// Builds IR extracting the aligned pointer from the descriptor.
+  virtual Value *alignedPtr(OpBuilder &builder, Location loc) = 0;
+
+  /// Builds IR inserting the aligned pointer into the descriptor.
+  virtual void setAlignedPtr(OpBuilder &builder, Location loc, Value *ptr) = 0;
+
+  /// Builds IR extracting the offset from the descriptor.
+  virtual Value *offset(OpBuilder &builder, Location loc) = 0;
+
+  /// Builds IR inserting the offset into the descriptor.
+  virtual void setOffset(OpBuilder &builder, Location loc, Value *offset) = 0;
+
+  virtual void setConstantOffset(OpBuilder &builder, Location loc,
+                                 uint64_t offset) = 0;
+
+  /// Builds IR extracting the pos-th size from the descriptor.
+  virtual Value *size(OpBuilder &builder, Location loc, unsigned pos) = 0;
+
+  /// Builds IR inserting the pos-th size into the descriptor
+  virtual void setSize(OpBuilder &builder, Location loc, unsigned pos,
+                       Value *size) = 0;
+  virtual void setConstantSize(OpBuilder &builder, Location loc, unsigned pos,
+                               uint64_t size) = 0;
+
+  /// Builds IR extracting the pos-th size from the descriptor.
+  virtual Value *stride(OpBuilder &builder, Location loc, unsigned pos) = 0;
+
+  /// Builds IR inserting the pos-th stride into the descriptor
+  virtual void setStride(OpBuilder &builder, Location loc, unsigned pos,
+                         Value *stride) = 0;
+  virtual void setConstantStride(OpBuilder &builder, Location loc, unsigned pos,
+                                 uint64_t stride) = 0;
+
+  /// Returns the (LLVM) type this descriptor points to.
+  virtual LLVM::LLVMType getElementType() = 0;
+
+protected:
+  MemRefDescriptor() = default;
 };
 
 /// Helper class to produce LLVM dialect operations extracting or inserting
@@ -135,7 +205,7 @@ public:
   static StructBuilder undef(OpBuilder &builder, Location loc,
                              Type descriptorType);
 
-  /*implicit*/ operator ValuePtr() { return value; }
+  ValuePtr getValue() { return value; }
 
 protected:
   // LLVM value
@@ -149,22 +219,16 @@ protected:
   /// Builds IR to set a value in the struct at position pos
   void setPtr(OpBuilder &builder, Location loc, unsigned pos, ValuePtr ptr);
 };
+
 /// Helper class to produce LLVM dialect operations extracting or inserting
 /// elements of a MemRef descriptor. Wraps a Value pointing to the descriptor.
 /// The Value may be null, in which case none of the operations are valid.
-class MemRefDescriptor : public StructBuilder {
+class DefaultMemRefDescriptor : public StructBuilder, public MemRefDescriptor {
 public:
   /// Construct a helper for the given descriptor value.
-  explicit MemRefDescriptor(ValuePtr descriptor);
-  /// Builds IR creating an `undef` value of the descriptor type.
-  static MemRefDescriptor undef(OpBuilder &builder, Location loc,
-                                Type descriptorType);
-  /// Builds IR creating a MemRef descriptor that represents `type` and
-  /// populates it with static shape and stride information extracted from the
-  /// type.
-  static MemRefDescriptor fromStaticShape(OpBuilder &builder, Location loc,
-                                          LLVMTypeConverter &typeConverter,
-                                          MemRefType type, ValuePtr memory);
+  explicit DefaultMemRefDescriptor(ValuePtr descriptor);
+
+  ValuePtr getValue() override { return StructBuilder::getValue(); };
 
   /// Builds IR extracting the allocated pointer from the descriptor.
   ValuePtr allocatedPtr(OpBuilder &builder, Location loc);

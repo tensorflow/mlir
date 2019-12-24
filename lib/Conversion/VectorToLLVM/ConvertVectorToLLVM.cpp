@@ -545,7 +545,7 @@ public:
         operands[0]->getType().dyn_cast<LLVM::LLVMType>();
     if (!llvmSourceDescriptorTy || !llvmSourceDescriptorTy.isStructTy())
       return matchFailure();
-    MemRefDescriptor sourceMemRef(operands[0]);
+    auto sourceMemRef = lowering.createMemRefDescriptor(operands[0]);
 
     auto llvmTargetDescriptorTy = lowering.convertType(targetMemRefType)
                                       .dyn_cast_or_null<LLVM::LLVMType>();
@@ -573,21 +573,22 @@ public:
     auto int64Ty = LLVM::LLVMType::getInt64Ty(lowering.getDialect());
 
     // Create descriptor.
-    auto desc = MemRefDescriptor::undef(rewriter, loc, llvmTargetDescriptorTy);
-    Type llvmTargetElementTy = desc.getElementType();
+    auto desc =
+        lowering.buildMemRefDescriptor(rewriter, loc, llvmTargetDescriptorTy);
+    Type llvmTargetElementTy = desc->getElementType();
     // Set allocated ptr.
-    ValuePtr allocated = sourceMemRef.allocatedPtr(rewriter, loc);
+    ValuePtr allocated = sourceMemRef->allocatedPtr(rewriter, loc);
     allocated =
         rewriter.create<LLVM::BitcastOp>(loc, llvmTargetElementTy, allocated);
-    desc.setAllocatedPtr(rewriter, loc, allocated);
+    desc->setAllocatedPtr(rewriter, loc, allocated);
     // Set aligned ptr.
-    ValuePtr ptr = sourceMemRef.alignedPtr(rewriter, loc);
+    ValuePtr ptr = sourceMemRef->alignedPtr(rewriter, loc);
     ptr = rewriter.create<LLVM::BitcastOp>(loc, llvmTargetElementTy, ptr);
-    desc.setAlignedPtr(rewriter, loc, ptr);
+    desc->setAlignedPtr(rewriter, loc, ptr);
     // Fill offset 0.
     auto attr = rewriter.getIntegerAttr(rewriter.getIndexType(), 0);
     auto zero = rewriter.create<LLVM::ConstantOp>(loc, int64Ty, attr);
-    desc.setOffset(rewriter, loc, zero);
+    desc->setOffset(rewriter, loc, zero);
 
     // Fill size and stride descriptors in memref.
     for (auto indexedSize : llvm::enumerate(targetMemRefType.getShape())) {
@@ -595,14 +596,14 @@ public:
       auto sizeAttr =
           rewriter.getIntegerAttr(rewriter.getIndexType(), indexedSize.value());
       auto size = rewriter.create<LLVM::ConstantOp>(loc, int64Ty, sizeAttr);
-      desc.setSize(rewriter, loc, index, size);
+      desc->setSize(rewriter, loc, index, size);
       auto strideAttr =
           rewriter.getIntegerAttr(rewriter.getIndexType(), strides[index]);
       auto stride = rewriter.create<LLVM::ConstantOp>(loc, int64Ty, strideAttr);
-      desc.setStride(rewriter, loc, index, stride);
+      desc->setStride(rewriter, loc, index, stride);
     }
 
-    rewriter.replaceOp(op, {desc});
+    rewriter.replaceOp(op, {desc->getValue()});
     return matchSuccess();
   }
 };

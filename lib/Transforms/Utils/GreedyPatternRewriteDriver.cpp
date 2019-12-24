@@ -22,10 +22,9 @@
 #include "mlir/Dialect/StandardOps/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/PatternMatch.h"
-#include "mlir/IR/RegionGraphTraits.h"
 #include "mlir/Transforms/FoldUtils.h"
+#include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
@@ -87,12 +86,11 @@ public:
 
   // These are hooks implemented for PatternRewriter.
 protected:
-  // Implement the hook for creating operations, and make sure that newly
-  // created ops are added to the worklist for processing.
-  Operation *createOperation(const OperationState &state) override {
-    auto *result = OpBuilder::createOperation(state);
-    addToWorklist(result);
-    return result;
+  // Implement the hook for inserting operations, and make sure that newly
+  // inserted ops are added to the worklist for processing.
+  Operation *insert(Operation *op) override {
+    addToWorklist(op);
+    return OpBuilder::insert(op);
   }
 
   // If an operation is about to be removed, make sure it is not in our
@@ -109,68 +107,18 @@ protected:
   // simplifications to its users - make sure to add them to the worklist
   // before the root is changed.
   void notifyRootReplaced(Operation *op) override {
-    for (auto *result : op->getResults())
+    for (auto result : op->getResults())
       for (auto *user : result->getUsers())
         addToWorklist(user);
   }
 
 private:
-  /// Erase the unreachable blocks within the provided regions. Returns success
-  /// if any blocks were erased, failure otherwise.
-  LogicalResult eraseUnreachableBlocks(MutableArrayRef<Region> regions) {
-    // Set of blocks found to be reachable within a given region.
-    llvm::df_iterator_default_set<Block *, 16> reachable;
-    // If any blocks were found to be dead.
-    bool erasedDeadBlocks = false;
-
-    SmallVector<Region *, 1> worklist;
-    worklist.reserve(regions.size());
-    for (Region &region : regions)
-      worklist.push_back(&region);
-    while (!worklist.empty()) {
-      Region *region = worklist.pop_back_val();
-      if (region->empty())
-        continue;
-
-      // If this is a single block region, just collect the nested regions.
-      if (std::next(region->begin()) == region->end()) {
-        for (Operation &op : region->front())
-          for (Region &region : op.getRegions())
-            worklist.push_back(&region);
-        continue;
-      }
-
-      // Mark all reachable blocks.
-      reachable.clear();
-      for (Block *block : depth_first_ext(&region->front(), reachable))
-        (void)block /* Mark all reachable blocks */;
-
-      // Collect all of the dead blocks and push the live regions onto the
-      // worklist.
-      for (Block &block : llvm::make_early_inc_range(*region)) {
-        if (!reachable.count(&block)) {
-          block.dropAllDefinedValueUses();
-          block.erase();
-          erasedDeadBlocks = true;
-          continue;
-        }
-
-        // Walk any regions within this block.
-        for (Operation &op : block)
-          for (Region &region : op.getRegions())
-            worklist.push_back(&region);
-      }
-    }
-
-    return success(erasedDeadBlocks);
-  }
-
   // Look over the provided operands for any defining operations that should
   // be re-added to the worklist. This function should be called when an
   // operation is modified or removed, as it may trigger further
   // simplifications.
   template <typename Operands> void addToWorklist(Operands &&operands) {
-    for (Value *operand : operands) {
+    for (ValuePtr operand : operands) {
       // If the use count of this operand is now < 2, we re-add the defining
       // operation to the worklist.
       // TODO(riverriddle) This is based on the fact that zero use operations
@@ -212,7 +160,7 @@ bool GreedyPatternRewriteDriver::simplify(MutableArrayRef<Region> regions,
       region.walk(collectOps);
 
     // These are scratch vectors used in the folding loop below.
-    SmallVector<Value *, 8> originalOperands, resultValues;
+    SmallVector<ValuePtr, 8> originalOperands, resultValues;
 
     changed = false;
     while (!worklist.empty()) {
@@ -241,7 +189,7 @@ bool GreedyPatternRewriteDriver::simplify(MutableArrayRef<Region> regions,
 
         // Add all the users of the result to the worklist so we make sure
         // to revisit them.
-        for (auto *result : op->getResults())
+        for (auto result : op->getResults())
           for (auto *operand : result->getUsers())
             addToWorklist(operand);
 
@@ -264,7 +212,7 @@ bool GreedyPatternRewriteDriver::simplify(MutableArrayRef<Region> regions,
 
     // After applying patterns, make sure that the CFG of each of the regions is
     // kept up to date.
-    changed |= succeeded(eraseUnreachableBlocks(regions));
+    changed |= succeeded(simplifyRegions(regions));
   } while (changed && ++i < maxIterations);
   // Whether the rewrite converges, i.e. wasn't changed in the last iteration.
   return !changed;

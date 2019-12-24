@@ -25,12 +25,12 @@ func @views(%arg0: index, %arg1: index, %arg2: index, %arg3: index, %arg4: index
   %0 = muli %arg0, %arg0 : index
   %1 = alloc (%0) : memref<?xi8>
   %2 = linalg.range %arg0:%arg1:%arg2 : !linalg.range
-  %3 = view %1[%arg0, %arg0][%c0] : memref<?xi8> to memref<?x?xf32, offset: ?, strides: [?, 1]>
+  %3 = view %1[%c0][%arg0, %arg0] : memref<?xi8> to memref<?x?xf32, offset: ?, strides: [?, 1]>
   %4 = linalg.slice %3[%2, %2] : memref<?x?xf32, offset: ?, strides: [?, 1]>, !linalg.range, !linalg.range, memref<?x?xf32, offset: ?, strides: [?, 1]>
   %5 = linalg.slice %3[%2, %arg2] : memref<?x?xf32, offset: ?, strides: [?, 1]>, !linalg.range, index, memref<?xf32, offset: ?, strides: [1]>
   %6 = linalg.slice %3[%arg2, %2] : memref<?x?xf32, offset: ?, strides: [?, 1]>, index, !linalg.range, memref<?xf32, offset: ?, strides: [1]>
   %7 = linalg.slice %3[%arg2, %arg3] : memref<?x?xf32, offset: ?, strides: [?, 1]>, index, index, memref<f32>
-  %8 = view %1[%arg0, %arg0][%c0] : memref<?xi8> to memref<?x?xvector<4x4xf32>, offset: ?, strides: [?, 1]>
+  %8 = view %1[%c0][%arg0, %arg0] : memref<?xi8> to memref<?x?xvector<4x4xf32>, offset: ?, strides: [?, 1]>
   dealloc %1 : memref<?xi8>
   return
 }
@@ -115,24 +115,15 @@ func @conv_view6(%arg0: memref<?x?x?x?x?x?xf32, offset: ?, strides: [?, ?, ?, ?,
 //       CHECK:  %{{.*}}: memref<?x?x?x?x?x?xf32, #[[strided6D]]>, %{{.*}}: memref<?x?x?x?x?x?xf32, #[[strided6D]]>, %{{.*}}: memref<?x?x?x?x?x?xf32, #[[strided6D]]>) {
 //       CHECK:   linalg.conv(%{{.*}}, %{{.*}}, %{{.*}}) {dilations = [4, 4, 5, 5], strides = [2, 2, 3, 3]} : memref<?x?x?x?x?x?xf32, #[[strided6D]]>, memref<?x?x?x?x?x?xf32, #[[strided6D]]>, memref<?x?x?x?x?x?xf32, #[[strided6D]]>
 
-func @subview(%arg0: memref<?x?xvector<3x4xi4>, offset: ?, strides: [?, 1]>) {
-  %c0 = constant 0 : index
-  %0 = linalg.subview %arg0[%c0, %c0, %c0, %c0, %c0, %c0] : memref<?x?xvector<3x4xi4>, offset: ?, strides: [?, 1]>
-  return
-}
-// CHECK-LABEL: func @subview(
-//       CHECK:  %{{.*}}: memref<?x?xvector<3x4xi4>, #[[strided2D]]>) {
-//       CHECK:   constant 0 : index
-//       CHECK:   linalg.subview %{{.*}}[%{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}] : memref<?x?xvector<3x4xi4>, #[[strided2D]]>
-
 #accesses = [
   (i, j, k) -> (j, i),
   (i, j, k) -> (i, k, i + j)
 ]
 #trait = {
+  args_in = 1,
+  args_out = 1,
   indexing_maps = #accesses,
-  n_views = [1, 1],
-  n_loop_types = [3, 0, 0],
+  iterator_types = ["parallel", "parallel", "parallel"],
   fun = @foo,
   library_call = "some_external_function_name_1"
 }
@@ -146,12 +137,13 @@ func @generic(%arg0: memref<?x?xvector<3x4xi4>, offset: ?, strides: [?, 1]>, %ar
 }
 // CHECK-LABEL: func @foo
 // CHECK-LABEL: func @generic
-//       CHECK:   linalg.generic {fun = @foo, indexing_maps = [#{{.*}}, #{{.*}}], library_call = "some_external_function_name_1", n_loop_types = [3, 0, 0], n_views = [1, 1]} %{{.*}}, %{{.*}} {foo = 1 : i64}: memref<?x?xvector<3x4xi4>, #[[strided2D]]>, memref<?x?x?xf32, #[[strided3D]]>
+//       CHECK:   linalg.generic {args_in = 1 : i64, args_out = 1 : i64, fun = @foo, indexing_maps = [#{{.*}}, #{{.*}}], iterator_types = ["parallel", "parallel", "parallel"], library_call = "some_external_function_name_1"} %{{.*}}, %{{.*}} {foo = 1 : i64}: memref<?x?xvector<3x4xi4>, #[[strided2D]]>, memref<?x?x?xf32, #[[strided3D]]>
 
 #trait2 = {
+  args_in = 1,
+  args_out = 1,
   indexing_maps = #accesses,
-  n_views = [1, 1],
-  n_loop_types = [3, 0, 0],
+  iterator_types = ["parallel", "parallel", "parallel"],
   library_call = "some_external_function_name_2"
 }
 func @generic_region(%arg0: memref<?x?xvector<3x4xi4>, offset: ?, strides: [?, 1]>, %arg1: memref<?x?x?xf32, offset: ?, strides: [?, ?, 1]>) {
@@ -162,7 +154,7 @@ func @generic_region(%arg0: memref<?x?xvector<3x4xi4>, offset: ?, strides: [?, 1
   return
 }
 // CHECK-LABEL: func @generic_region
-//       CHECK:   linalg.generic {indexing_maps = [#{{.*}}, #{{.*}}], library_call = "some_external_function_name_2", n_loop_types = [3, 0, 0], n_views = [1, 1]} %{{.*}}, %{{.*}} {
+//       CHECK:   linalg.generic {args_in = 1 : i64, args_out = 1 : i64, indexing_maps = [#{{.*}}, #{{.*}}], iterator_types = ["parallel", "parallel", "parallel"], library_call = "some_external_function_name_2"} %{{.*}}, %{{.*}} {
 //       CHECK:    ^{{.*}}(%{{.*}}: vector<3x4xi4>, %{{.*}}: f32):    // no predecessors
 //       CHECK:      linalg.yield %{{.*}} : f32
 //       CHECK:    } {foo = 1 : i64}: memref<?x?xvector<3x4xi4>, #[[strided2D]]>, memref<?x?x?xf32, #[[strided3D]]>
@@ -176,7 +168,7 @@ func @indexed_generic(%arg0: memref<?x?xvector<3x4xi4>, offset: ?, strides: [?, 
   return
 }
 // CHECK-LABEL: func @indexed_generic
-//       CHECK:   linalg.indexed_generic {indexing_maps = [#{{.*}}, #{{.*}}], library_call = "some_external_function_name_2", n_loop_types = [3, 0, 0], n_views = [1, 1]} %{{.*}}, %{{.*}} {
+//       CHECK:   linalg.indexed_generic {args_in = 1 : i64, args_out = 1 : i64, indexing_maps = [#{{.*}}, #{{.*}}],  iterator_types = ["parallel", "parallel", "parallel"], library_call = "some_external_function_name_2"} %{{.*}}, %{{.*}} {
 //       CHECK:    ^{{.*}}(%{{.*}}: index, %{{.*}}: index, %{{.*}}: index, %{{.*}}: vector<3x4xi4>, %{{.*}}: f32):
 //       CHECK:      linalg.yield %{{.*}} : f32
 //       CHECK:    } {foo = 1 : i64}: memref<?x?xvector<3x4xi4>, #[[strided2D]]>, memref<?x?x?xf32, #[[strided3D]]>

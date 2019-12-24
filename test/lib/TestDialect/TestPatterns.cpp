@@ -22,11 +22,12 @@
 using namespace mlir;
 
 // Native function for testing NativeCodeCall
-static Value *chooseOperand(Value *input1, Value *input2, BoolAttr choice) {
+static ValuePtr chooseOperand(ValuePtr input1, ValuePtr input2,
+                              BoolAttr choice) {
   return choice.getValue() ? input1 : input2;
 }
 
-static void createOpI(PatternRewriter &rewriter, Value *input) {
+static void createOpI(PatternRewriter &rewriter, ValuePtr input) {
   rewriter.create<OpI>(rewriter.getUnknownLoc(), input);
 }
 
@@ -73,17 +74,31 @@ struct ReturnTypeOpMatch : public RewritePattern {
   PatternMatchResult matchAndRewrite(Operation *op,
                                      PatternRewriter &rewriter) const final {
     if (auto retTypeFn = dyn_cast<InferTypeOpInterface>(op)) {
-      SmallVector<Value *, 4> values;
-      values.reserve(op->getNumOperands());
-      for (auto &operand : op->getOpOperands())
-        values.push_back(operand.get());
-      auto res = retTypeFn.inferReturnTypes(op->getLoc(), values,
-                                            op->getAttrs(), op->getRegions());
-      SmallVector<Type, 1> result_types(op->getResultTypes());
-      if (!retTypeFn.isCompatibleReturnTypes(res, result_types))
+      SmallVector<ValuePtr, 4> values(op->getOperands());
+      SmallVector<Type, 2> inferedReturnTypes;
+      if (failed(retTypeFn.inferReturnTypes(op->getLoc(), values,
+                                            op->getAttrs(), op->getRegions(),
+                                            inferedReturnTypes)))
+        return matchFailure();
+      SmallVector<Type, 1> resultTypes(op->getResultTypes());
+      if (!retTypeFn.isCompatibleReturnTypes(inferedReturnTypes, resultTypes))
         return op->emitOpError(
                    "inferred type incompatible with return type of operation"),
                matchFailure();
+
+      // TODO(jpienaar): Split this out to make the test more focused.
+      // Create new op with unknown location to verify building with
+      // InferTypeOpInterface is triggered.
+      auto fop = op->getParentOfType<FuncOp>();
+      if (values[0] == fop.getArgument(0)) {
+        // Use the 2nd function argument if the first function argument is used
+        // when constructing the new op so that a new return type is inferred.
+        values[0] = fop.getArgument(1);
+        values[1] = fop.getArgument(1);
+        // TODO(jpienaar): Expand to regions.
+        rewriter.create<OpWithInferTypeInterfaceOp>(
+            UnknownLoc::get(op->getContext()), values, op->getAttrs());
+      }
     }
     return matchFailure();
   }
@@ -118,7 +133,7 @@ struct TestRegionRewriteBlockMovement : public ConversionPattern {
       : ConversionPattern("test.region", 1, ctx) {}
 
   PatternMatchResult
-  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+  matchAndRewrite(Operation *op, ArrayRef<ValuePtr> operands,
                   ConversionPatternRewriter &rewriter) const final {
     // Inline this region into the parent region.
     auto &parentRegion = *op->getParentRegion();
@@ -151,7 +166,7 @@ struct TestRegionRewriteUndo : public RewritePattern {
 
     // Add an explicitly illegal operation to ensure the conversion fails.
     rewriter.create<ILLegalOpF>(op->getLoc(), rewriter.getIntegerType(32));
-    rewriter.create<TestValidOp>(op->getLoc(), ArrayRef<Value *>());
+    rewriter.create<TestValidOp>(op->getLoc(), ArrayRef<ValuePtr>());
 
     // Drop this operation.
     rewriter.eraseOp(op);
@@ -162,22 +177,39 @@ struct TestRegionRewriteUndo : public RewritePattern {
 //===----------------------------------------------------------------------===//
 // Type-Conversion Rewrite Testing
 
-/// This pattern simply erases the given operation.
-struct TestDropOp : public ConversionPattern {
-  TestDropOp(MLIRContext *ctx) : ConversionPattern("test.drop_op", 1, ctx) {}
+/// This patterns erases a region operation that has had a type conversion.
+struct TestDropOpSignatureConversion : public ConversionPattern {
+  TestDropOpSignatureConversion(MLIRContext *ctx, TypeConverter &converter)
+      : ConversionPattern("test.drop_region_op", 1, ctx), converter(converter) {
+  }
   PatternMatchResult
-  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
-                  ConversionPatternRewriter &rewriter) const final {
+  matchAndRewrite(Operation *op, ArrayRef<ValuePtr> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    Region &region = op->getRegion(0);
+    Block *entry = &region.front();
+
+    // Convert the original entry arguments.
+    TypeConverter::SignatureConversion result(entry->getNumArguments());
+    for (unsigned i = 0, e = entry->getNumArguments(); i != e; ++i)
+      if (failed(converter.convertSignatureArg(
+              i, entry->getArgument(i)->getType(), result)))
+        return matchFailure();
+
+    // Convert the region signature and just drop the operation.
+    rewriter.applySignatureConversion(&region, result);
     rewriter.eraseOp(op);
     return matchSuccess();
   }
+
+  /// The type converter to use when rewriting the signature.
+  TypeConverter &converter;
 };
 /// This pattern simply updates the operands of the given operation.
 struct TestPassthroughInvalidOp : public ConversionPattern {
   TestPassthroughInvalidOp(MLIRContext *ctx)
       : ConversionPattern("test.invalid", 1, ctx) {}
   PatternMatchResult
-  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+  matchAndRewrite(Operation *op, ArrayRef<ValuePtr> operands,
                   ConversionPatternRewriter &rewriter) const final {
     rewriter.replaceOpWithNewOp<TestValidOp>(op, llvm::None, operands,
                                              llvm::None);
@@ -189,7 +221,7 @@ struct TestSplitReturnType : public ConversionPattern {
   TestSplitReturnType(MLIRContext *ctx)
       : ConversionPattern("test.return", 1, ctx) {}
   PatternMatchResult
-  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+  matchAndRewrite(Operation *op, ArrayRef<ValuePtr> operands,
                   ConversionPatternRewriter &rewriter) const final {
     // Check for a return of F32.
     if (op->getNumOperands() != 1 || !op->getOperand(0)->getType().isF32())
@@ -199,8 +231,7 @@ struct TestSplitReturnType : public ConversionPattern {
     // results directly.
     auto *defOp = operands[0]->getDefiningOp();
     if (auto packerOp = llvm::dyn_cast_or_null<TestCastOp>(defOp)) {
-      SmallVector<Value *, 2> returnOperands(packerOp.getOperands());
-      rewriter.replaceOpWithNewOp<TestReturnOp>(op, returnOperands);
+      rewriter.replaceOpWithNewOp<TestReturnOp>(op, packerOp.getOperands());
       return matchSuccess();
     }
 
@@ -215,7 +246,7 @@ struct TestChangeProducerTypeI32ToF32 : public ConversionPattern {
   TestChangeProducerTypeI32ToF32(MLIRContext *ctx)
       : ConversionPattern("test.type_producer", 1, ctx) {}
   PatternMatchResult
-  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+  matchAndRewrite(Operation *op, ArrayRef<ValuePtr> operands,
                   ConversionPatternRewriter &rewriter) const final {
     // If the type is I32, change the type to F32.
     if (!(*op->result_type_begin()).isInteger(32))
@@ -228,7 +259,7 @@ struct TestChangeProducerTypeF32ToF64 : public ConversionPattern {
   TestChangeProducerTypeF32ToF64(MLIRContext *ctx)
       : ConversionPattern("test.type_producer", 1, ctx) {}
   PatternMatchResult
-  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+  matchAndRewrite(Operation *op, ArrayRef<ValuePtr> operands,
                   ConversionPatternRewriter &rewriter) const final {
     // If the type is F32, change the type to F64.
     if (!(*op->result_type_begin()).isF32())
@@ -241,7 +272,7 @@ struct TestChangeProducerTypeF32ToInvalid : public ConversionPattern {
   TestChangeProducerTypeF32ToInvalid(MLIRContext *ctx)
       : ConversionPattern("test.type_producer", 10, ctx) {}
   PatternMatchResult
-  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+  matchAndRewrite(Operation *op, ArrayRef<ValuePtr> operands,
                   ConversionPatternRewriter &rewriter) const final {
     // Always convert to B16, even though it is not a legal type. This tests
     // that values are unmapped correctly.
@@ -253,10 +284,9 @@ struct TestUpdateConsumerType : public ConversionPattern {
   TestUpdateConsumerType(MLIRContext *ctx)
       : ConversionPattern("test.type_consumer", 1, ctx) {}
   PatternMatchResult
-  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+  matchAndRewrite(Operation *op, ArrayRef<ValuePtr> operands,
                   ConversionPatternRewriter &rewriter) const final {
-    // Verify that the the incoming operand has been successfully remapped to
-    // F64.
+    // Verify that the incoming operand has been successfully remapped to F64.
     if (!operands[0]->getType().isF64())
       return matchFailure();
     rewriter.replaceOpWithNewOp<TestTypeConsumerOp>(op, operands[0]);
@@ -315,7 +345,7 @@ struct TestTypeConverter : public TypeConverter {
   /// Override the hook to materialize a conversion. This is necessary because
   /// we generate 1->N type mappings.
   Operation *materializeConversion(PatternRewriter &rewriter, Type resultType,
-                                   ArrayRef<Value *> inputs,
+                                   ArrayRef<ValuePtr> inputs,
                                    Location loc) override {
     return rewriter.create<TestCastOp>(loc, resultType, inputs);
   }
@@ -334,10 +364,11 @@ struct TestLegalizePatternDriver
     populateWithGenerated(&getContext(), &patterns);
     patterns
         .insert<TestRegionRewriteBlockMovement, TestRegionRewriteUndo,
-                TestDropOp, TestPassthroughInvalidOp, TestSplitReturnType,
+                TestPassthroughInvalidOp, TestSplitReturnType,
                 TestChangeProducerTypeI32ToF32, TestChangeProducerTypeF32ToF64,
                 TestChangeProducerTypeF32ToInvalid, TestUpdateConsumerType,
                 TestNonRootReplacement>(&getContext());
+    patterns.insert<TestDropOpSignatureConversion>(&getContext(), converter);
     mlir::populateFuncOpTypeConversionPattern(patterns, &getContext(),
                                               converter);
 
@@ -345,7 +376,8 @@ struct TestLegalizePatternDriver
     ConversionTarget target(getContext());
     target.addLegalOp<ModuleOp, ModuleTerminatorOp>();
     target.addLegalOp<LegalOpA, LegalOpB, TestCastOp, TestValidOp>();
-    target.addIllegalOp<ILLegalOpF, TestRegionBuilderOp>();
+    target
+        .addIllegalOp<ILLegalOpF, TestRegionBuilderOp, TestOpWithRegionFold>();
     target.addDynamicallyLegalOp<TestReturnOp>([](TestReturnOp op) {
       // Don't allow F32 operands.
       return llvm::none_of(op.getOperandTypes(),
@@ -417,3 +449,66 @@ static mlir::PassRegistration<TestLegalizePatternDriver>
                      return std::make_unique<TestLegalizePatternDriver>(
                          legalizerConversionMode);
                    });
+
+//===----------------------------------------------------------------------===//
+// ConversionPatternRewriter::getRemappedValue testing. This method is used
+// to get the remapped value of a original value that was replaced using
+// ConversionPatternRewriter.
+namespace {
+/// Converter that replaces a one-result one-operand OneVResOneVOperandOp1 with
+/// a one-operand two-result OneVResOneVOperandOp1 by replicating its original
+/// operand twice.
+///
+/// Example:
+///   %1 = test.one_variadic_out_one_variadic_in1"(%0)
+/// is replaced with:
+///   %1 = test.one_variadic_out_one_variadic_in1"(%0, %0)
+struct OneVResOneVOperandOp1Converter
+    : public OpConversionPattern<OneVResOneVOperandOp1> {
+  using OpConversionPattern<OneVResOneVOperandOp1>::OpConversionPattern;
+
+  PatternMatchResult
+  matchAndRewrite(OneVResOneVOperandOp1 op, ArrayRef<ValuePtr> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto origOps = op.getOperands();
+    assert(std::distance(origOps.begin(), origOps.end()) == 1 &&
+           "One operand expected");
+    ValuePtr origOp = *origOps.begin();
+    SmallVector<ValuePtr, 2> remappedOperands;
+    // Replicate the remapped original operand twice. Note that we don't used
+    // the remapped 'operand' since the goal is testing 'getRemappedValue'.
+    remappedOperands.push_back(rewriter.getRemappedValue(origOp));
+    remappedOperands.push_back(rewriter.getRemappedValue(origOp));
+
+    SmallVector<Type, 1> resultTypes(op.getResultTypes());
+    rewriter.replaceOpWithNewOp<OneVResOneVOperandOp1>(op, resultTypes,
+                                                       remappedOperands);
+    return matchSuccess();
+  }
+};
+
+struct TestRemappedValue : public mlir::FunctionPass<TestRemappedValue> {
+  void runOnFunction() override {
+    mlir::OwningRewritePatternList patterns;
+    patterns.insert<OneVResOneVOperandOp1Converter>(&getContext());
+
+    mlir::ConversionTarget target(getContext());
+    target.addLegalOp<ModuleOp, ModuleTerminatorOp, FuncOp, TestReturnOp>();
+    // We make OneVResOneVOperandOp1 legal only when it has more that one
+    // operand. This will trigger the conversion that will replace one-operand
+    // OneVResOneVOperandOp1 with two-operand OneVResOneVOperandOp1.
+    target.addDynamicallyLegalOp<OneVResOneVOperandOp1>(
+        [](Operation *op) -> bool {
+          return std::distance(op->operand_begin(), op->operand_end()) > 1;
+        });
+
+    if (failed(mlir::applyFullConversion(getFunction(), target, patterns))) {
+      signalPassFailure();
+    }
+  }
+};
+} // end anonymous namespace
+
+static PassRegistration<TestRemappedValue> remapped_value_pass(
+    "test-remapped-value",
+    "Test public remapped value mechanism in ConversionPatternRewriter");

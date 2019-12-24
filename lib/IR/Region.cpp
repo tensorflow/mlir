@@ -91,7 +91,7 @@ void Region::cloneInto(Region *dest, Region::iterator destPos,
     // Clone the block arguments. The user might be deleting arguments to the
     // block by specifying them in the mapper. If so, we don't add the
     // argument to the cloned block.
-    for (auto *arg : block.getArguments())
+    for (auto arg : block.getArguments())
       if (!mapper.contains(arg))
         mapper.map(arg, newBlock->addArgument(arg->getType()));
 
@@ -106,7 +106,7 @@ void Region::cloneInto(Region *dest, Region::iterator destPos,
   // operands of each of the operations.
   auto remapOperands = [&](Operation *op) {
     for (auto &operand : op->getOpOperands())
-      if (auto *mappedOp = mapper.lookupOrNull(operand.get()))
+      if (auto mappedOp = mapper.lookupOrNull(operand.get()))
         operand.set(mappedOp);
     for (auto &succOp : op->getBlockOperands())
       if (auto *mappedOp = mapper.lookupOrNull(succOp.get()))
@@ -129,7 +129,7 @@ void Region::dropAllReferences() {
 /// is used to point to the operation containing the region, the actual error is
 /// reported at the operation with an offending use.
 static bool isIsolatedAbove(Region &region, Region &limit,
-                            llvm::Optional<Location> noteLoc) {
+                            Optional<Location> noteLoc) {
   assert(limit.isAncestor(&region) &&
          "expected isolation limit to be an ancestor of the given region");
 
@@ -143,7 +143,7 @@ static bool isIsolatedAbove(Region &region, Region &limit,
   while (!pendingRegions.empty()) {
     for (Block &block : *pendingRegions.pop_back_val()) {
       for (Operation &op : block) {
-        for (Value *operand : op.getOperands()) {
+        for (ValuePtr operand : op.getOperands()) {
           // operand should be non-null here if the IR is well-formed. But
           // we don't assert here as this function is called from the verifier
           // and so could be called on invalid IR.
@@ -174,7 +174,7 @@ static bool isIsolatedAbove(Region &region, Region &limit,
   return true;
 }
 
-bool Region::isIsolatedFromAbove(llvm::Optional<Location> noteLoc) {
+bool Region::isIsolatedFromAbove(Optional<Location> noteLoc) {
   return isIsolatedAbove(*this, *this, noteLoc);
 }
 
@@ -212,4 +212,28 @@ void llvm::ilist_traits<::mlir::Block>::transferNodesFromList(
   // Update the 'parent' member of each Block.
   for (; first != last; ++first)
     first->parentValidOpOrderPair.setPointer(curParent);
+}
+
+//===----------------------------------------------------------------------===//
+// RegionRange
+//===----------------------------------------------------------------------===//
+
+RegionRange::RegionRange(MutableArrayRef<Region> regions)
+    : RegionRange(regions.data(), regions.size()) {}
+RegionRange::RegionRange(ArrayRef<std::unique_ptr<Region>> regions)
+    : RegionRange(regions.data(), regions.size()) {}
+
+/// See `detail::indexed_accessor_range_base` for details.
+RegionRange::OwnerT RegionRange::offset_base(const OwnerT &owner,
+                                             ptrdiff_t index) {
+  if (auto *operand = owner.dyn_cast<const std::unique_ptr<Region> *>())
+    return operand + index;
+  return &owner.get<Region *>()[index];
+}
+/// See `detail::indexed_accessor_range_base` for details.
+Region *RegionRange::dereference_iterator(const OwnerT &owner,
+                                          ptrdiff_t index) {
+  if (auto *operand = owner.dyn_cast<const std::unique_ptr<Region> *>())
+    return operand[index].get();
+  return &owner.get<Region *>()[index];
 }

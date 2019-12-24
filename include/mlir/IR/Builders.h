@@ -100,8 +100,10 @@ public:
   FloatAttr getFloatAttr(Type type, const APFloat &value);
   StringAttr getStringAttr(StringRef bytes);
   ArrayAttr getArrayAttr(ArrayRef<Attribute> value);
-  SymbolRefAttr getSymbolRefAttr(Operation *value);
-  SymbolRefAttr getSymbolRefAttr(StringRef value);
+  FlatSymbolRefAttr getSymbolRefAttr(Operation *value);
+  FlatSymbolRefAttr getSymbolRefAttr(StringRef value);
+  SymbolRefAttr getSymbolRefAttr(StringRef value,
+                                 ArrayRef<FlatSymbolRefAttr> nestedReferences);
 
   // Returns a 0-valued attribute of the given `type`. This function only
   // supports boolean, integer, and 16-/32-/64-bit float types, and vector or
@@ -117,6 +119,8 @@ public:
   IntegerAttr getI16IntegerAttr(int16_t value);
   IntegerAttr getI32IntegerAttr(int32_t value);
   IntegerAttr getI64IntegerAttr(int64_t value);
+
+  DenseIntElementsAttr getI32VectorAttr(ArrayRef<int32_t> values);
 
   ArrayAttr getAffineMapArrayAttr(ArrayRef<AffineMap> values);
   ArrayAttr getI32ArrayAttr(ArrayRef<int32_t> values);
@@ -277,6 +281,9 @@ public:
   /// Returns the current insertion point of the builder.
   Block::iterator getInsertionPoint() const { return insertPoint; }
 
+  /// Insert the given operation at the current insertion point and return it.
+  virtual Operation *insert(Operation *op);
+
   /// Add new block and set the insertion point to the end of it. The block is
   /// inserted at the provided insertion point of 'parent'.
   Block *createBlock(Region *parent, Region::iterator insertPt = {});
@@ -289,7 +296,7 @@ public:
   Block *getBlock() const { return block; }
 
   /// Creates an operation given the fields represented as an OperationState.
-  virtual Operation *createOperation(const OperationState &state);
+  Operation *createOperation(const OperationState &state);
 
   /// Create an operation of specific op type at the current insertion point.
   template <typename OpTy, typename... Args>
@@ -306,18 +313,27 @@ public:
   /// and immediately try to fold it. This functions populates 'results' with
   /// the results after folding the operation.
   template <typename OpTy, typename... Args>
-  void createOrFold(SmallVectorImpl<Value *> &results, Location location,
+  void createOrFold(SmallVectorImpl<ValuePtr> &results, Location location,
                     Args &&... args) {
-    auto op = create<OpTy>(location, std::forward<Args>(args)...);
-    tryFold(op.getOperation(), results);
+    // Create the operation without using 'createOperation' as we don't want to
+    // insert it yet.
+    OperationState state(location, OpTy::getOperationName());
+    OpTy::build(this, state, std::forward<Args>(args)...);
+    Operation *op = Operation::create(state);
+
+    // Fold the operation. If successful destroy it, otherwise insert it.
+    if (succeeded(tryFold(op, results)))
+      op->destroy();
+    else
+      insert(op);
   }
 
   /// Overload to create or fold a single result operation.
   template <typename OpTy, typename... Args>
   typename std::enable_if<OpTy::template hasTrait<OpTrait::OneResult>(),
-                          Value *>::type
+                          ValuePtr>::type
   createOrFold(Location location, Args &&... args) {
-    SmallVector<Value *, 1> results;
+    SmallVector<ValuePtr, 1> results;
     createOrFold<OpTy>(results, location, std::forward<Args>(args)...);
     return results.front();
   }
@@ -328,7 +344,7 @@ public:
                           OpTy>::type
   createOrFold(Location location, Args &&... args) {
     auto op = create<OpTy>(location, std::forward<Args>(args)...);
-    SmallVector<Value *, 0> unused;
+    SmallVector<ValuePtr, 0> unused;
     tryFold(op.getOperation(), unused);
 
     // Folding cannot remove a zero-result operation, so for convenience we
@@ -336,44 +352,35 @@ public:
     return op;
   }
 
+  /// Attempts to fold the given operation and places new results within
+  /// 'results'. Returns success if the operation was folded, failure otherwise.
+  /// Note: This function does not erase the operation on a successful fold.
+  LogicalResult tryFold(Operation *op, SmallVectorImpl<ValuePtr> &results);
+
   /// Creates a deep copy of the specified operation, remapping any operands
   /// that use values outside of the operation using the map that is provided
   /// ( leaving them alone if no entry is present).  Replaces references to
   /// cloned sub-operations to the corresponding operation that is copied,
   /// and adds those mappings to the map.
   Operation *clone(Operation &op, BlockAndValueMapping &mapper) {
-    Operation *cloneOp = op.clone(mapper);
-    insert(cloneOp);
-    return cloneOp;
+    return insert(op.clone(mapper));
   }
-  Operation *clone(Operation &op) {
-    Operation *cloneOp = op.clone();
-    insert(cloneOp);
-    return cloneOp;
-  }
+  Operation *clone(Operation &op) { return insert(op.clone()); }
 
   /// Creates a deep copy of this operation but keep the operation regions
   /// empty. Operands are remapped using `mapper` (if present), and `mapper` is
   /// updated to contain the results.
   Operation *cloneWithoutRegions(Operation &op, BlockAndValueMapping &mapper) {
-    Operation *cloneOp = op.cloneWithoutRegions(mapper);
-    insert(cloneOp);
-    return cloneOp;
+    return insert(op.cloneWithoutRegions(mapper));
   }
   Operation *cloneWithoutRegions(Operation &op) {
-    Operation *cloneOp = op.cloneWithoutRegions();
-    insert(cloneOp);
-    return cloneOp;
+    return insert(op.cloneWithoutRegions());
+  }
+  template <typename OpT> OpT cloneWithoutRegions(OpT op) {
+    return cast<OpT>(cloneWithoutRegions(*op.getOperation()));
   }
 
 private:
-  /// Attempts to fold the given operation and places new results within
-  /// 'results'.
-  void tryFold(Operation *op, SmallVectorImpl<Value *> &results);
-
-  /// Insert the given operation at the current insertion point.
-  void insert(Operation *op);
-
   Block *block = nullptr;
   Block::iterator insertPoint;
 };

@@ -32,7 +32,7 @@ module {
   }) {sym_name = "baz", type = !llvm<"i64 (i64)">} : () -> ()
 
   // CHECK: llvm.func @qux(!llvm<"i64*"> {llvm.noalias = true}, !llvm.i64)
-  // CHECK-NEXT: attributes  {xxx = {yyy = 42 : i64}}
+  // CHECK: attributes {xxx = {yyy = 42 : i64}}
   "llvm.func"() ({
   }) {sym_name = "qux", type = !llvm<"void (i64*, i64)">,
       arg0 = {llvm.noalias = true}, xxx = {yyy = 42}} : () -> ()
@@ -52,11 +52,11 @@ module {
   }
 
   // CHECK: llvm.func @roundtrip5()
-  // CHECK-NEXT: attributes  {baz = 42 : i64, foo = "bar"}
+  // CHECK: attributes {baz = 42 : i64, foo = "bar"}
   llvm.func @roundtrip5() attributes {foo = "bar", baz = 42}
 
   // CHECK: llvm.func @roundtrip6()
-  // CHECK-NEXT: attributes  {baz = 42 : i64, foo = "bar"}
+  // CHECK: attributes {baz = 42 : i64, foo = "bar"}
   llvm.func @roundtrip6() attributes {foo = "bar", baz = 42} {
     llvm.return
   }
@@ -81,7 +81,7 @@ module {
   }
 
   // CHECK: llvm.func @roundtrip12(%{{.*}}: !llvm<"i32*"> {llvm.noalias = true})
-  // CHECK-NEXT: attributes  {foo = 42 : i32}
+  // CHECK: attributes {foo = 42 : i32}
   llvm.func @roundtrip12(%arg0: !llvm<"i32*"> {llvm.noalias = true})
   attributes {foo = 42 : i32} {
     llvm.return
@@ -92,6 +92,27 @@ module {
 
   // CHECK: llvm.func @variadic_args(!llvm.i32, !llvm.i32, ...)
   llvm.func @variadic_args(!llvm.i32, !llvm.i32, ...)
+
+  //
+  // Check that functions can have linkage attributes.
+  //
+
+  // CHECK: llvm.func internal
+  llvm.func internal @internal_func() {
+    llvm.return
+  }
+
+  // CHECK: llvm.func weak
+  llvm.func weak @weak_linkage() {
+    llvm.return
+  }
+
+  // Omit the `external` linkage, which is the default, in the custom format.
+  // Check that it is present in the generic format using its numeric value.
+  //
+  // CHECK: llvm.func @external_func
+  // GENERIC: linkage = 10
+  llvm.func external @external_func()
 }
 
 // -----
@@ -187,4 +208,18 @@ module {
 module {
   // expected-error@+1 {{variadic arguments must be in the end of the argument list}}
   llvm.func @variadic_inside(%arg0: !llvm.i32, ..., %arg1: !llvm.i32)
+}
+
+// -----
+
+module {
+  // expected-error@+1 {{external functions must have 'external' or 'extern_weak' linkage}}
+  llvm.func internal @internal_external_func()
+}
+
+// -----
+
+module {
+  // expected-error@+1 {{functions cannot have 'common' linkage}}
+  llvm.func common @common_linkage_func()
 }

@@ -165,4 +165,31 @@ spv.module "Logical" "GLSL450" {
     %1 = spv.IAdd %0, %0 : i32
     spv.ReturnValue %1 : i32
   }
+
+  // CHECK-LABEL: @const_variable
+  func @const_variable(%arg0 : i32, %arg1 : i32) -> () {
+    // CHECK: %[[CONST:.*]] = spv.constant 5 : i32
+    // CHECK: spv.Variable init(%[[CONST]]) : !spv.ptr<i32, Function>
+    // CHECK: spv.IAdd %arg0, %arg1
+    %0 = spv.IAdd %arg0, %arg1 : i32
+    %1 = spv.constant 5 : i32
+    %2 = spv.Variable init(%1) : !spv.ptr<i32, Function>
+    %3 = spv.Load "Function" %2 : i32
+    %4 = spv.IAdd %0, %3 : i32
+    spv.Return
+  }
+
+  // CHECK-LABEL: @multi_dimensions_const
+  func @multi_dimensions_const() -> (!spv.array<2 x !spv.array<2 x !spv.array<3 x i32 [4]> [12]> [24]>) {
+    // CHECK: spv.constant {{\[}}{{\[}}[1 : i32, 2 : i32, 3 : i32], [4 : i32, 5 : i32, 6 : i32]], {{\[}}[7 : i32, 8 : i32, 9 : i32], [10 : i32, 11 : i32, 12 : i32]]] : !spv.array<2 x !spv.array<2 x !spv.array<3 x i32 [4]> [12]> [24]>
+    %0 = spv.constant dense<[[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [10, 11, 12]]]> : tensor<2x2x3xi32> : !spv.array<2 x !spv.array<2 x !spv.array<3 x i32 [4]> [12]> [24]>
+    spv.ReturnValue %0 : !spv.array<2 x !spv.array<2 x !spv.array<3 x i32 [4]> [12]> [24]>
+  }
+
+  // CHECK-LABEL: @multi_dimensions_splat_const
+  func @multi_dimensions_splat_const() -> (!spv.array<2 x !spv.array<2 x !spv.array<3 x i32 [4]> [12]> [24]>) {
+    // CHECK: spv.constant {{\[}}{{\[}}[1 : i32, 1 : i32, 1 : i32], [1 : i32, 1 : i32, 1 : i32]], {{\[}}[1 : i32, 1 : i32, 1 : i32], [1 : i32, 1 : i32, 1 : i32]]] : !spv.array<2 x !spv.array<2 x !spv.array<3 x i32 [4]> [12]> [24]>
+    %0 = spv.constant dense<1> : tensor<2x2x3xi32> : !spv.array<2 x !spv.array<2 x !spv.array<3 x i32 [4]> [12]> [24]>
+    spv.ReturnValue %0 : !spv.array<2 x !spv.array<2 x !spv.array<3 x i32 [4]> [12]> [24]>
+  }
 }

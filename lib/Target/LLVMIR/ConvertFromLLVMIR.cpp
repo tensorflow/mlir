@@ -76,7 +76,7 @@ private:
   /// `value` is an SSA-use. Return the remapped version of `value` or a
   /// placeholder that will be remapped later if this is an instruction that
   /// has not yet been visited.
-  Value *processValue(llvm::Value *value);
+  ValuePtr processValue(llvm::Value *value);
   /// Create the most accurate Location possible using a llvm::DebugLoc and
   /// possibly an llvm::Instruction to narrow the Location if debug information
   /// is unavailable.
@@ -85,14 +85,14 @@ private:
   /// `br` branches to `target`. Return the block arguments to attach to the
   /// generated branch op. These should be in the same order as the PHIs in
   /// `target`.
-  SmallVector<Value *, 4> processBranchArgs(llvm::BranchInst *br,
-                                            llvm::BasicBlock *target);
+  SmallVector<ValuePtr, 4> processBranchArgs(llvm::BranchInst *br,
+                                             llvm::BasicBlock *target);
   /// Return `value` as an attribute to attach to a GlobalOp.
   Attribute getConstantAsAttr(llvm::Constant *value);
   /// Return `c` as an MLIR Value. This could either be a ConstantOp, or
   /// an expanded sequence of ops in the current function's entry block (for
   /// ConstantExprs or ConstantGEPs).
-  Value *processConstant(llvm::Constant *c);
+  ValuePtr processConstant(llvm::Constant *c);
 
   /// The current builder, pointing at where the next Instruction should be
   /// generated.
@@ -120,7 +120,7 @@ private:
   /// Remapped blocks, for the current function.
   DenseMap<llvm::BasicBlock *, Block *> blocks;
   /// Remapped values. These are function-local.
-  DenseMap<llvm::Value *, Value *> instMap;
+  DenseMap<llvm::Value *, ValuePtr> instMap;
   /// Instructions that had not been defined when first encountered as a use.
   /// Maps to the dummy Operation that was created in processValue().
   DenseMap<llvm::Value *, Operation *> unknownInstMap;
@@ -215,6 +215,37 @@ Attribute Importer::getConstantAsAttr(llvm::Constant *value) {
   return Attribute();
 }
 
+/// Converts LLVM global variable linkage type into the LLVM dialect predicate.
+static LLVM::Linkage
+processLinkage(llvm::GlobalVariable::LinkageTypes linkage) {
+  switch (linkage) {
+  case llvm::GlobalValue::PrivateLinkage:
+    return LLVM::Linkage::Private;
+  case llvm::GlobalValue::InternalLinkage:
+    return LLVM::Linkage::Internal;
+  case llvm::GlobalValue::AvailableExternallyLinkage:
+    return LLVM::Linkage::AvailableExternally;
+  case llvm::GlobalValue::LinkOnceAnyLinkage:
+    return LLVM::Linkage::Linkonce;
+  case llvm::GlobalValue::WeakAnyLinkage:
+    return LLVM::Linkage::Weak;
+  case llvm::GlobalValue::CommonLinkage:
+    return LLVM::Linkage::Common;
+  case llvm::GlobalValue::AppendingLinkage:
+    return LLVM::Linkage::Appending;
+  case llvm::GlobalValue::ExternalWeakLinkage:
+    return LLVM::Linkage::ExternWeak;
+  case llvm::GlobalValue::LinkOnceODRLinkage:
+    return LLVM::Linkage::LinkonceODR;
+  case llvm::GlobalValue::WeakODRLinkage:
+    return LLVM::Linkage::WeakODR;
+  case llvm::GlobalValue::ExternalLinkage:
+    return LLVM::Linkage::External;
+  }
+
+  llvm_unreachable("unhandled linkage type");
+}
+
 GlobalOp Importer::processGlobal(llvm::GlobalVariable *GV) {
   auto it = globals.find(GV);
   if (it != globals.end())
@@ -224,20 +255,21 @@ GlobalOp Importer::processGlobal(llvm::GlobalVariable *GV) {
   Attribute valueAttr;
   if (GV->hasInitializer())
     valueAttr = getConstantAsAttr(GV->getInitializer());
-  GlobalOp op = b.create<GlobalOp>(UnknownLoc::get(context),
-                                   processType(GV->getValueType()),
-                                   GV->isConstant(), GV->getName(), valueAttr);
+  GlobalOp op = b.create<GlobalOp>(
+      UnknownLoc::get(context), processType(GV->getValueType()),
+      GV->isConstant(), processLinkage(GV->getLinkage()), GV->getName(),
+      valueAttr);
   if (GV->hasInitializer() && !valueAttr) {
     Region &r = op.getInitializerRegion();
     currentEntryBlock = b.createBlock(&r);
     b.setInsertionPoint(currentEntryBlock, currentEntryBlock->begin());
-    Value *v = processConstant(GV->getInitializer());
-    b.create<ReturnOp>(op.getLoc(), ArrayRef<Value *>({v}));
+    ValuePtr v = processConstant(GV->getInitializer());
+    b.create<ReturnOp>(op.getLoc(), ArrayRef<ValuePtr>({v}));
   }
   return globals[GV] = op;
 }
 
-Value *Importer::processConstant(llvm::Constant *c) {
+ValuePtr Importer::processConstant(llvm::Constant *c) {
   if (Attribute attr = getConstantAsAttr(c)) {
     // These constants can be represented as attributes.
     OpBuilder b(currentEntryBlock, currentEntryBlock->begin());
@@ -266,7 +298,7 @@ Value *Importer::processConstant(llvm::Constant *c) {
   return nullptr;
 }
 
-Value *Importer::processValue(llvm::Value *value) {
+ValuePtr Importer::processValue(llvm::Value *value) {
   auto it = instMap.find(value);
   if (it != instMap.end())
     return it->second;
@@ -375,9 +407,9 @@ static ICmpPredicate getICmpPredicate(llvm::CmpInst::Predicate p) {
 
 // `br` branches to `target`. Return the branch arguments to `br`, in the
 // same order of the PHIs in `target`.
-SmallVector<Value *, 4> Importer::processBranchArgs(llvm::BranchInst *br,
-                                                    llvm::BasicBlock *target) {
-  SmallVector<Value *, 4> v;
+SmallVector<ValuePtr, 4> Importer::processBranchArgs(llvm::BranchInst *br,
+                                                     llvm::BasicBlock *target) {
+  SmallVector<ValuePtr, 4> v;
   for (auto inst = target->begin(); isa<llvm::PHINode>(inst); ++inst) {
     auto *PN = cast<llvm::PHINode>(&*inst);
     v.push_back(processValue(PN->getIncomingValueForBlock(br->getParent())));
@@ -389,7 +421,7 @@ LogicalResult Importer::processInstruction(llvm::Instruction *inst) {
   // FIXME: Support uses of SubtargetData. Currently inbounds GEPs, fast-math
   // flags and call / operand attributes are not supported.
   Location loc = processDebugLoc(inst->getDebugLoc(), inst);
-  Value *&v = instMap[inst];
+  ValuePtr &v = instMap[inst];
   assert(!v && "processInstruction must be called only once per instruction!");
   switch (inst->getOpcode()) {
   default:
@@ -430,7 +462,7 @@ LogicalResult Importer::processInstruction(llvm::Instruction *inst) {
   case llvm::Instruction::AddrSpaceCast:
   case llvm::Instruction::BitCast: {
     OperationState state(loc, opcMap.lookup(inst->getOpcode()));
-    SmallVector<Value *, 4> ops;
+    SmallVector<ValuePtr, 4> ops;
     ops.reserve(inst->getNumOperands());
     for (auto *op : inst->operand_values())
       ops.push_back(processValue(op));
@@ -452,7 +484,7 @@ LogicalResult Importer::processInstruction(llvm::Instruction *inst) {
     auto *brInst = cast<llvm::BranchInst>(inst);
     OperationState state(loc,
                          brInst->isConditional() ? "llvm.cond_br" : "llvm.br");
-    SmallVector<Value *, 4> ops;
+    SmallVector<ValuePtr, 4> ops;
     if (brInst->isConditional())
       ops.push_back(processValue(brInst->getCondition()));
     state.addOperands(ops);
@@ -468,7 +500,7 @@ LogicalResult Importer::processInstruction(llvm::Instruction *inst) {
   }
   case llvm::Instruction::Call: {
     llvm::CallInst *ci = cast<llvm::CallInst>(inst);
-    SmallVector<Value *, 4> ops;
+    SmallVector<ValuePtr, 4> ops;
     ops.reserve(inst->getNumOperands());
     for (auto &op : ci->arg_operands())
       ops.push_back(processValue(op.get()));
@@ -491,7 +523,7 @@ LogicalResult Importer::processInstruction(llvm::Instruction *inst) {
   case llvm::Instruction::GetElementPtr: {
     // FIXME: Support inbounds GEPs.
     llvm::GetElementPtrInst *gep = cast<llvm::GetElementPtrInst>(inst);
-    SmallVector<Value *, 4> ops;
+    SmallVector<ValuePtr, 4> ops;
     for (auto *op : gep->operand_values())
       ops.push_back(processValue(op));
     v = b.create<GEPOp>(loc, processType(inst->getType()), ops,
@@ -533,8 +565,8 @@ LogicalResult Importer::processFunction(llvm::Function *f) {
   // any unknown uses we encountered are remapped.
   for (auto &llvmAndUnknown : unknownInstMap) {
     assert(instMap.count(llvmAndUnknown.first));
-    Value *newValue = instMap[llvmAndUnknown.first];
-    Value *oldValue = llvmAndUnknown.second->getResult(0);
+    ValuePtr newValue = instMap[llvmAndUnknown.first];
+    ValuePtr oldValue = llvmAndUnknown.second->getResult(0);
     oldValue->replaceAllUsesWith(newValue);
     llvmAndUnknown.second->erase();
   }

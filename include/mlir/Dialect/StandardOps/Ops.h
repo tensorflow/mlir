@@ -24,11 +24,13 @@
 #define MLIR_DIALECT_STANDARDOPS_OPS_H
 
 #include "mlir/Analysis/CallInterfaces.h"
-#include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Dialect.h"
-#include "mlir/IR/OpDefinition.h"
+#include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/StandardTypes.h"
+
+// Pull in all enum type definitions and utility function declarations.
+#include "mlir/Dialect/StandardOps/OpsEnums.h.inc"
 
 namespace mlir {
 class AffineMap;
@@ -40,27 +42,11 @@ class StandardOpsDialect : public Dialect {
 public:
   StandardOpsDialect(MLIRContext *context);
   static StringRef getDialectNamespace() { return "std"; }
-};
 
-/// The predicate indicates the type of the comparison to perform:
-/// (in)equality; (un)signed less/greater than (or equal to).
-enum class CmpIPredicate {
-  FirstValidValue,
-  // (In)equality comparisons.
-  EQ = FirstValidValue,
-  NE,
-  // Signed comparisons.
-  SLT,
-  SLE,
-  SGT,
-  SGE,
-  // Unsigned comparisons.
-  ULT,
-  ULE,
-  UGT,
-  UGE,
-  // Number of predicates.
-  NumPredicates
+  /// Materialize a single constant operation from a given attribute value with
+  /// the desired resultant type.
+  Operation *materializeConstant(OpBuilder &builder, Attribute value, Type type,
+                                 Location loc) override;
 };
 
 /// The predicate indicates the type of the comparison to perform:
@@ -196,27 +182,27 @@ class DmaStartOp
 public:
   using Op::Op;
 
-  static void build(Builder *builder, OperationState &result, Value *srcMemRef,
-                    ArrayRef<Value *> srcIndices, Value *destMemRef,
-                    ArrayRef<Value *> destIndices, Value *numElements,
-                    Value *tagMemRef, ArrayRef<Value *> tagIndices,
-                    Value *stride = nullptr,
-                    Value *elementsPerStride = nullptr);
+  static void build(Builder *builder, OperationState &result,
+                    ValuePtr srcMemRef, ValueRange srcIndices,
+                    ValuePtr destMemRef, ValueRange destIndices,
+                    ValuePtr numElements, ValuePtr tagMemRef,
+                    ValueRange tagIndices, ValuePtr stride = nullptr,
+                    ValuePtr elementsPerStride = nullptr);
 
   // Returns the source MemRefType for this DMA operation.
-  Value *getSrcMemRef() { return getOperand(0); }
+  ValuePtr getSrcMemRef() { return getOperand(0); }
   // Returns the rank (number of indices) of the source MemRefType.
   unsigned getSrcMemRefRank() {
     return getSrcMemRef()->getType().cast<MemRefType>().getRank();
   }
-  // Returns the source memerf indices for this DMA operation.
+  // Returns the source memref indices for this DMA operation.
   operand_range getSrcIndices() {
     return {getOperation()->operand_begin() + 1,
             getOperation()->operand_begin() + 1 + getSrcMemRefRank()};
   }
 
   // Returns the destination MemRefType for this DMA operations.
-  Value *getDstMemRef() { return getOperand(1 + getSrcMemRefRank()); }
+  ValuePtr getDstMemRef() { return getOperand(1 + getSrcMemRefRank()); }
   // Returns the rank (number of indices) of the destination MemRefType.
   unsigned getDstMemRefRank() {
     return getDstMemRef()->getType().cast<MemRefType>().getRank();
@@ -236,12 +222,12 @@ public:
   }
 
   // Returns the number of elements being transferred by this DMA operation.
-  Value *getNumElements() {
+  ValuePtr getNumElements() {
     return getOperand(1 + getSrcMemRefRank() + 1 + getDstMemRefRank());
   }
 
   // Returns the Tag MemRef for this DMA operation.
-  Value *getTagMemRef() {
+  ValuePtr getTagMemRef() {
     return getOperand(1 + getSrcMemRefRank() + 1 + getDstMemRefRank() + 1);
   }
   // Returns the rank (number of indices) of the tag MemRefType.
@@ -282,21 +268,21 @@ public:
   void print(OpAsmPrinter &p);
   LogicalResult verify();
 
-  static void getCanonicalizationPatterns(OwningRewritePatternList &results,
-                                          MLIRContext *context);
+  LogicalResult fold(ArrayRef<Attribute> cstOperands,
+                     SmallVectorImpl<OpFoldResult> &results);
 
   bool isStrided() {
     return getNumOperands() != 1 + getSrcMemRefRank() + 1 + getDstMemRefRank() +
                                    1 + 1 + getTagMemRefRank();
   }
 
-  Value *getStride() {
+  ValuePtr getStride() {
     if (!isStrided())
       return nullptr;
     return getOperand(getNumOperands() - 1 - 1);
   }
 
-  Value *getNumElementsPerStride() {
+  ValuePtr getNumElementsPerStride() {
     if (!isStrided())
       return nullptr;
     return getOperand(getNumOperands() - 1);
@@ -321,13 +307,14 @@ class DmaWaitOp
 public:
   using Op::Op;
 
-  static void build(Builder *builder, OperationState &result, Value *tagMemRef,
-                    ArrayRef<Value *> tagIndices, Value *numElements);
+  static void build(Builder *builder, OperationState &result,
+                    ValuePtr tagMemRef, ValueRange tagIndices,
+                    ValuePtr numElements);
 
   static StringRef getOperationName() { return "std.dma_wait"; }
 
   // Returns the Tag MemRef associated with the DMA operation being waited on.
-  Value *getTagMemRef() { return getOperand(0); }
+  ValuePtr getTagMemRef() { return getOperand(0); }
 
   // Returns the tag memref index for this DMA operation.
   operand_range getTagIndices() {
@@ -341,12 +328,12 @@ public:
   }
 
   // Returns the number of elements transferred in the associated DMA operation.
-  Value *getNumElements() { return getOperand(1 + getTagMemRefRank()); }
+  ValuePtr getNumElements() { return getOperand(1 + getTagMemRefRank()); }
 
   static ParseResult parse(OpAsmParser &parser, OperationState &result);
   void print(OpAsmPrinter &p);
-  static void getCanonicalizationPatterns(OwningRewritePatternList &results,
-                                          MLIRContext *context);
+  LogicalResult fold(ArrayRef<Attribute> cstOperands,
+                     SmallVectorImpl<OpFoldResult> &results);
 };
 
 /// Prints dimension and symbol list.
@@ -356,8 +343,10 @@ void printDimAndSymbolList(Operation::operand_iterator begin,
 
 /// Parses dimension and symbol list and returns true if parsing failed.
 ParseResult parseDimAndSymbolList(OpAsmParser &parser,
-                                  SmallVector<Value *, 4> &operands,
+                                  SmallVectorImpl<ValuePtr> &operands,
                                   unsigned &numDims);
+
+raw_ostream &operator<<(raw_ostream &os, SubViewOp::Range &range);
 
 } // end namespace mlir
 

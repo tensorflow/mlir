@@ -194,13 +194,13 @@ module attributes {gpu.container_module} {
 
 module attributes {gpu.container_module} {
   module @kernels attributes {gpu.kernel_module} {
-    func @kernel_1(%arg1 : !llvm<"float*">) {
-      return
+    gpu.func @kernel_1(%arg1 : !llvm<"float*">) kernel {
+      gpu.return
     }
   }
 
   func @launch_func_missing_kernel_attr(%sz : index, %arg : !llvm<"float*">) {
-    // expected-error@+1 {{kernel function is missing the 'gpu.kernel' attribute}}
+    // xpected-error@+1 {{kernel function is missing the 'gpu.kernel' attribute}}
     "gpu.launch_func"(%sz, %sz, %sz, %sz, %sz, %sz, %arg)
     {kernel = "kernel_1", kernel_module = @kernels}
         : (index, index, index, index, index, index, !llvm<"float*">) -> ()
@@ -212,8 +212,8 @@ module attributes {gpu.container_module} {
 
 module attributes {gpu.container_module} {
   module @kernels attributes {gpu.kernel_module} {
-    func @kernel_1(%arg1 : !llvm<"float*">) attributes { gpu.kernel } {
-      return
+    gpu.func @kernel_1(%arg1 : !llvm<"float*">) attributes { gpu.kernel } {
+      gpu.return
     }
   }
 
@@ -230,8 +230,8 @@ module attributes {gpu.container_module} {
 // -----
 
 module @kernels attributes {gpu.kernel_module} {
-  func @kernel_1(%arg1 : !llvm<"float*">) attributes { gpu.kernel } {
-    return
+  gpu.func @kernel_1(%arg1 : !llvm<"float*">) attributes { gpu.kernel } {
+    gpu.return
   }
 }
 
@@ -360,3 +360,72 @@ func @reduce_incorrect_yield(%arg0 : f32) {
   }) : (f32) -> (f32)
 }
 
+// -----
+
+func @shuffle_mismatching_type(%arg0 : f32, %arg1 : i32, %arg2 : i32) {
+  // expected-error@+1 {{'gpu.shuffle' op requires the same type for value operand and result}}
+  %shfl, %pred = "gpu.shuffle"(%arg0, %arg1, %arg2) { mode = "xor" } : (f32, i32, i32) -> (i32, i1)
+}
+
+// -----
+
+func @shuffle_unsupported_type(%arg0 : index, %arg1 : i32, %arg2 : i32) {
+  // expected-error@+1 {{'gpu.shuffle' op requires value operand type to be f32 or i32}}
+  %shfl, %pred = gpu.shuffle %arg0, %arg1, %arg2 xor : index
+}
+
+// -----
+
+module {
+  module @gpu_funcs attributes {gpu.kernel_module} {
+    // expected-error @+1 {{custom op 'gpu.func' gpu.func requires named arguments}}
+    gpu.func @kernel_1(f32, f32) {
+    ^bb0(%arg0: f32):
+      gpu.return
+    }
+  }
+}
+
+// -----
+
+module {
+  module @gpu_funcs attributes {gpu.kernel_module} {
+    // expected-error @+1 {{requires 'type' attribute of function type}}
+    "gpu.func"() ({
+      gpu.return
+    }) {sym_name="kernel_1", type=f32} : () -> ()
+  }
+}
+
+// -----
+
+module {
+  module @gpu_funcs attributes {gpu.kernel_module} {
+    // expected-error @+1 {{expected memref type in attribution}}
+    gpu.func @kernel() workgroup(%0: i32) {
+      gpu.return
+    }
+  }
+}
+
+// -----
+
+module {
+  module @gpu_funcs attributes {gpu.kernel_module} {
+    // expected-error @+1 {{expected memory space 3 in attribution}}
+    gpu.func @kernel() workgroup(%0: memref<4xf32>) {
+      gpu.return
+    }
+  }
+}
+
+// -----
+
+module {
+  module @gpu_funcs attributes {gpu.kernel_module} {
+    // expected-error @+1 {{expected memory space 5 in attribution}}
+    gpu.func @kernel() private(%0: memref<4xf32>) {
+      gpu.return
+    }
+  }
+}

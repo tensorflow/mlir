@@ -58,6 +58,13 @@ DialectAsmPrinter::~DialectAsmPrinter() {}
 
 OpAsmPrinter::~OpAsmPrinter() {}
 
+//===--------------------------------------------------------------------===//
+// Operation OpAsm interface.
+//===--------------------------------------------------------------------===//
+
+/// The OpAsmOpInterface, see OpAsmInterface.td for more details.
+#include "mlir/IR/OpAsmInterface.cpp.inc"
+
 //===----------------------------------------------------------------------===//
 // OpPrintingFlags
 //===----------------------------------------------------------------------===//
@@ -84,6 +91,11 @@ static llvm::cl::opt<bool>
                           llvm::cl::desc("Print the generic op form"),
                           llvm::cl::init(false), llvm::cl::Hidden);
 
+static llvm::cl::opt<bool> printLocalScopeOpt(
+    "mlir-print-local-scope",
+    llvm::cl::desc("Print assuming in local scope by default"),
+    llvm::cl::init(false), llvm::cl::Hidden);
+
 /// Initialize the printing flags with default supplied by the cl::opts above.
 OpPrintingFlags::OpPrintingFlags()
     : elementsAttrElementLimit(
@@ -92,7 +104,8 @@ OpPrintingFlags::OpPrintingFlags()
               : Optional<int64_t>()),
       printDebugInfoFlag(printDebugInfoOpt),
       printDebugInfoPrettyFormFlag(printPrettyDebugInfoOpt),
-      printGenericOpFormFlag(printGenericOpFormOpt) {}
+      printGenericOpFormFlag(printGenericOpFormOpt),
+      printLocalScope(printLocalScopeOpt) {}
 
 /// Enable the elision of large elements attributes, by printing a '...'
 /// instead of the element data, when the number of elements is greater than
@@ -118,6 +131,14 @@ OpPrintingFlags &OpPrintingFlags::printGenericOpForm() {
   return *this;
 }
 
+/// Use local scope when printing the operation. This allows for using the
+/// printer in a more localized and thread-safe setting, but may not necessarily
+/// be identical of what the IR will look like when dumping the full module.
+OpPrintingFlags &OpPrintingFlags::useLocalScope() {
+  printLocalScope = true;
+  return *this;
+}
+
 /// Return if the given ElementsAttr should be elided.
 bool OpPrintingFlags::shouldElideElementsAttr(ElementsAttr attr) const {
   return elementsAttrElementLimit.hasValue() &&
@@ -138,6 +159,9 @@ bool OpPrintingFlags::shouldPrintDebugInfoPrettyForm() const {
 bool OpPrintingFlags::shouldPrintGenericOpForm() const {
   return printGenericOpFormFlag;
 }
+
+/// Return if the printer should use local scope when dumping the IR.
+bool OpPrintingFlags::shouldUseLocalScope() const { return printLocalScope; }
 
 //===----------------------------------------------------------------------===//
 // ModuleState
@@ -295,7 +319,7 @@ void ModuleState::visitOperation(Operation *op) {
     visitType(type);
   for (auto &region : op->getRegions())
     for (auto &block : region)
-      for (auto *arg : block.getArguments())
+      for (auto arg : block.getArguments())
         visitType(arg->getType());
 
   // Visit each of the attributes.
@@ -413,9 +437,9 @@ public:
   void printLocation(LocationAttr loc);
 
   void printAffineMap(AffineMap map);
-  void printAffineExpr(
-      AffineExpr expr,
-      llvm::function_ref<void(unsigned, bool)> printValueName = nullptr);
+  void
+  printAffineExpr(AffineExpr expr,
+                  function_ref<void(unsigned, bool)> printValueName = nullptr);
   void printAffineConstraint(AffineExpr expr, bool isEq);
   void printIntegerSet(IntegerSet set);
 
@@ -439,7 +463,7 @@ protected:
   };
   void printAffineExprInternal(
       AffineExpr expr, BindingStrength enclosingTightness,
-      llvm::function_ref<void(unsigned, bool)> printValueName = nullptr);
+      function_ref<void(unsigned, bool)> printValueName = nullptr);
 
   /// The output stream for the printer.
   raw_ostream &os;
@@ -709,6 +733,19 @@ static void printSymbolReference(StringRef symbolRef, raw_ostream &os) {
   os << '"';
 }
 
+// Print out a valid ElementsAttr that is succinct and can represent any
+// potential shape/type, for use when eliding a large ElementsAttr.
+//
+// We choose to use an opaque ElementsAttr literal with conspicuous content to
+// hopefully alert readers to the fact that this has been elided.
+//
+// Unfortunately, neither of the strings of an opaque ElementsAttr literal will
+// accept the string "elided". The first string must be a registered dialect
+// name and the latter must be a hex constant.
+static void printElidedElementsAttr(raw_ostream &os) {
+  os << R"(opaque<"", "0xDEADBEEF">)";
+}
+
 void ModulePrinter::printAttribute(Attribute attr, bool mayElideType) {
   if (!attr) {
     os << "<<NULL ATTRIBUTE>>";
@@ -801,24 +838,31 @@ void ModulePrinter::printAttribute(Attribute attr, bool mayElideType) {
   case StandardAttributes::Type:
     printType(attr.cast<TypeAttr>().getValue());
     break;
-  case StandardAttributes::SymbolRef:
-    printSymbolReference(attr.cast<SymbolRefAttr>().getValue(), os);
+  case StandardAttributes::SymbolRef: {
+    auto refAttr = attr.dyn_cast<SymbolRefAttr>();
+    printSymbolReference(refAttr.getRootReference(), os);
+    for (FlatSymbolRefAttr nestedRef : refAttr.getNestedReferences()) {
+      os << "::";
+      printSymbolReference(nestedRef.getValue(), os);
+    }
     break;
+  }
   case StandardAttributes::OpaqueElements: {
     auto eltsAttr = attr.cast<OpaqueElementsAttr>();
+    if (printerFlags.shouldElideElementsAttr(eltsAttr)) {
+      printElidedElementsAttr(os);
+      break;
+    }
     os << "opaque<\"" << eltsAttr.getDialect()->getNamespace() << "\", ";
-    os << '"' << "0x";
-
-    // Check for large ElementsAttr elision.
-    if (printerFlags.shouldElideElementsAttr(eltsAttr))
-      os << "...";
-    else
-      os << llvm::toHex(eltsAttr.getValue());
-    os << "\">";
+    os << '"' << "0x" << llvm::toHex(eltsAttr.getValue()) << "\">";
     break;
   }
   case StandardAttributes::DenseElements: {
     auto eltsAttr = attr.cast<DenseElementsAttr>();
+    if (printerFlags.shouldElideElementsAttr(eltsAttr)) {
+      printElidedElementsAttr(os);
+      break;
+    }
     os << "dense<";
     printDenseElementsAttr(eltsAttr);
     os << '>';
@@ -826,6 +870,11 @@ void ModulePrinter::printAttribute(Attribute attr, bool mayElideType) {
   }
   case StandardAttributes::SparseElements: {
     auto elementsAttr = attr.cast<SparseElementsAttr>();
+    if (printerFlags.shouldElideElementsAttr(elementsAttr.getIndices()) ||
+        printerFlags.shouldElideElementsAttr(elementsAttr.getValues())) {
+      printElidedElementsAttr(os);
+      break;
+    }
     os << "sparse<";
     printDenseElementsAttr(elementsAttr.getIndices());
     os << ", ";
@@ -883,13 +932,6 @@ void ModulePrinter::printDenseElementsAttr(DenseElementsAttr attr) {
   // Special case for 0-d and splat tensors.
   if (attr.isSplat()) {
     printEltFn(attr, os, 0);
-    return;
-  }
-
-  // Check for large elements attr elision. We explicitly check *after* splat,
-  // as the splat printing is already elided.
-  if (printerFlags.shouldElideElementsAttr(attr)) {
-    os << "...";
     return;
   }
 
@@ -1044,6 +1086,13 @@ void ModulePrinter::printType(Type type) {
     os << '>';
     return;
   }
+  case StandardTypes::UnrankedMemRef: {
+    auto v = type.cast<UnrankedMemRefType>();
+    os << "memref<*x";
+    printType(v.getElementType());
+    os << '>';
+    return;
+  }
   case StandardTypes::Complex:
     os << "complex<";
     printType(type.cast<ComplexType>().getElementType());
@@ -1067,7 +1116,7 @@ void ModulePrinter::printType(Type type) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// This class provides the main specialication of the DialectAsmPrinter that is
+/// This class provides the main specialization of the DialectAsmPrinter that is
 /// used to provide support for print attributes and types. This hooks allows
 /// for dialects to hook into the main ModulePrinter.
 struct CustomDialectAsmPrinter : public DialectAsmPrinter {
@@ -1126,13 +1175,13 @@ void ModulePrinter::printDialectType(Type type) {
 //===----------------------------------------------------------------------===//
 
 void ModulePrinter::printAffineExpr(
-    AffineExpr expr, llvm::function_ref<void(unsigned, bool)> printValueName) {
+    AffineExpr expr, function_ref<void(unsigned, bool)> printValueName) {
   printAffineExprInternal(expr, BindingStrength::Weak, printValueName);
 }
 
 void ModulePrinter::printAffineExprInternal(
     AffineExpr expr, BindingStrength enclosingTightness,
-    llvm::function_ref<void(unsigned, bool)> printValueName) {
+    function_ref<void(unsigned, bool)> printValueName) {
   const char *binopSpelling = nullptr;
   switch (expr.getKind()) {
   case AffineExprKind::SymbolId: {
@@ -1388,7 +1437,7 @@ public:
   void printAttribute(Attribute attr) override {
     ModulePrinter::printAttribute(attr);
   }
-  void printOperand(Value *value) override { printValueID(value); }
+  void printOperand(ValuePtr value) override { printValueID(value); }
 
   void printOptionalAttrDict(ArrayRef<NamedAttribute> attrs,
                              ArrayRef<StringRef> elidedAttrs = {}) override {
@@ -1437,10 +1486,10 @@ public:
   /// SSA values in namesToUse.  This may only be used for IsolatedFromAbove
   /// operations.  If any entry in namesToUse is null, the corresponding
   /// argument name is left alone.
-  void shadowRegionArgs(Region &region, ArrayRef<Value *> namesToUse) override;
+  void shadowRegionArgs(Region &region, ValueRange namesToUse) override;
 
   void printAffineMapOfSSAIds(AffineMapAttr mapAttr,
-                              ArrayRef<Value *> operands) override {
+                              ValueRange operands) override {
     AffineMap map = mapAttr.getValue();
     unsigned numDims = map.getNumDims();
     auto printValueName = [&](unsigned pos, bool isSymbol) {
@@ -1467,16 +1516,25 @@ public:
   const static unsigned indentWidth = 2;
 
 protected:
-  void numberValueID(Value *value);
   void numberValuesInRegion(Region &region);
   void numberValuesInBlock(Block &block);
-  void printValueID(Value *value, bool printResultNo = true) const {
+  void numberValuesInOp(Operation &op);
+  void printValueID(ValuePtr value, bool printResultNo = true) const {
     printValueIDImpl(value, printResultNo, os);
   }
 
 private:
-  void printValueIDImpl(Value *value, bool printResultNo,
+  /// Given a result of an operation 'result', find the result group head
+  /// 'lookupValue' and the result of 'result' within that group in
+  /// 'lookupResultNo'. 'lookupResultNo' is only filled in if the result group
+  /// has more than 1 result.
+  void getResultIDAndNumber(OpResultPtr result, ValuePtr &lookupValue,
+                            int &lookupResultNo) const;
+  void printValueIDImpl(ValuePtr value, bool printResultNo,
                         raw_ostream &stream) const;
+
+  /// Set a special value name for the given value.
+  void setValueName(ValuePtr value, StringRef name);
 
   /// Uniques the given value name within the printer. If the given name
   /// conflicts, it is automatically renamed.
@@ -1484,8 +1542,13 @@ private:
 
   /// This is the value ID for each SSA value. If this returns ~0, then the
   /// valueID has an entry in valueNames.
-  DenseMap<Value *, unsigned> valueIDs;
-  DenseMap<Value *, StringRef> valueNames;
+  DenseMap<ValuePtr, unsigned> valueIDs;
+  DenseMap<ValuePtr, StringRef> valueNames;
+
+  /// This is a map of operations that contain multiple named result groups,
+  /// i.e. there may be multiple names for the results of the operation. The key
+  /// of this map are the result numbers that start a result group.
+  DenseMap<Operation *, SmallVector<int, 1>> opResultGroups;
 
   /// This is the block ID for each block in the current.
   DenseMap<Block *, unsigned> blockIDs;
@@ -1510,8 +1573,9 @@ private:
 
 OperationPrinter::OperationPrinter(Operation *op, ModulePrinter &other)
     : ModulePrinter(other) {
-  if (op->getNumResults() != 0)
-    numberValueID(op->getResult(0));
+  llvm::ScopedHashTable<StringRef, char>::ScopeTy usedNamesScope(usedNames);
+  numberValuesInOp(*op);
+
   for (auto &region : op->getRegions())
     numberValuesInRegion(region);
 }
@@ -1521,7 +1585,6 @@ OperationPrinter::OperationPrinter(Region *region, ModulePrinter &other)
   numberValuesInRegion(*region);
 }
 
-/// Number all of the SSA values in the specified region.
 void OperationPrinter::numberValuesInRegion(Region &region) {
   // Save the current value ids to allow for numbering values in sibling regions
   // the same.
@@ -1555,59 +1618,87 @@ void OperationPrinter::numberValuesInRegion(Region &region) {
   nextConflictID = curConflictID;
 }
 
-/// Number all of the SSA values in the specified block, without traversing
-/// nested regions.
 void OperationPrinter::numberValuesInBlock(Block &block) {
-  // Number the block arguments.
-  for (auto *arg : block.getArguments())
-    numberValueID(arg);
+  auto setArgNameFn = [&](ValuePtr arg, StringRef name) {
+    assert(!valueIDs.count(arg) && "arg numbered multiple times");
+    assert(cast<BlockArgument>(arg)->getOwner() == &block &&
+           "arg not defined in 'block'");
+    setValueName(arg, name);
+  };
 
-  // We number operation that have results, and we only number the first result.
+  bool isEntryBlock = block.isEntryBlock();
+  if (isEntryBlock && state) {
+    if (auto *op = block.getParentOp()) {
+      if (auto dialectAsmInterface = state->getOpAsmInterface(op->getDialect()))
+        dialectAsmInterface->getAsmBlockArgumentNames(&block, setArgNameFn);
+    }
+  }
+
+  // Number the block arguments. We give entry block arguments a special name
+  // 'arg'.
+  SmallString<32> specialNameBuffer(isEntryBlock ? "arg" : "");
+  llvm::raw_svector_ostream specialName(specialNameBuffer);
+  for (auto arg : block.getArguments()) {
+    if (valueIDs.count(arg))
+      continue;
+    if (isEntryBlock) {
+      specialNameBuffer.resize(strlen("arg"));
+      specialName << nextArgumentID++;
+    }
+    setValueName(arg, specialName.str());
+  }
+
+  // Number the operations in this block.
   for (auto &op : block)
-    if (op.getNumResults() != 0)
-      numberValueID(op.getResult(0));
+    numberValuesInOp(op);
 }
 
-void OperationPrinter::numberValueID(Value *value) {
-  assert(!valueIDs.count(value) && "Value numbered multiple times");
+void OperationPrinter::numberValuesInOp(Operation &op) {
+  unsigned numResults = op.getNumResults();
+  if (numResults == 0)
+    return;
+  ValuePtr resultBegin = op.getResult(0);
 
-  SmallString<32> specialNameBuffer;
-  llvm::raw_svector_ostream specialName(specialNameBuffer);
+  // Function used to set the special result names for the operation.
+  SmallVector<int, 2> resultGroups(/*Size=*/1, /*Value=*/0);
+  auto setResultNameFn = [&](ValuePtr result, StringRef name) {
+    assert(!valueIDs.count(result) && "result numbered multiple times");
+    assert(result->getDefiningOp() == &op && "result not defined by 'op'");
+    setValueName(result, name);
 
-  // Check to see if this value requested a special name.
-  auto *op = value->getDefiningOp();
-  if (state && op) {
-    if (auto *interface = state->getOpAsmInterface(op->getDialect()))
-      interface->getOpResultName(op, specialName);
+    // Record the result number for groups not anchored at 0.
+    if (int resultNo = cast<OpResult>(result)->getResultNumber())
+      resultGroups.push_back(resultNo);
+  };
+
+  if (OpAsmOpInterface asmInterface = dyn_cast<OpAsmOpInterface>(&op)) {
+    asmInterface.getAsmResultNames(setResultNameFn);
+  } else if (auto *dialectAsmInterface =
+                 state ? state->getOpAsmInterface(op.getDialect()) : nullptr) {
+    dialectAsmInterface->getAsmResultNames(&op, setResultNameFn);
   }
 
-  if (specialNameBuffer.empty()) {
-    auto *blockArg = dyn_cast<BlockArgument>(value);
-    if (!blockArg) {
-      // This is an uninteresting operation result, give it a boring number and
-      // be done with it.
-      valueIDs[value] = nextValueID++;
-      return;
-    }
+  // If the first result wasn't numbered, give it a default number.
+  if (valueIDs.try_emplace(resultBegin, nextValueID).second)
+    ++nextValueID;
 
-    // Otherwise, if this is an argument to the entry block of a region, give it
-    // an 'arg' name.
-    if (auto *block = blockArg->getOwner()) {
-      auto *parentRegion = block->getParent();
-      if (parentRegion && block == &parentRegion->front())
-        specialName << "arg" << nextArgumentID++;
-    }
+  // If this operation has multiple result groups, mark it.
+  if (resultGroups.size() != 1) {
+    llvm::array_pod_sort(resultGroups.begin(), resultGroups.end());
+    opResultGroups.try_emplace(&op, std::move(resultGroups));
+  }
+}
 
-    // Otherwise number it normally.
-    if (specialNameBuffer.empty()) {
-      valueIDs[value] = nextValueID++;
-      return;
-    }
+/// Set a special value name for the given value.
+void OperationPrinter::setValueName(ValuePtr value, StringRef name) {
+  // If the name is empty, the value uses the default numbering.
+  if (name.empty()) {
+    valueIDs[value] = nextValueID++;
+    return;
   }
 
-  // Ok, this value had an interesting name.  Remember it with a sentinel.
   valueIDs[value] = nameSentinel;
-  valueNames[value] = uniqueValueName(specialName.str());
+  valueNames[value] = uniqueValueName(name);
 }
 
 /// Uniques the given value name within the printer. If the given name
@@ -1646,7 +1737,7 @@ void OperationPrinter::print(Block *block, bool printBlockArgs,
     // Print the argument list if non-empty.
     if (!block->args_empty()) {
       os << '(';
-      interleaveComma(block->getArguments(), [&](BlockArgument *arg) {
+      interleaveComma(block->getArguments(), [&](BlockArgumentPtr arg) {
         printValueID(arg);
         os << ": ";
         printType(arg->getType());
@@ -1697,7 +1788,46 @@ void OperationPrinter::print(Operation *op) {
   printTrailingLocation(op->getLoc());
 }
 
-void OperationPrinter::printValueIDImpl(Value *value, bool printResultNo,
+void OperationPrinter::getResultIDAndNumber(OpResultPtr result,
+                                            ValuePtr &lookupValue,
+                                            int &lookupResultNo) const {
+  Operation *owner = result->getOwner();
+  if (owner->getNumResults() == 1)
+    return;
+  int resultNo = result->getResultNumber();
+
+  // If this operation has multiple result groups, we will need to find the
+  // one corresponding to this result.
+  auto resultGroupIt = opResultGroups.find(owner);
+  if (resultGroupIt == opResultGroups.end()) {
+    // If not, just use the first result.
+    lookupResultNo = resultNo;
+    lookupValue = owner->getResult(0);
+    return;
+  }
+
+  // Find the correct index using a binary search, as the groups are ordered.
+  ArrayRef<int> resultGroups = resultGroupIt->second;
+  auto it = llvm::upper_bound(resultGroups, resultNo);
+  int groupResultNo = 0, groupSize = 0;
+
+  // If there are no smaller elements, the last result group is the lookup.
+  if (it == resultGroups.end()) {
+    groupResultNo = resultGroups.back();
+    groupSize = static_cast<int>(owner->getNumResults()) - resultGroups.back();
+  } else {
+    // Otherwise, the previous element is the lookup.
+    groupResultNo = *std::prev(it);
+    groupSize = *it - groupResultNo;
+  }
+
+  // We only record the result number for a group of size greater than 1.
+  if (groupSize != 1)
+    lookupResultNo = resultNo - groupResultNo;
+  lookupValue = owner->getResult(groupResultNo);
+}
+
+void OperationPrinter::printValueIDImpl(ValuePtr value, bool printResultNo,
                                         raw_ostream &stream) const {
   if (!value) {
     stream << "<<NULL>>";
@@ -1710,16 +1840,12 @@ void OperationPrinter::printValueIDImpl(Value *value, bool printResultNo,
   // If this is a reference to the result of a multi-result operation or
   // operation, print out the # identifier and make sure to map our lookup
   // to the first result of the operation.
-  if (auto *result = dyn_cast<OpResult>(value)) {
-    if (result->getOwner()->getNumResults() != 1) {
-      resultNo = result->getResultNumber();
-      lookupValue = result->getOwner()->getResult(0);
-    }
-  }
+  if (OpResultPtr result = dyn_cast<OpResult>(value))
+    getResultIDAndNumber(result, lookupValue, resultNo);
 
   auto it = valueIDs.find(lookupValue);
   if (it == valueIDs.end()) {
-    stream << "<<INVALID SSA VALUE>>";
+    stream << "<<UNKNOWN SSA VALUE>>";
     return;
   }
 
@@ -1740,8 +1866,7 @@ void OperationPrinter::printValueIDImpl(Value *value, bool printResultNo,
 /// SSA values in namesToUse.  This may only be used for IsolatedFromAbove
 /// operations.  If any entry in namesToUse is null, the corresponding
 /// argument name is left alone.
-void OperationPrinter::shadowRegionArgs(Region &region,
-                                        ArrayRef<Value *> namesToUse) {
+void OperationPrinter::shadowRegionArgs(Region &region, ValueRange namesToUse) {
   assert(!region.empty() && "cannot shadow arguments of an empty region");
   assert(region.front().getNumArguments() == namesToUse.size() &&
          "incorrect number of names passed in");
@@ -1750,11 +1875,11 @@ void OperationPrinter::shadowRegionArgs(Region &region,
 
   SmallVector<char, 16> nameStr;
   for (unsigned i = 0, e = namesToUse.size(); i != e; ++i) {
-    auto *nameToUse = namesToUse[i];
+    auto nameToUse = namesToUse[i];
     if (nameToUse == nullptr)
       continue;
 
-    auto *nameToReplace = region.front().getArgument(i);
+    auto nameToReplace = region.front().getArgument(i);
 
     nameStr.clear();
     llvm::raw_svector_ostream nameStream(nameStr);
@@ -1773,9 +1898,29 @@ void OperationPrinter::shadowRegionArgs(Region &region,
 
 void OperationPrinter::printOperation(Operation *op) {
   if (size_t numResults = op->getNumResults()) {
-    printValueID(op->getResult(0), /*printResultNo=*/false);
-    if (numResults > 1)
-      os << ':' << numResults;
+    auto printResultGroup = [&](size_t resultNo, size_t resultCount) {
+      printValueID(op->getResult(resultNo), /*printResultNo=*/false);
+      if (resultCount > 1)
+        os << ':' << resultCount;
+    };
+
+    // Check to see if this operation has multiple result groups.
+    auto resultGroupIt = opResultGroups.find(op);
+    if (resultGroupIt != opResultGroups.end()) {
+      ArrayRef<int> resultGroups = resultGroupIt->second;
+      // Interleave the groups excluding the last one, this one will be handled
+      // separately.
+      interleaveComma(llvm::seq<int>(0, resultGroups.size() - 1), [&](int i) {
+        printResultGroup(resultGroups[i],
+                         resultGroups[i + 1] - resultGroups[i]);
+      });
+      os << ", ";
+      printResultGroup(resultGroups.back(), numResults - resultGroups.back());
+
+    } else {
+      printResultGroup(/*resultNo=*/0, /*resultCount=*/numResults);
+    }
+
     os << " = ";
   }
 
@@ -1806,10 +1951,10 @@ void OperationPrinter::printGenericOp(Operation *op) {
   for (unsigned i = 0; i < numSuccessors; ++i)
     totalNumSuccessorOperands += op->getNumSuccessorOperands(i);
   unsigned numProperOperands = op->getNumOperands() - totalNumSuccessorOperands;
-  SmallVector<Value *, 8> properOperands(
+  SmallVector<ValuePtr, 8> properOperands(
       op->operand_begin(), std::next(op->operand_begin(), numProperOperands));
 
-  interleaveComma(properOperands, [&](Value *value) { printValueID(value); });
+  interleaveComma(properOperands, [&](ValuePtr value) { printValueID(value); });
 
   os << ')';
 
@@ -1852,10 +1997,10 @@ void OperationPrinter::printSuccessorAndUseList(Operation *term,
 
   os << '(';
   interleaveComma(succOperands,
-                  [this](Value *operand) { printValueID(operand); });
+                  [this](ValuePtr operand) { printValueID(operand); });
   os << " : ";
   interleaveComma(succOperands,
-                  [this](Value *operand) { printType(operand->getType()); });
+                  [this](ValuePtr operand) { printType(operand->getType()); });
   os << ')';
 }
 
@@ -1927,7 +2072,7 @@ void Value::print(raw_ostream &os) {
   if (auto *op = getDefiningOp())
     return op->print(os);
   // TODO: Improve this.
-  assert(isa<BlockArgument>(*this));
+  assert(isa<BlockArgument>());
   os << "<block argument>\n";
 }
 
@@ -1937,9 +2082,10 @@ void Value::dump() {
 }
 
 void Operation::print(raw_ostream &os, OpPrintingFlags flags) {
-  // Handle top-level operations.
-  if (!getParent()) {
-    ModulePrinter modulePrinter(os, flags);
+  // Handle top-level operations or local printing.
+  if (!getParent() || flags.shouldUseLocalScope()) {
+    ModuleState state(getContext());
+    ModulePrinter modulePrinter(os, flags, &state);
     OperationPrinter(this, modulePrinter).print(this);
     return;
   }
@@ -1960,7 +2106,7 @@ void Operation::print(raw_ostream &os, OpPrintingFlags flags) {
 }
 
 void Operation::dump() {
-  print(llvm::errs());
+  print(llvm::errs(), OpPrintingFlags().useLocalScope());
   llvm::errs() << "\n";
 }
 
@@ -2000,7 +2146,9 @@ void Block::printAsOperand(raw_ostream &os, bool printType) {
 
 void ModuleOp::print(raw_ostream &os, OpPrintingFlags flags) {
   ModuleState state(getContext());
-  state.initialize(*this);
+  // Skip initializing in local scope to avoid populating aliases.
+  if (!flags.shouldUseLocalScope())
+    state.initialize(*this);
   ModulePrinter(os, flags, &state).print(*this);
 }
 

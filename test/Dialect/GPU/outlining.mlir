@@ -38,9 +38,8 @@ func @launch() {
 
 
 // CHECK-LABEL: module @launch_kernel
-// CHECK-NEXT: func @launch_kernel
+// CHECK-NEXT: gpu.func @launch_kernel
 // CHECK-SAME: (%[[KERNEL_ARG0:.*]]: f32, %[[KERNEL_ARG1:.*]]: memref<?xf32, 1>)
-// CHECK-NEXT: attributes {gpu.kernel}
 // CHECK-NEXT: %[[BID:.*]] = "gpu.block_id"() {dimension = "x"} : () -> index
 // CHECK-NEXT: = "gpu.block_id"() {dimension = "y"} : () -> index
 // CHECK-NEXT: = "gpu.block_id"() {dimension = "z"} : () -> index
@@ -92,7 +91,7 @@ func @extra_constants(%arg0 : memref<?xf32>) {
   // CHECK: %[[CST:.*]] = constant 8 : index
   %cst = constant 8 : index
   %cst2 = constant 2 : index
-  %cst3 = constant 3 : index
+  %cst3 = dim %arg0, 0 : memref<?xf32>
   // CHECK: "gpu.launch_func"(%[[CST]], %[[CST]], %[[CST]], %[[CST]], %[[CST]], %[[CST]], %{{.*}}) {kernel = "extra_constants_kernel", kernel_module = @extra_constants_kernel} : (index, index, index, index, index, index, memref<?xf32>) -> ()
   gpu.launch blocks(%bx, %by, %bz) in (%grid_x = %cst, %grid_y = %cst,
                                        %grid_z = %cst)
@@ -111,6 +110,8 @@ func @extra_constants(%arg0 : memref<?xf32>) {
 
 // -----
 
+llvm.mlir.global internal @global(42 : i64) : !llvm.i64
+
 func @function_call(%arg0 : memref<?xf32>) {
   %cst = constant 8 : index
   gpu.launch blocks(%bx, %by, %bz) in (%grid_x = %cst, %grid_y = %cst,
@@ -119,6 +120,7 @@ func @function_call(%arg0 : memref<?xf32>) {
                                         %block_z = %cst) {
     call @device_function() : () -> ()
     call @device_function() : () -> ()
+    %0 = llvm.mlir.addressof @global : !llvm<"i64*">
     gpu.return
   }
   return
@@ -134,7 +136,14 @@ func @recursive_device_function() {
   gpu.return
 }
 
-// CHECK: @device_function
-// CHECK: @recursive_device_function
-// CHECK: @device_function
-// CHECK: @recursive_device_function
+// CHECK: module @function_call_kernel attributes {gpu.kernel_module} {
+// CHECK:   gpu.func @function_call_kernel()
+// CHECK:     call @device_function() : () -> ()
+// CHECK:     call @device_function() : () -> ()
+// CHECK:     llvm.mlir.addressof @global : !llvm<"i64*">
+//
+// CHECK:   llvm.mlir.global internal @global(42 : i64) : !llvm.i64
+//
+// CHECK:   func @device_function()
+// CHECK:   func @recursive_device_function()
+// CHECK-NOT:   func @device_function

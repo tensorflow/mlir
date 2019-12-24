@@ -22,9 +22,7 @@
 #ifndef TOY_OPS
 #define TOY_OPS
 
-#ifndef OP_BASE
 include "mlir/IR/OpBase.td"
-#endif // OP_BASE
 
 // Provide a definition of the 'toy' dialect in the ODS framework so that we
 // can define our operations.
@@ -45,13 +43,13 @@ class Toy_Op<string mnemonic, list<OpTrait> traits = []> :
 // Toy Operations
 //===----------------------------------------------------------------------===//
 
-// We define a toy operation by inherting from our base 'Toy_Op' class above.
+// We define a toy operation by inheriting from our base 'Toy_Op' class above.
 // Here we provide the mnemonic and a list of traits for the operation. The
 // constant operation is marked as 'NoSideEffect' as it is a pure operation
 // and may be removed if dead.
 def ConstantOp : Toy_Op<"constant", [NoSideEffect]> {
   // Provide a summary and description for this operation. This can be used to
-  // auto-generate documenatation of the operations within our dialect.
+  // auto-generate documentation of the operations within our dialect.
   let summary = "constant";
   let description = [{
     Constant operation turns a literal into an SSA value. The data is attached
@@ -100,7 +98,7 @@ def AddOp : Toy_Op<"add", [NoSideEffect]> {
 
   // Allow building an AddOp with from the two input operands.
   let builders = [
-    OpBuilder<"Builder *b, OperationState &state, Value *lhs, Value *rhs">
+    OpBuilder<"Builder *b, OperationState &state, ValuePtr lhs, ValuePtr rhs">
   ];
 }
 
@@ -123,7 +121,7 @@ def GenericCallOp : Toy_Op<"generic_call"> {
 
   // The generic call operation takes a symbol reference attribute as the
   // callee, and inputs for the call.
-  let arguments = (ins SymbolRefAttr:$callee, Variadic<F64Tensor>:$inputs);
+  let arguments = (ins FlatSymbolRefAttr:$callee, Variadic<F64Tensor>:$inputs);
 
   // The generic call operation returns a single value of TensorType.
   let results = (outs F64Tensor);
@@ -131,7 +129,7 @@ def GenericCallOp : Toy_Op<"generic_call"> {
   // Add custom build methods for the generic call operation.
   let builders = [
     OpBuilder<"Builder *builder, OperationState &state, "
-              "StringRef callee, ArrayRef<Value *> arguments">
+              "StringRef callee, ArrayRef<ValuePtr> arguments">
   ];
 }
 
@@ -147,7 +145,7 @@ def MulOp : Toy_Op<"mul", [NoSideEffect]> {
 
   // Allow building a MulOp with from the two input operands.
   let builders = [
-    OpBuilder<"Builder *b, OperationState &state, Value *lhs, Value *rhs">
+    OpBuilder<"Builder *b, OperationState &state, ValuePtr lhs, ValuePtr rhs">
   ];
 }
 
@@ -227,7 +225,7 @@ def TransposeOp : Toy_Op<"transpose", [NoSideEffect]> {
 
   // Allow building a TransposeOp with from the input operand.
   let builders = [
-    OpBuilder<"Builder *b, OperationState &state, Value *input">
+    OpBuilder<"Builder *b, OperationState &state, ValuePtr input">
   ];
 
   // Invoke a static verify method to verify this transpose operation.

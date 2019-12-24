@@ -184,9 +184,11 @@ CallGraphNode *CallGraph::resolveCallable(CallInterfaceCallable callable,
   // Get the callee operation from the callable.
   Operation *callee;
   if (auto symbolRef = callable.dyn_cast<SymbolRefAttr>())
-    callee = SymbolTable::lookupNearestSymbolFrom(from, symbolRef.getValue());
+    // TODO(riverriddle) Support nested references.
+    callee = SymbolTable::lookupNearestSymbolFrom(from,
+                                                  symbolRef.getRootReference());
   else
-    callee = callable.get<Value *>()->getDefiningOp();
+    callee = callable.get<ValuePtr>()->getDefiningOp();
 
   // If the callee is non-null and is a valid callable object, try to get the
   // called region from it.
@@ -204,7 +206,7 @@ CallGraphNode *CallGraph::resolveCallable(CallInterfaceCallable callable,
 //===----------------------------------------------------------------------===//
 // Printing
 
-/// Dump the the graph in a human readable format.
+/// Dump the graph in a human readable format.
 void CallGraph::dump() const { print(llvm::errs()); }
 void CallGraph::print(raw_ostream &os) const {
   os << "// ---- CallGraph ----\n";

@@ -77,17 +77,17 @@ static llvm::cl::list<unsigned> clTileSizes(
 static LinalgOp cloneWithLoopRanges(OpBuilder &b, Location loc, LinalgOp op,
                                     ArrayRef<SubViewOp::Range> loopRanges) {
   auto maps = loopToOperandRangesMaps(op);
-  SmallVector<Value *, 8> clonedViews;
+  SmallVector<ValuePtr, 8> clonedViews;
   clonedViews.reserve(op.getNumInputsAndOutputs());
   // Iterate over the inputs and outputs in order.
   // Extract the subranges from the linearized ranges.
-  SmallVector<Value *, 8> ios(op.getInputsAndOutputs());
+  SmallVector<ValuePtr, 8> ios(op.getInputsAndOutputs());
   for (auto en : llvm::enumerate(ios)) {
     unsigned idx = en.index();
     auto map = maps[idx];
     LLVM_DEBUG(dbgs() << "map: " << map << "\n");
-    Value *view = en.value();
-    SmallVector<SubViewOp::Range, 8> viewRanges(map.getNumResults());
+    ValuePtr view = en.value();
+    SmallVector<SubViewOp::Range, 4> viewRanges(map.getNumResults());
     for (auto en2 : llvm::enumerate(map.getResults())) {
       unsigned d = en2.index();
       // loopToOperandRangesMaps are permutations-only.
@@ -97,15 +97,19 @@ static LinalgOp cloneWithLoopRanges(OpBuilder &b, Location loc, LinalgOp op,
                         << "\t"
                         << "loopPos: " << loopPos << "\t" << viewRanges[d]);
     }
-    // TODO(ntv): opportunities for folding/CSE here rather than build new IR.
-    SmallVector<Value *, 12> subViewOperands;
-    subViewOperands.reserve(viewRanges.size() * 3);
+    // Construct a new subview for the tile.
+    unsigned rank = viewRanges.size();
+    SmallVector<ValuePtr, 4> offsets, sizes, strides;
+    offsets.reserve(rank);
+    sizes.reserve(rank);
+    strides.reserve(rank);
     for (auto r : viewRanges) {
-      subViewOperands.push_back(r.min);
-      subViewOperands.push_back(r.max);
-      subViewOperands.push_back(r.step);
+      offsets.push_back(r.offset);
+      sizes.push_back(r.size);
+      strides.push_back(r.stride);
     }
-    clonedViews.push_back(b.create<SubViewOp>(loc, view, subViewOperands));
+    clonedViews.push_back(
+        b.create<SubViewOp>(loc, view, offsets, sizes, strides));
   }
   auto operands = getAssumedNonViewOperands(op);
   clonedViews.append(operands.begin(), operands.end());
@@ -113,7 +117,7 @@ static LinalgOp cloneWithLoopRanges(OpBuilder &b, Location loc, LinalgOp op,
 }
 
 struct ViewDimension {
-  Value *view;
+  ValuePtr view;
   unsigned dimension;
 };
 
@@ -126,14 +130,14 @@ static ViewDimension getViewDefiningLoopRange(LinalgOp op, unsigned loopDepth) {
   auto maps = loopToOperandRangesMaps(op);
   // Iterate over the inputs and outputs in order.
   // Extract the subranges from the linearized ranges.
-  SmallVector<Value *, 8> ios(op.getInputsAndOutputs());
+  SmallVector<ValuePtr, 8> ios(op.getInputsAndOutputs());
   for (auto en : llvm::enumerate(ios)) {
     unsigned idx = en.index();
     auto map = maps[idx];
     LLVM_DEBUG(dbgs() << "getViewDefiningLoopRange I/O idx: " << idx << "\n");
     LLVM_DEBUG(dbgs() << "getViewDefiningLoopRange map: " << map << "\n");
-    Value *view = en.value();
-    SmallVector<Value *, 8> viewRanges(map.getNumResults(), nullptr);
+    ValuePtr view = en.value();
+    SmallVector<ValuePtr, 8> viewRanges(map.getNumResults(), nullptr);
     for (auto en2 : llvm::enumerate(map.getResults())) {
       if (loopDepth == en2.value().cast<AffineDimExpr>().getPosition()) {
         LLVM_DEBUG(dbgs() << "getViewDefiningLoopRange loopDepth: " << loopDepth
@@ -147,9 +151,9 @@ static ViewDimension getViewDefiningLoopRange(LinalgOp op, unsigned loopDepth) {
   llvm_unreachable("Expect to be able to extract a view defining loop range");
 }
 
-static LinalgOp fuse(Value *producedView, LinalgOp producer, LinalgOp consumer,
-                     unsigned consumerIdx, unsigned producerIdx,
-                     OperationFolder *folder) {
+static LinalgOp fuse(ValuePtr producedView, LinalgOp producer,
+                     LinalgOp consumer, unsigned consumerIdx,
+                     unsigned producerIdx, OperationFolder *folder) {
   auto subView = dyn_cast_or_null<SubViewOp>(
       consumer.getInput(consumerIdx)->getDefiningOp());
   auto slice = dyn_cast_or_null<SliceOp>(
@@ -175,7 +179,7 @@ static LinalgOp fuse(Value *producedView, LinalgOp producer, LinalgOp consumer,
   // This defines a subset of the loop ranges that we need to complete later.
   for (auto en : llvm::enumerate(producerMap.getResults())) {
     unsigned posInProducerLoop = en.value().cast<AffineDimExpr>().getPosition();
-    loopRanges[posInProducerLoop] = subView.getRange(en.index());
+    loopRanges[posInProducerLoop] = subView.getRanges()[en.index()];
   }
 
   OpBuilder b(consumer.getOperation());
@@ -184,7 +188,7 @@ static LinalgOp fuse(Value *producedView, LinalgOp producer, LinalgOp consumer,
   // producer map for `producerIdx`, we need to explicitly compute the view that
   // defines the loop ranges using the `producer`.
   for (unsigned i = 0, nLoops = loopRanges.size(); i < nLoops; ++i) {
-    if (loopRanges[i].min)
+    if (loopRanges[i].offset)
       LLVM_DEBUG(llvm::dbgs()
                  << "existing LoopRange: " << loopRanges[i] << "\n");
     else {
@@ -202,7 +206,7 @@ static LinalgOp fuse(Value *producedView, LinalgOp producer, LinalgOp consumer,
 // Encode structural fusion safety preconditions.
 // Some of these will be lifted in the future with better analysis.
 static bool isStructurallyFusableProducer(LinalgOp producer,
-                                          Value *consumedView,
+                                          ValuePtr consumedView,
                                           LinalgOp consumer) {
   if (producer.getNumOutputs() != 1) {
     LLVM_DEBUG(dbgs() << "\nNot structurally fusable (multi-output)");
@@ -222,7 +226,7 @@ static bool isStructurallyFusableProducer(LinalgOp producer,
 
 bool mlir::linalg::isProducerLastWriteOfView(const LinalgDependenceGraph &graph,
                                              LinalgOp consumer,
-                                             Value *consumedView,
+                                             ValuePtr consumedView,
                                              LinalgOp producer) {
   // Make some simple structural checks that alleviate the need for more
   // complex analyses.
@@ -241,7 +245,7 @@ bool mlir::linalg::isProducerLastWriteOfView(const LinalgDependenceGraph &graph,
 }
 
 bool mlir::linalg::isFusableInto(const LinalgDependenceGraph &graph,
-                                 LinalgOp consumer, Value *consumedView,
+                                 LinalgOp consumer, ValuePtr consumedView,
                                  LinalgOp producer) {
   if (!isProducerLastWriteOfView(graph, consumer, consumedView, producer))
     return false;
@@ -268,13 +272,13 @@ Optional<FusionInfo> mlir::linalg::fuseProducerOf(
     auto producer = cast<LinalgOp>(dependence.dependentOpView.op);
 
     // Check that the dependence is indeed on the input `consumerIdx` view.
-    auto *consumedView = dependence.indexingView;
+    auto consumedView = dependence.indexingView;
     if (consumer.getInput(consumerIdx) != consumedView)
       continue;
 
     // Consumer consumes this view, `isStructurallyFusableProducer` also checks
     // whether it is a strict subview of the producer view.
-    auto *producedView = dependence.dependentOpView.view;
+    auto producedView = dependence.dependentOpView.view;
     auto producerIdx = producer.getIndexOfOutput(producedView).getValue();
     // `consumerIdx` and `producerIdx` exist by construction.
     LLVM_DEBUG(dbgs() << "\nRAW producer: " << *producer.getOperation()

@@ -2,12 +2,13 @@
 
 module attributes {gpu.container_module} {
 
-  // CHECK: llvm.mlir.global constant @[[kernel_name:.*]]("kernel\00")
-  // CHECK: llvm.mlir.global constant @[[global:.*]]("CUBIN")
+  // CHECK: llvm.mlir.global internal constant @[[kernel_name:.*]]("kernel\00")
+  // CHECK: llvm.mlir.global internal constant @[[global:.*]]("CUBIN")
 
   module @kernel_module attributes {gpu.kernel_module, nvvm.cubin = "CUBIN"} {
-    func @kernel(!llvm.float, !llvm<"float*">)
-        attributes { gpu.kernel }
+    gpu.func @kernel(%arg0: !llvm.float, %arg1: !llvm<"float*">) attributes {gpu.kernel} {
+      gpu.return
+    }
   }
 
   llvm.func @foo() {

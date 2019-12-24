@@ -1,14 +1,4 @@
-// RUN: mlir-opt %s -pass-pipeline='func(canonicalize)' | FileCheck %s
-
-#TEST_VIEW_MAP0 = (d0, d1)[s0, s1] -> (d0 * s1 + d1 + s0)
-#TEST_VIEW_MAP1 = (d0, d1, d2)[s0, s1] -> (d0 * s1 + d1 * s0 + d2)
-#TEST_VIEW_MAP2 = (d0, d1)[s0] -> (d0 * 4 + d1 + s0)
-
-// CHECK-DAG: #[[VIEW_MAP0:map[0-9]+]] = (d0, d1) -> (d0 * 11 + d1 + 15)
-// CHECK-DAG: #[[VIEW_MAP1:map[0-9]+]] = (d0, d1)[s0] -> (d0 * 11 + s0 + d1)
-// CHECK-DAG: #[[VIEW_MAP2:map[0-9]+]] = (d0, d1)[s0] -> (d0 * s0 + d1 + 15)
-// CHECK-DAG: #[[VIEW_MAP3:map[0-9]+]] = (d0, d1, d2)[s0] -> (d0 * s0 + d1 * 7 + d2)
-// CHECK-DAG: #[[VIEW_MAP4:map[0-9]+]] = (d0, d1) -> (d0 * 4 + d1 + 15)
+// RUN: mlir-opt %s -pass-pipeline='func(canonicalize)' -split-input-file | FileCheck %s
 
 // CHECK-LABEL: func @test_subi_zero
 func @test_subi_zero(%arg0: i32) -> i32 {
@@ -74,6 +64,15 @@ func @addi_zero(%arg0: i32) -> i32 {
   return %y: i32
 }
 
+// CHECK-LABEL: func @addi_zero_index
+func @addi_zero_index(%arg0: index) -> index {
+  // CHECK-NEXT: return %arg0
+  %c0_index = constant 0 : index
+  %y = addi %c0_index, %arg0 : index
+  return %y: index
+}
+
+
 // CHECK-LABEL: func @addi_zero_vector
 func @addi_zero_vector(%arg0: vector<4 x i32>) -> vector<4 x i32> {
   // CHECK-NEXT: return %arg0
@@ -99,6 +98,17 @@ func @muli_zero(%arg0: i32) -> i32 {
 
   // CHECK-NEXT: return %c0_i32
   return %y: i32
+}
+
+// CHECK-LABEL: func @muli_zero_index
+func @muli_zero_index(%arg0: index) -> index {
+  // CHECK-NEXT: %[[CST:.*]] = constant 0 : index
+  %c0_index = constant 0 : index
+
+  %y = muli %c0_index, %arg0 : index
+
+  // CHECK-NEXT: return %[[CST]]
+  return %y: index
 }
 
 // CHECK-LABEL: func @muli_zero_vector
@@ -129,6 +139,14 @@ func @muli_one(%arg0: i32) -> i32 {
   %c0_i32 = constant 1 : i32
   %y = muli %c0_i32, %arg0 : i32
   return %y: i32
+}
+
+// CHECK-LABEL: func @muli_one_index
+func @muli_one_index(%arg0: index) -> index {
+  // CHECK-NEXT: return %arg0
+  %c0_index = constant 1 : index
+  %y = muli %c0_index, %arg0 : index
+  return %y: index
 }
 
 // CHECK-LABEL: func @muli_one_vector
@@ -177,6 +195,15 @@ func @and_zero(%arg0: i32) -> i32 {
   return %1 : i32
 }
 
+//CHECK-LABEL: func @and_zero_index
+func @and_zero_index(%arg0: index) -> index {
+  // CHECK-NEXT: %[[CST:.*]] = constant 0 : index
+  %c0_index = constant 0 : index
+  // CHECK-NEXT: return %[[CST]]
+  %1 = and %arg0, %c0_index : index
+  return %1 : index
+}
+
 //CHECK-LABEL: func @and_zero_vector
 func @and_zero_vector(%arg0: vector<4xi32>) -> vector<4xi32> {
   // CHECK-NEXT: %cst = constant dense<0> : vector<4xi32>
@@ -222,6 +249,14 @@ func @or_zero(%arg0: i32) -> i32 {
   // CHECK-NEXT: return %arg0
   %1 = or %arg0, %c0_i32 : i32
   return %1 : i32
+}
+
+//CHECK-LABEL: func @or_zero_index
+func @or_zero_index(%arg0: index) -> index {
+  %c0_index = constant 0 : index
+  // CHECK-NEXT: return %arg0
+  %1 = or %arg0, %c0_index : index
+  return %1 : index
 }
 
 //CHECK-LABEL: func @or_zero_vector
@@ -383,6 +418,62 @@ func @dyn_shape_fold(%L : index, %M : index) -> (memref<? x ? x i32>, memref<? x
   return %c, %d : memref<? x ? x i32>, memref<? x ? x f32>
 }
 
+#map1 = (d0, d1)[s0, s1, s2] -> (d0 * s1 + d1 * s2 + s0)
+#map2 = (d0, d1, d2)[s0, s1, s2] -> (d0 * s2 + d1 * s1 + d2 + s0)
+
+// CHECK-LABEL: func @dim_op_fold(%arg0: index, %arg1: index, %arg2: index,
+func @dim_op_fold(%arg0: index, %arg1: index, %arg2: index, %BUF: memref<?xi8>, %M : index, %N : index, %K : index) {
+// CHECK-SAME: [[M:arg[0-9]+]]: index
+// CHECK-SAME: [[N:arg[0-9]+]]: index
+// CHECK-SAME: [[K:arg[0-9]+]]: index
+  %c0 = constant 0 : index
+  %c1 = constant 1 : index
+  %0 = alloc(%arg0, %arg1) : memref<?x?xf32>
+  %1 = alloc(%arg1, %arg2) : memref<?x8x?xf32>
+  %2 = dim %1, 2 : memref<?x8x?xf32>
+  affine.for %arg3 = 0 to %2 {
+    %3 = alloc(%arg0) : memref<?xi8>
+    %ub = dim %3, 0 : memref<?xi8>
+    affine.for %arg4 = 0 to %ub {
+      %s = dim %0, 0 : memref<?x?xf32>
+      %v = std.view %3[%c0][%arg4, %s] : memref<?xi8> to memref<?x?xf32, #map1>
+      %sv = std.subview %0[%c0, %c0][%s,%arg4][%c1,%c1] : memref<?x?xf32> to memref<?x?xf32, #map1>
+      %l = dim %v, 1 : memref<?x?xf32, #map1>
+      %u = dim %sv, 0 : memref<?x?xf32, #map1>
+      affine.for %arg5 = %l to %u {
+        "foo"() : () -> ()
+      }
+    }
+  }
+  // CHECK-NEXT: %c0 = constant 0 : index
+  // CHECK-NEXT: %c1 = constant 1 : index
+  // CHECK-NEXT: affine.for %arg7 = 0 to %arg2 {
+  // CHECK-NEXT:   affine.for %arg8 = 0 to %arg0 {
+  // CHECK-NEXT:     affine.for %arg9 = %arg0 to %arg0 {
+  // CHECK-NEXT:       "foo"() : () -> ()
+  // CHECK-NEXT:     }
+  // CHECK-NEXT:   }
+  // CHECK-NEXT: }
+
+  %A = view %BUF[%c0][%M, %K] : memref<?xi8> to memref<?x?xf32, offset: ?, strides: [?, 1]>
+  %B = view %BUF[%c0][%K, %N] : memref<?xi8> to memref<?x?xf32, offset: ?, strides: [?, 1]>
+  %C = view %BUF[%c0][%M, %N] : memref<?xi8> to memref<?x?xf32, offset: ?, strides: [?, 1]>
+
+  %M_ = dim %A, 0 : memref<?x?xf32, offset: ?, strides: [?, 1]>
+  %K_ = dim %A, 1 : memref<?x?xf32, offset: ?, strides: [?, 1]>
+  %N_ = dim %C, 1 : memref<?x?xf32, offset: ?, strides: [?, 1]>
+  loop.for %i = %c0 to %M_ step %c1 {
+    loop.for %j = %c0 to %N_ step %c1 {
+      loop.for %k = %c0 to %K_ step %c1 {
+      }
+    }
+  }
+  // CHECK: loop.for %{{.*}} = %c0 to %[[M]] step %c1 {
+  // CHECK:   loop.for %arg8 = %c0 to %[[N]] step %c1 {
+  // CHECK:     loop.for %arg9 = %c0 to %[[K]] step %c1 {
+  return
+}
+
 // CHECK-LABEL: func @merge_constants
 func @merge_constants() -> (index, index) {
   // CHECK-NEXT: %c42 = constant 42 : index
@@ -475,17 +566,17 @@ func @indirect_call_folding() {
   return
 }
 
-// --------------------------------------------------------------------------//
+//
 // IMPORTANT NOTE: the operations in this test are exactly those produced by
 // lowering affine.apply (i) -> (i mod 42) to standard operations.  Please only
 // change these operations together with the affine lowering pass tests.
-// --------------------------------------------------------------------------//
+//
 // CHECK-LABEL: @lowered_affine_mod
 func @lowered_affine_mod() -> (index, index) {
 // CHECK-NEXT: {{.*}} = constant 41 : index
   %c-43 = constant -43 : index
   %c42 = constant 42 : index
-  %0 = remis %c-43, %c42 : index
+  %0 = remi_signed %c-43, %c42 : index
   %c0 = constant 0 : index
   %1 = cmpi "slt", %0, %c0 : index
   %2 = addi %0, %c42 : index
@@ -493,7 +584,7 @@ func @lowered_affine_mod() -> (index, index) {
 // CHECK-NEXT: {{.*}} = constant 1 : index
   %c43 = constant 43 : index
   %c42_0 = constant 42 : index
-  %4 = remis %c43, %c42_0 : index
+  %4 = remi_signed %c43, %c42_0 : index
   %c0_1 = constant 0 : index
   %5 = cmpi "slt", %4, %c0_1 : index
   %6 = addi %4, %c42_0 : index
@@ -501,11 +592,11 @@ func @lowered_affine_mod() -> (index, index) {
   return %3, %7 : index, index
 }
 
-// --------------------------------------------------------------------------//
+//
 // IMPORTANT NOTE: the operations in this test are exactly those produced by
 // lowering affine.apply (i) -> (i mod 42) to standard operations.  Please only
 // change these operations together with the affine lowering pass tests.
-// --------------------------------------------------------------------------//
+//
 // CHECK-LABEL: func @lowered_affine_floordiv
 func @lowered_affine_floordiv() -> (index, index) {
 // CHECK-NEXT: %c-2 = constant -2 : index
@@ -516,7 +607,7 @@ func @lowered_affine_floordiv() -> (index, index) {
   %0 = cmpi "slt", %c-43, %c0 : index
   %1 = subi %c-1, %c-43 : index
   %2 = select %0, %1, %c-43 : index
-  %3 = divis %2, %c42 : index
+  %3 = divi_signed %2, %c42 : index
   %4 = subi %c-1, %3 : index
   %5 = select %0, %4, %3 : index
 // CHECK-NEXT: %c1 = constant 1 : index
@@ -527,17 +618,17 @@ func @lowered_affine_floordiv() -> (index, index) {
   %6 = cmpi "slt", %c43, %c0_1 : index
   %7 = subi %c-1_2, %c43 : index
   %8 = select %6, %7, %c43 : index
-  %9 = divis %8, %c42_0 : index
+  %9 = divi_signed %8, %c42_0 : index
   %10 = subi %c-1_2, %9 : index
   %11 = select %6, %10, %9 : index
   return %5, %11 : index, index
 }
 
-// --------------------------------------------------------------------------//
+//
 // IMPORTANT NOTE: the operations in this test are exactly those produced by
 // lowering affine.apply (i) -> (i mod 42) to standard operations.  Please only
 // change these operations together with the affine lowering pass tests.
-// --------------------------------------------------------------------------//
+//
 // CHECK-LABEL: func @lowered_affine_ceildiv
 func @lowered_affine_ceildiv() -> (index, index) {
 // CHECK-NEXT:  %c-1 = constant -1 : index
@@ -549,7 +640,7 @@ func @lowered_affine_ceildiv() -> (index, index) {
   %1 = subi %c0, %c-43 : index
   %2 = subi %c-43, %c1 : index
   %3 = select %0, %1, %2 : index
-  %4 = divis %3, %c42 : index
+  %4 = divi_signed %3, %c42 : index
   %5 = subi %c0, %4 : index
   %6 = addi %4, %c1 : index
   %7 = select %0, %5, %6 : index
@@ -562,7 +653,7 @@ func @lowered_affine_ceildiv() -> (index, index) {
   %9 = subi %c0_1, %c43 : index
   %10 = subi %c43, %c1_2 : index
   %11 = select %8, %9, %10 : index
-  %12 = divis %11, %c42_0 : index
+  %12 = divi_signed %11, %c42_0 : index
   %13 = subi %c0_1, %12 : index
   %14 = addi %12, %c1_2 : index
   %15 = select %8, %13, %14 : index
@@ -590,9 +681,22 @@ func @cast_values(%arg0: tensor<*xi32>, %arg1: memref<?xi32>) -> (tensor<2xi32>,
   return %4, %5 : tensor<2xi32>, memref<2xi32>
 }
 
+// -----
+
+#TEST_VIEW_MAP0 = (d0, d1)[s0, s1] -> (d0 * s1 + d1 + s0)
+#TEST_VIEW_MAP1 = (d0, d1, d2)[s0, s1] -> (d0 * s1 + d1 * s0 + d2)
+#TEST_VIEW_MAP2 = (d0, d1)[s0] -> (d0 * 4 + d1 + s0)
+
+// CHECK-DAG: #[[VIEW_MAP0:map[0-9]+]] = (d0, d1) -> (d0 * 11 + d1 + 15)
+// CHECK-DAG: #[[VIEW_MAP1:map[0-9]+]] = (d0, d1)[s0] -> (d0 * 11 + s0 + d1)
+// CHECK-DAG: #[[VIEW_MAP2:map[0-9]+]] = (d0, d1)[s0] -> (d0 * s0 + d1 + 15)
+// CHECK-DAG: #[[VIEW_MAP3:map[0-9]+]] = (d0, d1, d2)[s0] -> (d0 * s0 + d1 * 7 + d2)
+// CHECK-DAG: #[[VIEW_MAP4:map[0-9]+]] = (d0, d1) -> (d0 * 4 + d1 + 15)
+
 // CHECK-LABEL: func @view
 func @view(%arg0 : index) {
   %0 = alloc() : memref<2048xi8>
+  %c0 = constant 0 : index
   %c7 = constant 7 : index
   %c11 = constant 11 : index
   %c15 = constant 15 : index
@@ -601,30 +705,170 @@ func @view(%arg0 : index) {
   // CHECK: std.view %0[][] : memref<2048xi8> to memref<7x11xf32, #[[VIEW_MAP0]]>
   %1 = view %0[%c15][%c7, %c11]
     : memref<2048xi8> to memref<?x?xf32, #TEST_VIEW_MAP0>
+  load %1[%c0, %c0] : memref<?x?xf32, #TEST_VIEW_MAP0>
 
   // Test: fold constant sizes but not offset, update map with static stride.
   // Test that we do not a fold dynamic dim which is not produced by a constant.
   // CHECK: std.view %0[%arg0][] : memref<2048xi8> to memref<7x11xf32, #[[VIEW_MAP1]]>
   %2 = view %0[%arg0][%c7, %c11]
     : memref<2048xi8> to memref<?x?xf32, #TEST_VIEW_MAP0>
+  load %2[%c0, %c0] : memref<?x?xf32, #TEST_VIEW_MAP0>
 
   // Test: fold constant offset but not sizes, update map with constant offset.
   // Test that we fold constant offset but not dynamic dims.
   // CHECK: std.view %0[][%arg0, %arg0] : memref<2048xi8> to memref<?x?xf32, #[[VIEW_MAP2]]>
   %3 = view %0[%c15][%arg0, %arg0]
     : memref<2048xi8> to memref<?x?xf32,  #TEST_VIEW_MAP0>
+  load %3[%c0, %c0] : memref<?x?xf32, #TEST_VIEW_MAP0>
 
   // Test: fold one constant dim, no offset, should update with constant
   // stride on dim 1, but leave dynamic stride on dim 0.
   // CHECK: std.view %0[][%arg0, %arg0] : memref<2048xi8> to memref<?x?x7xf32, #[[VIEW_MAP3]]>
   %4 = view %0[][%arg0, %arg0, %c7]
     : memref<2048xi8> to memref<?x?x?xf32, #TEST_VIEW_MAP1>
+  load %4[%c0, %c0, %c0] : memref<?x?x?xf32, #TEST_VIEW_MAP1>
 
   // Test: preserve an existing static dim size while folding a dynamic
   // dimension and offset.
   // CHECK: std.view %0[][] : memref<2048xi8> to memref<7x4xf32, #[[VIEW_MAP4]]>
   %5 = view %0[%c15][%c7]
     : memref<2048xi8> to memref<?x4xf32, #TEST_VIEW_MAP2>
+  load %5[%c0, %c0] : memref<?x4xf32, #TEST_VIEW_MAP2>
 
   return
+}
+
+// -----
+
+// CHECK-DAG: #[[BASE_MAP0:map[0-9]+]] = (d0, d1, d2) -> (d0 * 64 + d1 * 4 + d2)
+// CHECK-DAG: #[[SUBVIEW_MAP0:map[0-9]+]] = (d0, d1, d2)[s0] -> (d0 * 64 + s0 + d1 * 4 + d2)
+// CHECK-DAG: #[[SUBVIEW_MAP1:map[0-9]+]] = (d0, d1, d2) -> (d0 * 64 + d1 * 4 + d2 + 79)
+// CHECK-DAG: #[[SUBVIEW_MAP2:map[0-9]+]] = (d0, d1, d2) -> (d0 * 128 + d1 * 28 + d2 * 11)
+// CHECK-DAG: #[[SUBVIEW_MAP3:map[0-9]+]] = (d0, d1, d2)[s0, s1, s2, s3] -> (d0 * s1 + s0 + d1 * s2 + d2 * s3)
+// CHECK-DAG: #[[SUBVIEW_MAP4:map[0-9]+]] = (d0, d1, d2)[s0] -> (d0 * 128 + s0 + d1 * 28 + d2 * 11)
+// CHECK-DAG: #[[SUBVIEW_MAP5:map[0-9]+]] = (d0, d1, d2)[s0, s1, s2] -> (d0 * s0 + d1 * s1 + d2 * s2 + 79)
+// CHECK-DAG: #[[SUBVIEW_MAP6:map[0-9]+]] = (d0, d1)[s0] -> (d0 * 4 + s0 + d1)
+// CHECK-DAG: #[[SUBVIEW_MAP7:map[0-9]+]] = (d0, d1) -> (d0 * 4 + d1 + 12)
+
+// CHECK-LABEL: func @subview
+// CHECK-SAME: %[[ARG0:.*]]: index, %[[ARG1:.*]]: index
+func @subview(%arg0 : index, %arg1 : index) -> (index, index) {
+  // CHECK: %[[C0:.*]] = constant 0 : index
+  %c0 = constant 0 : index
+  // CHECK: %[[C1:.*]] = constant 1 : index
+  %c1 = constant 1 : index
+  // CHECK: %[[C2:.*]] = constant 2 : index
+  %c2 = constant 2 : index
+  // CHECK: %[[C7:.*]] = constant 7 : index
+  %c7 = constant 7 : index
+  // CHECK: %[[C11:.*]] = constant 11 : index
+  %c11 = constant 11 : index
+  %c15 = constant 15 : index
+
+  // CHECK: %[[ALLOC0:.*]] = alloc()
+  %0 = alloc() : memref<8x16x4xf32, (d0, d1, d2) -> (d0 * 64 + d1 * 4 + d2)>
+
+  // Test: subview with constant base memref and constant operands is folded.
+  // Note that the subview uses the base memrefs layout map because it used
+  // zero offset and unit stride arguments.
+  // CHECK: std.subview %[[ALLOC0]][][][] : memref<8x16x4xf32, #[[BASE_MAP0]]> to memref<7x11x2xf32, #[[BASE_MAP0]]>
+  %1 = subview %0[%c0, %c0, %c0][%c7, %c11, %c2][%c1, %c1, %c1]
+    : memref<8x16x4xf32, (d0, d1, d2) -> (d0 * 64 + d1 * 4 + d2)> to
+      memref<?x?x?xf32,
+       (d0, d1, d2)[s0, s1, s2, s3] -> (d0 * s1 + d1 * s2 + d2 * s3 + s0)>
+  load %1[%c0, %c0, %c0] : memref<?x?x?xf32,
+       (d0, d1, d2)[s0, s1, s2, s3] -> (d0 * s1 + d1 * s2 + d2 * s3 + s0)>
+
+  // Test: subview with one dynamic operand should not be folded.
+  // CHECK: std.subview %[[ALLOC0]][%[[C0]], %[[ARG0]], %[[C0]]][][] : memref<8x16x4xf32, #[[BASE_MAP0]]> to memref<7x11x15xf32, #[[SUBVIEW_MAP0]]>
+  %2 = subview %0[%c0, %arg0, %c0][%c7, %c11, %c15][%c1, %c1, %c1]
+    : memref<8x16x4xf32, (d0, d1, d2) -> (d0 * 64 + d1 * 4 + d2)> to
+      memref<?x?x?xf32,
+       (d0, d1, d2)[s0, s1, s2, s3] -> (d0 * s1 + d1 * s2 + d2 * s3 + s0)>
+  load %2[%c0, %c0, %c0] : memref<?x?x?xf32,
+       (d0, d1, d2)[s0, s1, s2, s3] -> (d0 * s1 + d1 * s2 + d2 * s3 + s0)>
+
+  // CHECK: %[[ALLOC1:.*]] = alloc(%[[ARG0]])
+  %3 = alloc(%arg0) : memref<?x16x4xf32, (d0, d1, d2) -> (d0 * 64 + d1 * 4 + d2)>
+  // Test: subview with constant operands but dynamic base memref is folded as long as the strides and offset of the base memref are static.
+  // CHECK: std.subview %[[ALLOC1]][][][] : memref<?x16x4xf32, #[[BASE_MAP0]]> to memref<7x11x15xf32, #[[BASE_MAP0]]>
+  %4 = subview %3[%c0, %c0, %c0][%c7, %c11, %c15][%c1, %c1, %c1]
+    : memref<?x16x4xf32, (d0, d1, d2) -> (d0 * 64 + d1 * 4 + d2)> to
+      memref<?x?x?xf32,
+       (d0, d1, d2)[s0, s1, s2, s3] -> (d0 * s1 + d1 * s2 + d2 * s3 + s0)>
+  load %4[%c0, %c0, %c0] : memref<?x?x?xf32,
+       (d0, d1, d2)[s0, s1, s2, s3] -> (d0 * s1 + d1 * s2 + d2 * s3 + s0)>
+
+  // Test: subview offset operands are folded correctly w.r.t. base strides.
+  // CHECK: std.subview %[[ALLOC0]][][][] : memref<8x16x4xf32, #[[BASE_MAP0]]> to memref<7x11x2xf32, #[[SUBVIEW_MAP1]]>
+  %5 = subview %0[%c1, %c2, %c7][%c7, %c11, %c2][%c1, %c1, %c1]
+    : memref<8x16x4xf32, (d0, d1, d2) -> (d0 * 64 + d1 * 4 + d2)> to
+      memref<?x?x?xf32,
+       (d0, d1, d2)[s0, s1, s2, s3] -> (d0 * s1 + d1 * s2 + d2 * s3 + s0)>
+  load %5[%c0, %c0, %c0] : memref<?x?x?xf32,
+       (d0, d1, d2)[s0, s1, s2, s3] -> (d0 * s1 + d1 * s2 + d2 * s3 + s0)>
+
+  // Test: subview stride operands are folded correctly w.r.t. base strides.
+  // CHECK: std.subview %[[ALLOC0]][][][] : memref<8x16x4xf32, #[[BASE_MAP0]]> to memref<7x11x2xf32, #[[SUBVIEW_MAP2]]>
+  %6 = subview %0[%c0, %c0, %c0][%c7, %c11, %c2][%c2, %c7, %c11]
+    : memref<8x16x4xf32, (d0, d1, d2) -> (d0 * 64 + d1 * 4 + d2)> to
+      memref<?x?x?xf32,
+       (d0, d1, d2)[s0, s1, s2, s3] -> (d0 * s1 + d1 * s2 + d2 * s3 + s0)>
+  load %6[%c0, %c0, %c0] : memref<?x?x?xf32,
+       (d0, d1, d2)[s0, s1, s2, s3] -> (d0 * s1 + d1 * s2 + d2 * s3 + s0)>
+
+  // Test: subview shape are folded, but offsets and strides are not even if base memref is static
+  // CHECK: std.subview %[[ALLOC0]][%[[ARG0]], %[[ARG0]], %[[ARG0]]][][%[[ARG1]], %[[ARG1]], %[[ARG1]]] : memref<8x16x4xf32, #[[BASE_MAP0]]> to memref<7x11x2xf32, #[[SUBVIEW_MAP3]]>
+  %10 = subview %0[%arg0, %arg0, %arg0][%c7, %c11, %c2][%arg1, %arg1, %arg1] : memref<8x16x4xf32, offset:0, strides:[64, 4, 1]> to memref<?x?x?xf32, offset: ?, strides: [?, ?, ?]>
+  load %10[%arg1, %arg1, %arg1] : memref<?x?x?xf32, offset: ?, strides: [?, ?, ?]>
+
+  // Test: subview strides are folded, but offsets and shape are not even if base memref is static
+  // CHECK: std.subview %[[ALLOC0]][%[[ARG0]], %[[ARG0]], %[[ARG0]]][%[[ARG1]], %[[ARG1]], %[[ARG1]]][] : memref<8x16x4xf32, #[[BASE_MAP0]]> to memref<?x?x?xf32, #[[SUBVIEW_MAP4]]
+  %11 = subview %0[%arg0, %arg0, %arg0][%arg1, %arg1, %arg1][%c2, %c7, %c11] : memref<8x16x4xf32, offset:0, strides:[64, 4, 1]> to memref<?x?x?xf32, offset: ?, strides: [?, ?, ?]>
+  load %11[%arg0, %arg0, %arg0] : memref<?x?x?xf32, offset: ?, strides: [?, ?, ?]>
+
+  // Test: subview offsets are folded, but strides and shape are not even if base memref is static
+  // CHECK: std.subview %[[ALLOC0]][][%[[ARG1]], %[[ARG1]], %[[ARG1]]][%[[ARG0]], %[[ARG0]], %[[ARG0]]] : memref<8x16x4xf32, #[[BASE_MAP0]]> to memref<?x?x?xf32, #[[SUBVIEW_MAP5]]
+  %13 = subview %0[%c1, %c2, %c7][%arg1, %arg1, %arg1][%arg0, %arg0, %arg0] :  memref<8x16x4xf32, offset:0, strides:[64, 4, 1]> to memref<?x?x?xf32, offset: ?, strides: [?, ?, ?]>
+  load %13[%arg1, %arg1, %arg1] : memref<?x?x?xf32, offset: ?, strides: [?, ?, ?]>
+
+  // CHECK: %[[ALLOC2:.*]] = alloc(%[[ARG0]], %[[ARG0]], %[[ARG1]])
+  %14 = alloc(%arg0, %arg0, %arg1) : memref<?x?x?xf32>
+  // Test: subview shape are folded, even if base memref is not static
+  // CHECK: std.subview %[[ALLOC2]][%[[ARG0]], %[[ARG0]], %[[ARG0]]][][%[[ARG1]], %[[ARG1]], %[[ARG1]]] : memref<?x?x?xf32> to memref<7x11x2xf32, #[[SUBVIEW_MAP3]]>
+  %15 = subview %14[%arg0, %arg0, %arg0][%c7, %c11, %c2][%arg1, %arg1, %arg1] : memref<?x?x?xf32> to memref<?x?x?xf32, offset: ?, strides: [?, ?, ?]>
+  load %15[%arg1, %arg1, %arg1] : memref<?x?x?xf32, offset: ?, strides: [?, ?, ?]>
+
+  // TEST: subview strides are not folded when the base memref is not static
+  // CHECK: std.subview %[[ALLOC2]][%[[ARG0]], %[[ARG0]], %[[ARG0]]][%[[ARG1]], %[[ARG1]], %[[ARG1]]][%[[C2]], %[[C2]], %[[C2]]] : memref<?x?x?xf32> to memref<?x?x?xf32, #[[SUBVIEW_MAP3]]
+  %16 = subview %14[%arg0, %arg0, %arg0][%arg1, %arg1, %arg1][%c2, %c2, %c2] : memref<?x?x?xf32> to memref<?x?x?xf32, offset: ?, strides: [?, ?, ?]>
+  load %16[%arg0, %arg0, %arg0] : memref<?x?x?xf32, offset: ?, strides: [?, ?, ?]>
+
+  // TEST: subview offsets are not folded when the base memref is not static
+  // CHECK: std.subview %[[ALLOC2]][%[[C1]], %[[C1]], %[[C1]]][%[[ARG0]], %[[ARG0]], %[[ARG0]]][%[[ARG1]], %[[ARG1]], %[[ARG1]]] : memref<?x?x?xf32> to memref<?x?x?xf32, #[[SUBVIEW_MAP3]]
+  %17 = subview %14[%c1, %c1, %c1][%arg0, %arg0, %arg0][%arg1, %arg1, %arg1] : memref<?x?x?xf32> to memref<?x?x?xf32, offset: ?, strides: [?, ?, ?]>
+  load %17[%arg0, %arg0, %arg0] : memref<?x?x?xf32, offset: ?, strides: [?, ?, ?]>
+
+  // CHECK: %[[ALLOC3:.*]] = alloc() : memref<12x4xf32>
+  %18 = alloc() : memref<12x4xf32>
+  %c4 = constant 4 : index
+
+  // TEST: subview strides are maintained when sizes are folded
+  // CHECK: std.subview %[[ALLOC3]][%arg1, %arg1][][] : memref<12x4xf32> to memref<2x4xf32, #[[SUBVIEW_MAP6]]>
+  %19 = subview %18[%arg1, %arg1][%c2, %c4][] : memref<12x4xf32> to memref<?x?xf32, offset: ?, strides:[4, 1]>
+  load %19[%arg1, %arg1] : memref<?x?xf32, offset: ?, strides:[4, 1]>
+
+  // TEST: subview strides and sizes are maintained when offsets are folded
+  // CHECK: std.subview %[[ALLOC3]][][][] : memref<12x4xf32> to memref<12x4xf32, #[[SUBVIEW_MAP7]]>
+  %20 = subview %18[%c2, %c4][][] : memref<12x4xf32> to memref<12x4xf32, offset: ?, strides:[4, 1]>
+  load %20[%arg1, %arg1] : memref<12x4xf32, offset: ?, strides:[4, 1]>
+
+  // Test: dim on subview is rewritten to size operand.
+  %7 = dim %4, 0 : memref<?x?x?xf32,
+       (d0, d1, d2)[s0, s1, s2, s3] -> (d0 * s1 + d1 * s2 + d2 * s3 + s0)>
+  %8 = dim %4, 1 : memref<?x?x?xf32,
+       (d0, d1, d2)[s0, s1, s2, s3] -> (d0 * s1 + d1 * s2 + d2 * s3 + s0)>
+
+  // CHECK: return %[[C7]], %[[C11]]
+  return %7, %8 : index, index
 }

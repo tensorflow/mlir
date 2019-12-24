@@ -120,8 +120,8 @@ constructTiledIndexSetHyperRect(MutableArrayRef<AffineForOp> origLoops,
   for (unsigned i = 0; i < width; i++) {
     auto lbOperands = origLoops[i].getLowerBoundOperands();
     auto ubOperands = origLoops[i].getUpperBoundOperands();
-    SmallVector<Value *, 4> newLbOperands(lbOperands);
-    SmallVector<Value *, 4> newUbOperands(ubOperands);
+    SmallVector<ValuePtr, 4> newLbOperands(lbOperands);
+    SmallVector<ValuePtr, 4> newUbOperands(ubOperands);
     newLoops[i].setLowerBound(newLbOperands, origLoops[i].getLowerBoundMap());
     newLoops[i].setUpperBound(newUbOperands, origLoops[i].getUpperBoundMap());
     newLoops[i].setStep(tileSizes[i]);
@@ -147,7 +147,7 @@ constructTiledIndexSetHyperRect(MutableArrayRef<AffineForOp> origLoops,
       // with 'i' (tile-space loop) appended to it. The new upper bound map is
       // the original one with an additional expression i + tileSize appended.
       auto ub = origLoops[i].getUpperBound();
-      SmallVector<Value *, 4> ubOperands;
+      SmallVector<ValuePtr, 4> ubOperands;
       ubOperands.reserve(ub.getNumOperands() + 1);
       auto origUbMap = ub.getMap();
       // Add dim operands from original upper bound.
@@ -235,9 +235,10 @@ LogicalResult mlir::tileCodeGen(MutableArrayRef<AffineForOp> band,
   // Move the loop body of the original nest to the new one.
   moveLoopBody(origLoops[origLoops.size() - 1], innermostPointLoop);
 
-  SmallVector<Value *, 8> origLoopIVs;
+  SmallVector<ValuePtr, 8> origLoopIVs;
   extractForInductionVars(band, &origLoopIVs);
-  SmallVector<Optional<Value *>, 6> ids(origLoopIVs.begin(), origLoopIVs.end());
+  SmallVector<Optional<ValuePtr>, 6> ids(origLoopIVs.begin(),
+                                         origLoopIVs.end());
   FlatAffineConstraints cst;
   getIndexSet(band, &cst);
 
@@ -362,7 +363,7 @@ void LoopTiling::getTileSizes(ArrayRef<AffineForOp> band,
   // one possible approach. Or compute a polynomial in tile sizes and solve for
   // it.
 
-  // For an n-d tilable band, compute n^th root of the excess.
+  // For an n-d tileable band, compute n^th root of the excess.
   unsigned tSize =
       static_cast<unsigned>(floorl(std::pow(excessFactor, 1.0 / band.size())));
   // We'll keep a running product to determine the last tile size better.

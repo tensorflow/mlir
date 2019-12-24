@@ -24,6 +24,7 @@
 #include "toy/Dialect.h"
 #include "toy/Passes.h"
 
+#include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Conversion/LoopToStandard/ConvertLoopToStandard.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
@@ -33,7 +34,6 @@
 #include "mlir/Dialect/StandardOps/Ops.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "mlir/Transforms/LowerAffine.h"
 #include "llvm/ADT/Sequence.h"
 
 using namespace mlir;
@@ -51,7 +51,7 @@ public:
       : ConversionPattern(toy::PrintOp::getOperationName(), 1, context) {}
 
   PatternMatchResult
-  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+  matchAndRewrite(Operation *op, ArrayRef<ValuePtr> operands,
                   ConversionPatternRewriter &rewriter) const override {
     auto memRefType = (*op->operand_type_begin()).cast<MemRefType>();
     auto memRefShape = memRefType.getShape();
@@ -64,14 +64,14 @@ public:
 
     // Get a symbol reference to the printf function, inserting it if necessary.
     auto printfRef = getOrInsertPrintf(rewriter, parentModule, llvmDialect);
-    Value *formatSpecifierCst = getOrCreateGlobalString(
+    ValuePtr formatSpecifierCst = getOrCreateGlobalString(
         loc, rewriter, "frmt_spec", StringRef("%f \0", 4), parentModule,
         llvmDialect);
-    Value *newLineCst = getOrCreateGlobalString(
+    ValuePtr newLineCst = getOrCreateGlobalString(
         loc, rewriter, "nl", StringRef("\n\0", 2), parentModule, llvmDialect);
 
     // Create a loop for each of the dimensions within the shape.
-    SmallVector<Value *, 4> loopIvs;
+    SmallVector<ValuePtr, 4> loopIvs;
     for (unsigned i = 0, e = memRefShape.size(); i != e; ++i) {
       auto lowerBound = rewriter.create<ConstantIndexOp>(loc, 0);
       auto upperBound = rewriter.create<ConstantIndexOp>(loc, memRefShape[i]);
@@ -97,7 +97,7 @@ public:
     auto elementLoad = rewriter.create<LoadOp>(loc, printOp.input(), loopIvs);
     rewriter.create<CallOp>(
         loc, printfRef, rewriter.getIntegerType(32),
-        ArrayRef<Value *>({formatSpecifierCst, elementLoad}));
+        ArrayRef<ValuePtr>({formatSpecifierCst, elementLoad}));
 
     // Notify the rewriter that this operation has been removed.
     rewriter.eraseOp(op);
@@ -107,9 +107,9 @@ public:
 private:
   /// Return a symbol reference to the printf function, inserting it into the
   /// module if necessary.
-  static SymbolRefAttr getOrInsertPrintf(PatternRewriter &rewriter,
-                                         ModuleOp module,
-                                         LLVM::LLVMDialect *llvmDialect) {
+  static FlatSymbolRefAttr getOrInsertPrintf(PatternRewriter &rewriter,
+                                             ModuleOp module,
+                                             LLVM::LLVMDialect *llvmDialect) {
     auto *context = module.getContext();
     if (module.lookupSymbol<LLVM::LLVMFuncOp>("printf"))
       return SymbolRefAttr::get("printf", context);
@@ -130,10 +130,10 @@ private:
 
   /// Return a value representing an access into a global string with the given
   /// name, creating the string if necessary.
-  static Value *getOrCreateGlobalString(Location loc, OpBuilder &builder,
-                                        StringRef name, StringRef value,
-                                        ModuleOp module,
-                                        LLVM::LLVMDialect *llvmDialect) {
+  static ValuePtr getOrCreateGlobalString(Location loc, OpBuilder &builder,
+                                          StringRef name, StringRef value,
+                                          ModuleOp module,
+                                          LLVM::LLVMDialect *llvmDialect) {
     // Create the global at the entry of the module.
     LLVM::GlobalOp global;
     if (!(global = module.lookupSymbol<LLVM::GlobalOp>(name))) {
@@ -141,18 +141,19 @@ private:
       builder.setInsertionPointToStart(module.getBody());
       auto type = LLVM::LLVMType::getArrayTy(
           LLVM::LLVMType::getInt8Ty(llvmDialect), value.size());
-      global = builder.create<LLVM::GlobalOp>(
-          loc, type, /*isConstant=*/true, name, builder.getStringAttr(value));
+      global = builder.create<LLVM::GlobalOp>(loc, type, /*isConstant=*/true,
+                                              LLVM::Linkage::Internal, name,
+                                              builder.getStringAttr(value));
     }
 
     // Get the pointer to the first character in the global string.
-    Value *globalPtr = builder.create<LLVM::AddressOfOp>(loc, global);
-    Value *cst0 = builder.create<LLVM::ConstantOp>(
+    ValuePtr globalPtr = builder.create<LLVM::AddressOfOp>(loc, global);
+    ValuePtr cst0 = builder.create<LLVM::ConstantOp>(
         loc, LLVM::LLVMType::getInt64Ty(llvmDialect),
         builder.getIntegerAttr(builder.getIndexType(), 0));
     return builder.create<LLVM::GEPOp>(
         loc, LLVM::LLVMType::getInt8PtrTy(llvmDialect), globalPtr,
-        ArrayRef<Value *>({cst0, cst0}));
+        ArrayRef<ValuePtr>({cst0, cst0}));
   }
 };
 } // end anonymous namespace

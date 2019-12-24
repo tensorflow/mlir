@@ -20,7 +20,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "mlir/Analysis/SliceAnalysis.h"
-#include "mlir/Analysis/VectorAnalysis.h"
 #include "mlir/Dialect/AffineOps/AffineOps.h"
 #include "mlir/Dialect/LoopOps/LoopOps.h"
 #include "mlir/IR/Function.h"
@@ -105,8 +104,8 @@ static void getBackwardSliceImpl(Operation *op,
   }
 
   for (auto en : llvm::enumerate(op->getOperands())) {
-    auto *operand = en.value();
-    if (auto *blockArg = dyn_cast<BlockArgument>(operand)) {
+    auto operand = en.value();
+    if (auto blockArg = dyn_cast<BlockArgument>(operand)) {
       if (auto affIv = getForInductionVarOwner(operand)) {
         auto *affOp = affIv.getOperation();
         if (backwardSlice->count(affOp) == 0)

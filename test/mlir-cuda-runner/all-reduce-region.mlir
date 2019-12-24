@@ -1,13 +1,12 @@
-// RUN: mlir-cuda-runner %s --shared-libs=%cuda_wrapper_library_dir/libcuda-runtime-wrappers%shlibext --entry-point-result=void | FileCheck %s
+// RUN: mlir-cuda-runner %s --shared-libs=%cuda_wrapper_library_dir/libcuda-runtime-wrappers%shlibext,%linalg_test_lib_dir/libmlir_runner_utils%shlibext --entry-point-result=void | FileCheck %s
 
-// CHECK: [3.500000e+01, 3.500000e+01, {{.*}}, 3.500000e+01, 3.500000e+01]
+// CHECK: [{{(35, ){34}35}}]
 func @main() {
   %arg = alloc() : memref<35xf32>
   %dst = memref_cast %arg : memref<35xf32> to memref<?xf32>
-  %zero = constant 0 : i32
   %one = constant 1 : index
   %sx = dim %dst, 0 : memref<?xf32>
-  call @mcuMemHostRegister(%dst, %zero) : (memref<?xf32>, i32) -> ()
+  call @mcuMemHostRegisterMemRef1dFloat(%dst) : (memref<?xf32>) -> ()
   gpu.launch blocks(%bx, %by, %bz) in (%grid_x = %one, %grid_y = %one, %grid_z = %one)
              threads(%tx, %ty, %tz) in (%block_x = %sx, %block_y = %one, %block_z = %one)
              args(%kernel_dst = %dst) : memref<?xf32> {
@@ -21,9 +20,10 @@ func @main() {
     store %res, %kernel_dst[%tx] : memref<?xf32>
     gpu.return
   }
-  call @mcuPrintFloat(%dst) : (memref<?xf32>) -> ()
+  %U = memref_cast %dst : memref<?xf32> to memref<*xf32>
+  call @print_memref_f32(%U) : (memref<*xf32>) -> ()
   return
 }
 
-func @mcuMemHostRegister(%ptr : memref<?xf32>, %flags : i32)
-func @mcuPrintFloat(%ptr : memref<?xf32>)
+func @mcuMemHostRegisterMemRef1dFloat(%ptr : memref<?xf32>)
+func @print_memref_f32(memref<*xf32>)

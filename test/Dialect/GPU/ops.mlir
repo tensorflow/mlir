@@ -61,8 +61,7 @@ module attributes {gpu.container_module} {
   }
 
   module @kernels attributes {gpu.kernel_module} {
-    func @kernel_1(%arg0 : f32, %arg1 : memref<?xf32, 1>)
-        attributes { gpu.kernel } {
+    gpu.func @kernel_1(%arg0 : f32, %arg1 : memref<?xf32, 1>) attributes {gpu.kernel} {
       %tIdX = "gpu.thread_id"() {dimension = "x"} : () -> (index)
       %tIdY = "gpu.thread_id"() {dimension = "y"} : () -> (index)
       %tIdZ = "gpu.thread_id"() {dimension = "z"} : () -> (index)
@@ -82,15 +81,21 @@ module attributes {gpu.container_module} {
       %one = constant 1.0 : f32
       %sum = "gpu.all_reduce"(%one) ({}) {op = "add"} : (f32) -> (f32)
 
+      %width = constant 7 : i32
+      %offset = constant 3 : i32
+      // CHECK: gpu.shuffle %{{.*}}, %{{.*}}, %{{.*}} xor : f32
+      %shfl, %pred = gpu.shuffle %arg0, %offset, %width xor : f32
+
       "gpu.barrier"() : () -> ()
 
       "some_op"(%bIdX, %tIdX) : (index, index) -> ()
       %42 = load %arg1[%bIdX] : memref<?xf32, 1>
-      return
+      gpu.return
     }
 
-    func @kernel_2(f32, memref<?xf32, 1>)
-        attributes { gpu.kernel }
+    gpu.func @kernel_2(%arg0: f32, %arg1: memref<?xf32, 1>) attributes {gpu.kernel} {
+      gpu.return
+    }
   }
 
   func @foo() {
@@ -110,6 +115,55 @@ module attributes {gpu.container_module} {
         : (index, index, index, index, index, index, f32, memref<?xf32, 1>) -> ()
 
     return
+  }
+
+  module @gpu_funcs attributes {gpu.kernel_module} {
+    // CHECK-LABEL: gpu.func @kernel_1({{.*}}: f32) -> f32
+    // CHECK:       workgroup
+    // CHECK:       private
+    // CHECK:       attributes
+    gpu.func @kernel_1(%arg0: f32) -> f32
+        workgroup(%arg1: memref<42xf32, 3>)
+        private(%arg2: memref<2xf32, 5>, %arg3: memref<1xf32, 5>)
+        kernel
+        attributes {foo="bar"} {
+      "use"(%arg1) : (memref<42xf32, 3>) -> ()
+      "use"(%arg2) : (memref<2xf32, 5>) -> ()
+      "use"(%arg3) : (memref<1xf32, 5>) -> ()
+      gpu.return
+    }
+
+    // CHECK-LABEL: gpu.func @no_attribution
+    // CHECK: {
+    gpu.func @no_attribution(%arg0: f32) {
+      gpu.return
+    }
+
+    // CHECK-LABEL: @no_attribution_attrs
+    // CHECK:       attributes
+    // CHECK:       {
+    gpu.func @no_attribution_attrs(%arg0: f32) attributes {foo="bar"} {
+      gpu.return
+    }
+
+    // CHECK-LABEL: @workgroup_only
+    // CHECK:       workgroup({{.*}}: {{.*}})
+    // CHECK:       {
+    gpu.func @workgroup_only() workgroup(%arg0: memref<42xf32, 3>) {
+      gpu.return
+    }
+    // CHECK-LABEL: @private_only
+    // CHECK:       private({{.*}}: {{.*}})
+    // CHECK:       {
+    gpu.func @private_only() private(%arg0: memref<2xf32, 5>) {
+      gpu.return
+    }
+
+    // CHECK-LABEL: @empty_attribution
+    // CHECK:       {
+    gpu.func @empty_attribution(%arg0: f32) workgroup() private() {
+      gpu.return
+    }
   }
 
 }

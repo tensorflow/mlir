@@ -60,14 +60,14 @@ public:
     /// remaps an existing signature input.
     struct InputMapping {
       size_t inputNo, size;
-      Value *replacementValue;
+      ValuePtr replacementValue;
     };
 
     /// Return the argument types for the new signature.
     ArrayRef<Type> getConvertedTypes() const { return argTypes; }
 
     /// Get the input mapping for the given argument.
-    llvm::Optional<InputMapping> const &getInputMapping(unsigned input) const {
+    Optional<InputMapping> getInputMapping(unsigned input) const {
       return remappedInputs[input];
     }
 
@@ -90,11 +90,11 @@ public:
 
     /// Remap an input of the original signature to another `replacement`
     /// value. This drops the original argument.
-    void remapInput(unsigned origInputNo, Value *replacement);
+    void remapInput(unsigned origInputNo, ValuePtr replacement);
 
   private:
     /// The remapping information for each of the original arguments.
-    SmallVector<llvm::Optional<InputMapping>, 4> remappedInputs;
+    SmallVector<Optional<InputMapping>, 4> remappedInputs;
 
     /// The set of new argument types.
     SmallVector<Type, 4> argTypes;
@@ -133,7 +133,7 @@ public:
   /// This function converts the type signature of the given block, by invoking
   /// 'convertSignatureArg' for each argument. This function should return a
   /// valid conversion for the signature on success, None otherwise.
-  llvm::Optional<SignatureConversion> convertBlockSignature(Block *block);
+  Optional<SignatureConversion> convertBlockSignature(Block *block);
 
   /// This hook allows for materializing a conversion from a set of types into
   /// one result type by generating a cast operation of some kind. The generated
@@ -143,7 +143,7 @@ public:
   /// the conversion has finished.
   virtual Operation *materializeConversion(PatternRewriter &rewriter,
                                            Type resultType,
-                                           ArrayRef<Value *> inputs,
+                                           ArrayRef<ValuePtr> inputs,
                                            Location loc) {
     llvm_unreachable("expected 'materializeConversion' to be overridden");
   }
@@ -172,7 +172,7 @@ public:
   /// ConversionPattern ever needs to replace an operation that does not
   /// have successors. This function should not fail. If some specific cases of
   /// the operation are not supported, these cases should not be matched.
-  virtual void rewrite(Operation *op, ArrayRef<Value *> operands,
+  virtual void rewrite(Operation *op, ArrayRef<ValuePtr> operands,
                        ConversionPatternRewriter &rewriter) const {
     llvm_unreachable("unimplemented rewrite");
   }
@@ -187,18 +187,18 @@ public:
   /// terminator operation that has successors. This function should not fail
   /// the pass. If some specific cases of the operation are not supported,
   /// these cases should not be matched.
-  virtual void rewrite(Operation *op, ArrayRef<Value *> properOperands,
+  virtual void rewrite(Operation *op, ArrayRef<ValuePtr> properOperands,
                        ArrayRef<Block *> destinations,
-                       ArrayRef<ArrayRef<Value *>> operands,
+                       ArrayRef<ArrayRef<ValuePtr>> operands,
                        ConversionPatternRewriter &rewriter) const {
     llvm_unreachable("unimplemented rewrite for terminators");
   }
 
   /// Hook for derived classes to implement combined matching and rewriting.
   virtual PatternMatchResult
-  matchAndRewrite(Operation *op, ArrayRef<Value *> properOperands,
+  matchAndRewrite(Operation *op, ArrayRef<ValuePtr> properOperands,
                   ArrayRef<Block *> destinations,
-                  ArrayRef<ArrayRef<Value *>> operands,
+                  ArrayRef<ArrayRef<ValuePtr>> operands,
                   ConversionPatternRewriter &rewriter) const {
     if (!match(op))
       return matchFailure();
@@ -208,7 +208,7 @@ public:
 
   /// Hook for derived classes to implement combined matching and rewriting.
   virtual PatternMatchResult
-  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+  matchAndRewrite(Operation *op, ArrayRef<ValuePtr> operands,
                   ConversionPatternRewriter &rewriter) const {
     if (!match(op))
       return matchFailure();
@@ -234,29 +234,29 @@ struct OpConversionPattern : public ConversionPattern {
 
   /// Wrappers around the ConversionPattern methods that pass the derived op
   /// type.
-  void rewrite(Operation *op, ArrayRef<Value *> operands,
+  void rewrite(Operation *op, ArrayRef<ValuePtr> operands,
                ConversionPatternRewriter &rewriter) const final {
-    rewrite(llvm::cast<SourceOp>(op), operands, rewriter);
+    rewrite(cast<SourceOp>(op), operands, rewriter);
   }
-  void rewrite(Operation *op, ArrayRef<Value *> properOperands,
+  void rewrite(Operation *op, ArrayRef<ValuePtr> properOperands,
                ArrayRef<Block *> destinations,
-               ArrayRef<ArrayRef<Value *>> operands,
+               ArrayRef<ArrayRef<ValuePtr>> operands,
                ConversionPatternRewriter &rewriter) const final {
-    rewrite(llvm::cast<SourceOp>(op), properOperands, destinations, operands,
+    rewrite(cast<SourceOp>(op), properOperands, destinations, operands,
             rewriter);
   }
   PatternMatchResult
-  matchAndRewrite(Operation *op, ArrayRef<Value *> properOperands,
+  matchAndRewrite(Operation *op, ArrayRef<ValuePtr> properOperands,
                   ArrayRef<Block *> destinations,
-                  ArrayRef<ArrayRef<Value *>> operands,
+                  ArrayRef<ArrayRef<ValuePtr>> operands,
                   ConversionPatternRewriter &rewriter) const final {
-    return matchAndRewrite(llvm::cast<SourceOp>(op), properOperands,
-                           destinations, operands, rewriter);
+    return matchAndRewrite(cast<SourceOp>(op), properOperands, destinations,
+                           operands, rewriter);
   }
   PatternMatchResult
-  matchAndRewrite(Operation *op, ArrayRef<Value *> operands,
+  matchAndRewrite(Operation *op, ArrayRef<ValuePtr> operands,
                   ConversionPatternRewriter &rewriter) const final {
-    return matchAndRewrite(llvm::cast<SourceOp>(op), operands, rewriter);
+    return matchAndRewrite(cast<SourceOp>(op), operands, rewriter);
   }
 
   // TODO(b/142763075): Use OperandAdaptor when it supports access to unnamed
@@ -264,22 +264,22 @@ struct OpConversionPattern : public ConversionPattern {
 
   /// Rewrite and Match methods that operate on the SourceOp type. These must be
   /// overridden by the derived pattern class.
-  virtual void rewrite(SourceOp op, ArrayRef<Value *> operands,
+  virtual void rewrite(SourceOp op, ArrayRef<ValuePtr> operands,
                        ConversionPatternRewriter &rewriter) const {
     llvm_unreachable("must override matchAndRewrite or a rewrite method");
   }
 
-  virtual void rewrite(SourceOp op, ArrayRef<Value *> properOperands,
+  virtual void rewrite(SourceOp op, ArrayRef<ValuePtr> properOperands,
                        ArrayRef<Block *> destinations,
-                       ArrayRef<ArrayRef<Value *>> operands,
+                       ArrayRef<ArrayRef<ValuePtr>> operands,
                        ConversionPatternRewriter &rewriter) const {
     llvm_unreachable("unimplemented rewrite for terminators");
   }
 
   virtual PatternMatchResult
-  matchAndRewrite(SourceOp op, ArrayRef<Value *> properOperands,
+  matchAndRewrite(SourceOp op, ArrayRef<ValuePtr> properOperands,
                   ArrayRef<Block *> destinations,
-                  ArrayRef<ArrayRef<Value *>> operands,
+                  ArrayRef<ArrayRef<ValuePtr>> operands,
                   ConversionPatternRewriter &rewriter) const {
     if (!match(op))
       return matchFailure();
@@ -288,7 +288,7 @@ struct OpConversionPattern : public ConversionPattern {
   }
 
   virtual PatternMatchResult
-  matchAndRewrite(SourceOp op, ArrayRef<Value *> operands,
+  matchAndRewrite(SourceOp op, ArrayRef<ValuePtr> operands,
                   ConversionPatternRewriter &rewriter) const {
     if (!match(op))
       return matchFailure();
@@ -322,26 +322,27 @@ public:
   ConversionPatternRewriter(MLIRContext *ctx, TypeConverter *converter);
   ~ConversionPatternRewriter() override;
 
-  /// Apply a signature conversion to the entry block of the given region.
-  void applySignatureConversion(Region *region,
-                                TypeConverter::SignatureConversion &conversion);
+  /// Apply a signature conversion to the entry block of the given region. This
+  /// replaces the entry block with a new block containing the updated
+  /// signature. The new entry block to the region is returned for convenience.
+  Block *
+  applySignatureConversion(Region *region,
+                           TypeConverter::SignatureConversion &conversion);
 
   /// Replace all the uses of the block argument `from` with value `to`.
-  void replaceUsesOfBlockArgument(BlockArgument *from, Value *to);
+  void replaceUsesOfBlockArgument(BlockArgumentPtr from, ValuePtr to);
 
-  /// Clone the given operation without cloning its regions.
-  Operation *cloneWithoutRegions(Operation *op);
-  template <typename OpT> OpT cloneWithoutRegions(OpT op) {
-    return cast<OpT>(cloneWithoutRegions(op.getOperation()));
-  }
+  /// Return the converted value that replaces 'key'. Return 'key' if there is
+  /// no such a converted value.
+  ValuePtr getRemappedValue(ValuePtr key);
 
   //===--------------------------------------------------------------------===//
   // PatternRewriter Hooks
   //===--------------------------------------------------------------------===//
 
   /// PatternRewriter hook for replacing the results of an operation.
-  void replaceOp(Operation *op, ArrayRef<Value *> newValues,
-                 ArrayRef<Value *> valuesToRemoveIfDead) override;
+  void replaceOp(Operation *op, ValueRange newValues,
+                 ValueRange valuesToRemoveIfDead) override;
   using PatternRewriter::replaceOp;
 
   /// PatternRewriter hook for erasing a dead operation. The uses of this
@@ -353,8 +354,7 @@ public:
   Block *splitBlock(Block *block, Block::iterator before) override;
 
   /// PatternRewriter hook for merging a block into another.
-  void mergeBlocks(Block *source, Block *dest,
-                   ArrayRef<Value *> argValues) override;
+  void mergeBlocks(Block *source, Block *dest, ValueRange argValues) override;
 
   /// PatternRewriter hook for moving blocks out of a region.
   void inlineRegionBefore(Region &region, Region &parent,
@@ -370,8 +370,8 @@ public:
                          BlockAndValueMapping &mapping) override;
   using PatternRewriter::cloneRegionBefore;
 
-  /// PatternRewriter hook for creating a new operation.
-  Operation *createOperation(const OperationState &state) override;
+  /// PatternRewriter hook for inserting a new operation.
+  Operation *insert(Operation *op) override;
 
   /// PatternRewriter hook for updating the root operation in-place.
   void notifyRootUpdated(Operation *op) override;

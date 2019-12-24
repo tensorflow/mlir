@@ -215,6 +215,56 @@ func @bitcount(%arg: i32) -> i32 {
 // -----
 
 //===----------------------------------------------------------------------===//
+// spv.BitFieldInsert
+//===----------------------------------------------------------------------===//
+
+func @bit_field_insert_vec(%base: vector<3xi32>, %insert: vector<3xi32>, %offset: i32, %count: i16) -> vector<3xi32> {
+  // CHECK: {{%.*}} = spv.BitFieldInsert {{%.*}}, {{%.*}}, {{%.*}}, {{%.*}} : vector<3xi32>, i32, i16
+  %0 = spv.BitFieldInsert %base, %insert, %offset, %count : vector<3xi32>, i32, i16
+  spv.ReturnValue %0 : vector<3xi32>
+}
+
+// -----
+
+func @bit_field_insert_invalid_insert_type(%base: vector<3xi32>, %insert: vector<2xi32>, %offset: i32, %count: i16) -> vector<3xi32> {
+  // expected-error @+1 {{expected the same type for the base operand, insert operand, and result, but provided 'vector<3xi32>', 'vector<2xi32>' and 'vector<3xi32>'}}
+  %0 = "spv.BitFieldInsert" (%base, %insert, %offset, %count) : (vector<3xi32>, vector<2xi32>, i32, i16) -> vector<3xi32>
+  spv.ReturnValue %0 : vector<3xi32>
+}
+
+// -----
+
+//===----------------------------------------------------------------------===//
+// spv.BitFieldSExtract
+//===----------------------------------------------------------------------===//
+
+func @bit_field_s_extract_vec(%base: vector<3xi32>, %offset: i8, %count: i8) -> vector<3xi32> {
+  // CHECK: {{%.*}} = spv.BitFieldSExtract {{%.*}}, {{%.*}}, {{%.*}} : vector<3xi32>, i8, i8
+  %0 = spv.BitFieldSExtract %base, %offset, %count : vector<3xi32>, i8, i8
+  spv.ReturnValue %0 : vector<3xi32>
+}
+
+//===----------------------------------------------------------------------===//
+// spv.BitFieldUExtract
+//===----------------------------------------------------------------------===//
+
+func @bit_field_u_extract_vec(%base: vector<3xi32>, %offset: i8, %count: i8) -> vector<3xi32> {
+  // CHECK: {{%.*}} = spv.BitFieldUExtract {{%.*}}, {{%.*}}, {{%.*}} : vector<3xi32>, i8, i8
+  %0 = spv.BitFieldUExtract %base, %offset, %count : vector<3xi32>, i8, i8
+  spv.ReturnValue %0 : vector<3xi32>
+}
+
+// -----
+
+func @bit_field_u_extract_invalid_result_type(%base: vector<3xi32>, %offset: i32, %count: i16) -> vector<4xi32> {
+  // expected-error @+1 {{expected the same type for the first operand and result, but provided 'vector<3xi32>' and 'vector<4xi32>'}}
+  %0 = "spv.BitFieldUExtract" (%base, %offset, %count) : (vector<3xi32>, i32, i16) -> vector<4xi32>
+  spv.ReturnValue %0 : vector<4xi32>
+}
+
+// -----
+
+//===----------------------------------------------------------------------===//
 // spv.BitReverse
 //===----------------------------------------------------------------------===//
 
@@ -222,150 +272,6 @@ func @bitreverse(%arg: i32) -> i32 {
   // CHECK: spv.BitReverse {{%.*}} : i32
   %0 = spv.BitReverse %arg : i32
   spv.ReturnValue %0 : i32
-}
-
-// -----
-
-//===----------------------------------------------------------------------===//
-// spv.CompositeExtractOp
-//===----------------------------------------------------------------------===//
-
-func @composite_extract_f32_from_1D_array(%arg0: !spv.array<4xf32>) -> f32 {
-  // CHECK: %0 = spv.CompositeExtract %arg0[1 : i32] : !spv.array<4 x f32>
-  %0 = spv.CompositeExtract %arg0[1 : i32] : !spv.array<4xf32>
-  return %0: f32
-}
-
-// -----
-
-func @composite_extract_f32_from_2D_array(%arg0: !spv.array<4x!spv.array<4xf32>>) -> f32 {
-  // CHECK: %0 = spv.CompositeExtract %arg0[1 : i32, 2 : i32] : !spv.array<4 x !spv.array<4 x f32>>
-  %0 = spv.CompositeExtract %arg0[1 : i32, 2 : i32] : !spv.array<4x!spv.array<4xf32>>
-  return %0: f32
-}
-
-// -----
-
-func @composite_extract_1D_array_from_2D_array(%arg0: !spv.array<4x!spv.array<4xf32>>) -> !spv.array<4xf32> {
-  // CHECK: %0 = spv.CompositeExtract %arg0[1 : i32] : !spv.array<4 x !spv.array<4 x f32>>
-  %0 = spv.CompositeExtract %arg0[1 : i32] : !spv.array<4x!spv.array<4xf32>>
-  return %0 : !spv.array<4xf32>
-}
-
-// -----
-
-func @composite_extract_struct(%arg0 : !spv.struct<f32, !spv.array<4xf32>>) -> f32 {
-  // CHECK: %0 = spv.CompositeExtract %arg0[1 : i32, 2 : i32] : !spv.struct<f32, !spv.array<4 x f32>>
-  %0 = spv.CompositeExtract %arg0[1 : i32, 2 : i32] : !spv.struct<f32, !spv.array<4xf32>>
-  return %0 : f32
-}
-
-// -----
-
-func @composite_extract_vector(%arg0 : vector<4xf32>) -> f32 {
-  // CHECK: %0 = spv.CompositeExtract %arg0[1 : i32] : vector<4xf32>
-  %0 = spv.CompositeExtract %arg0[1 : i32] : vector<4xf32>
-  return %0 : f32
-}
-
-// -----
-
-func @composite_extract_no_ssa_operand() -> () {
-  // expected-error @+1 {{expected SSA operand}}
-  %0 = spv.CompositeExtract [4 : i32, 1 : i32] : !spv.array<4x!spv.array<4xf32>>
-  return
-}
-
-// -----
-
-func @composite_extract_invalid_index_type_1() -> () {
-  %0 = spv.constant 10 : i32
-  %1 = spv.Variable : !spv.ptr<!spv.array<4x!spv.array<4xf32>>, Function>
-  %2 = spv.Load "Function" %1 ["Volatile"] : !spv.array<4x!spv.array<4xf32>>
-  // expected-error @+1 {{expected non-function type}}
-  %3 = spv.CompositeExtract %2[%0] : !spv.array<4x!spv.array<4xf32>>
-  return
-}
-
-// -----
-
-func @composite_extract_invalid_index_type_2(%arg0 : !spv.array<4x!spv.array<4xf32>>) -> () {
-  // expected-error @+1 {{op attribute 'indices' failed to satisfy constraint: 32-bit integer array attribute}}
-  %0 = spv.CompositeExtract %arg0[1] : !spv.array<4x!spv.array<4xf32>>
-  return
-}
-
-// -----
-
-func @composite_extract_invalid_index_identifier(%arg0 : !spv.array<4x!spv.array<4xf32>>) -> () {
-  // expected-error @+1 {{expected bare identifier}}
-  %0 = spv.CompositeExtract %arg0(1 : i32) : !spv.array<4x!spv.array<4xf32>>
-  return
-}
-
-// -----
-
-func @composite_extract_2D_array_out_of_bounds_access_1(%arg0: !spv.array<4x!spv.array<4xf32>>) -> () {
-  // expected-error @+1 {{index 4 out of bounds for '!spv.array<4 x !spv.array<4 x f32>>'}}
-  %0 = spv.CompositeExtract %arg0[4 : i32, 1 : i32] : !spv.array<4x!spv.array<4xf32>>
-  return
-}
-
-// -----
-
-func @composite_extract_2D_array_out_of_bounds_access_2(%arg0: !spv.array<4x!spv.array<4xf32>>
-) -> () {
-  // expected-error @+1 {{index 4 out of bounds for '!spv.array<4 x f32>'}}
-  %0 = spv.CompositeExtract %arg0[1 : i32, 4 : i32] : !spv.array<4x!spv.array<4xf32>>
-  return
-}
-
-// -----
-
-func @composite_extract_struct_element_out_of_bounds_access(%arg0 : !spv.struct<f32, !spv.array<4xf32>>) -> () {
-  // expected-error @+1 {{index 2 out of bounds for '!spv.struct<f32, !spv.array<4 x f32>>'}}
-  %0 = spv.CompositeExtract %arg0[2 : i32, 0 : i32] : !spv.struct<f32, !spv.array<4xf32>>
-  return
-}
-
-// -----
-
-func @composite_extract_vector_out_of_bounds_access(%arg0: vector<4xf32>) -> () {
-  // expected-error @+1 {{index 4 out of bounds for 'vector<4xf32>'}}
-  %0 = spv.CompositeExtract %arg0[4 : i32] : vector<4xf32>
-  return
-}
-
-// -----
-
-func @composite_extract_invalid_types_1(%arg0: !spv.array<4x!spv.array<4xf32>>) -> () {
-  // expected-error @+1 {{cannot extract from non-composite type 'f32' with index 3}}
-  %0 = spv.CompositeExtract %arg0[1 : i32, 2 : i32, 3 : i32] : !spv.array<4x!spv.array<4xf32>>
-  return
-}
-
-// -----
-
-func @composite_extract_invalid_types_2(%arg0: f32) -> () {
-  // expected-error @+1 {{cannot extract from non-composite type 'f32' with index 1}}
-  %0 = spv.CompositeExtract %arg0[1 : i32] : f32
-  return
-}
-
-// -----
-
-func @composite_extract_invalid_extracted_type(%arg0: !spv.array<4x!spv.array<4xf32>>) -> () {
-  // expected-error @+1 {{expected at least one index for spv.CompositeExtract}}
-  %0 = spv.CompositeExtract %arg0[] : !spv.array<4x!spv.array<4xf32>>
-  return
-}
-
-// -----
-
-func @composite_extract_result_type_mismatch(%arg0: !spv.array<4xf32>) -> i32 {
-  // expected-error @+1 {{invalid result type: expected 'f32' but provided 'i32'}}
-  %0 = "spv.CompositeExtract"(%arg0) {indices = [2: i32]} : (!spv.array<4xf32>) -> (i32)
-  return %0: i32
 }
 
 // -----
@@ -1021,7 +927,7 @@ func @shift_left_logical_invalid_result_type(%arg0: i32, %arg1 : i16) -> i16 {
 // spv.ShiftRightArithmetic
 //===----------------------------------------------------------------------===//
 
-func @shift_right_aritmethic(%arg0: vector<4xi32>, %arg1 : vector<4xi8>) -> vector<4xi32> {
+func @shift_right_arithmetic(%arg0: vector<4xi32>, %arg1 : vector<4xi8>) -> vector<4xi32> {
   // CHECK: {{%.*}} = spv.ShiftRightArithmetic {{%.*}}, {{%.*}} : vector<4xi32>, vector<4xi8>
   %0 = spv.ShiftRightArithmetic %arg0, %arg1: vector<4xi32>, vector<4xi8>
   spv.ReturnValue %0 : vector<4xi32>
@@ -1159,6 +1065,17 @@ spv.module "Logical" "GLSL450" {
     spv.Store  "Input" %0, %arg0 : f32
     spv.Return
   }
+}
+
+// -----
+
+//===----------------------------------------------------------------------===//
+// spv.SubgroupBallotKHR
+//===----------------------------------------------------------------------===//
+
+func @subgroup_ballot(%predicate: i1) -> vector<4xi32> {
+  %0 = spv.SubgroupBallotKHR %predicate: vector<4xi32>
+  return %0: vector<4xi32>
 }
 
 // -----

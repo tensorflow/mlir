@@ -2,32 +2,6 @@
 
 // -----
 
-#map = (d0)[s0] -> (d0 + s0)
-
-func @affine_apply_invalid_dim(%arg : index) {
-  affine.for %n0 = 0 to 7 {
-    %dim = addi %arg, %arg : index
-
-    // expected-error@+1 {{operand cannot be used as a dimension id}}
-    %x  = affine.apply #map(%dim)[%arg]
-  }
-  return
-}
-
-// -----
-
-#map0 = (d0)[s0] -> (d0 + s0)
-
-func @affine_apply_invalid_sym() {
-  affine.for %i0 = 0 to 7 {
-    // expected-error@+1 {{operand cannot be used as a symbol}}
-    %0 = affine.apply #map0(%i0)[%i0]
-  }
-  return
-}
-
-// -----
-
 func @affine_apply_operand_non_index(%arg0 : i32) {
   // Custom parser automatically assigns all arguments the `index` so we must
   // use the generic syntax here to exercise the verifier.
@@ -73,6 +47,19 @@ func @affine_for_upper_bound_invalid_dim(%arg : index) {
     affine.for %n1 = #map(%dim)[%arg] to 7 {
     }
   }
+  return
+}
+
+// -----
+func @affine_load_invalid_dim(%M : memref<10xi32>) {
+  "unknown"() ({
+  ^bb0(%arg: index):
+    affine.load %M[%arg] : memref<10xi32>
+    // expected-error@-1 {{index must be a dimension or symbol identifier}}
+    br ^bb1
+  ^bb1:
+    br ^bb1
+  }) : () -> ()
   return
 }
 
@@ -149,5 +136,35 @@ func @affine_store_missing_l_square(%C: memref<4096x4096xf32>) {
   %9 = constant 0.0 : f32
   // expected-error@+1 {{expected '['}}
   affine.store %9, %C : memref<4096x4096xf32>
+  return
+}
+
+// -----
+
+// CHECK-LABEL: @affine_min
+func @affine_min(%arg0 : index, %arg1 : index, %arg2 : index) {
+  // expected-error@+1 {{operand count and affine map dimension and symbol count must match}}
+  %0 = affine.min (d0) -> (d0) (%arg0, %arg1)
+
+  return
+}
+
+// -----
+
+// CHECK-LABEL: @affine_min
+func @affine_min(%arg0 : index, %arg1 : index, %arg2 : index) {
+  // expected-error@+1 {{operand count and affine map dimension and symbol count must match}}
+  %0 = affine.min ()[s0] -> (s0) (%arg0, %arg1)
+
+  return
+}
+
+// -----
+
+// CHECK-LABEL: @affine_min
+func @affine_min(%arg0 : index, %arg1 : index, %arg2 : index) {
+  // expected-error@+1 {{operand count and affine map dimension and symbol count must match}}
+  %0 = affine.min (d0) -> (d0) ()
+
   return
 }

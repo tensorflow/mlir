@@ -19,10 +19,8 @@
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Value.h"
-#include "llvm/ADT/SmallSet.h"
 
 using namespace mlir;
-using namespace llvm;
 
 PatternBenefit::PatternBenefit(unsigned benefit) : representation(benefit) {
   assert(representation == benefit && benefit != ImpossibleToMatchSentinel &&
@@ -82,33 +80,10 @@ PatternRewriter::~PatternRewriter() {
   // Out of line to provide a vtable anchor for the class.
 }
 
-/// This method checks if Values in 'valuesToRemoveIfDead' are dead and removes
-/// their defining Operations. An Operation is removed only if all its Value
-/// results are dead and has no side effect.
-void PatternRewriter::removeOpsIfDeadResults(
-    ArrayRef<Value *> valuesToRemoveIfDead) {
-  // Gather unique operations to be removed.
-  SmallPtrSet<Operation *, 8> opsToRemove;
-  for (auto *valueToRemove : valuesToRemoveIfDead) {
-    auto *op = valueToRemove->getDefiningOp();
-    if (op->use_empty() && op->hasNoSideEffect())
-      opsToRemove.insert(op);
-  }
-
-  for (auto *op : opsToRemove) {
-    notifyOperationRemoved(op);
-    op->erase();
-  }
-}
-
 /// This method performs the final replacement for a pattern, where the
 /// results of the operation are updated to use the specified list of SSA
-/// values.  In addition to replacing and removing the specified operation,
-/// clients can specify a list of other nodes that this replacement may make
-/// (perhaps transitively) dead.  If any of those ops are dead, this will
-/// remove them as well.
-void PatternRewriter::replaceOp(Operation *op, ValueRange newValues,
-                                ValueRange valuesToRemoveIfDead) {
+/// values.
+void PatternRewriter::replaceOp(Operation *op, ValueRange newValues) {
   // Notify the rewriter subclass that we're about to replace this root.
   notifyRootReplaced(op);
 
@@ -118,8 +93,6 @@ void PatternRewriter::replaceOp(Operation *op, ValueRange newValues,
 
   notifyOperationRemoved(op);
   op->erase();
-
-  removeOpsIfDeadResults(valuesToRemoveIfDead);
 }
 
 /// This method erases an operation that is known to have no uses. The uses of
@@ -159,15 +132,15 @@ Block *PatternRewriter::splitBlock(Block *block, Block::iterator before) {
   return block->splitBlock(before);
 }
 
-/// op and newOp are known to have the same number of results, replace the
+/// 'op' and 'newOp' are known to have the same number of results, replace the
 /// uses of op with uses of newOp
-void PatternRewriter::replaceOpWithResultsOfAnotherOp(
-    Operation *op, Operation *newOp, ValueRange valuesToRemoveIfDead) {
+void PatternRewriter::replaceOpWithResultsOfAnotherOp(Operation *op,
+                                                      Operation *newOp) {
   assert(op->getNumResults() == newOp->getNumResults() &&
          "replacement op doesn't match results of original op");
   if (op->getNumResults() == 1)
-    return replaceOp(op, newOp->getResult(0), valuesToRemoveIfDead);
-  return replaceOp(op, newOp->getResults(), valuesToRemoveIfDead);
+    return replaceOp(op, newOp->getResult(0));
+  return replaceOp(op, newOp->getResults());
 }
 
 /// Move the blocks that belong to "region" before the given position in
@@ -204,16 +177,9 @@ void PatternRewriter::cloneRegionBefore(Region &region, Block *before) {
 /// up modifying the pattern root in place, by changing its operands.  This is
 /// a minor efficiency win (it avoids creating a new operation and removing
 /// the old one) but also often allows simpler code in the client.
-///
-/// The opsToRemoveIfDead list is an optional list of nodes that the rewriter
-/// should remove if they are dead at this point.
-///
-void PatternRewriter::updatedRootInPlace(Operation *op,
-                                         ValueRange valuesToRemoveIfDead) {
+void PatternRewriter::updatedRootInPlace(Operation *op) {
   // Notify the rewriter subclass that we're about to replace this root.
   notifyRootUpdated(op);
-
-  removeOpsIfDeadResults(valuesToRemoveIfDead);
 }
 
 //===----------------------------------------------------------------------===//

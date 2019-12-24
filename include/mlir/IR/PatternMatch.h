@@ -327,33 +327,15 @@ public:
 
   /// This method performs the final replacement for a pattern, where the
   /// results of the operation are updated to use the specified list of SSA
-  /// values.  In addition to replacing and removing the specified operation,
-  /// clients can specify a list of other nodes that this replacement may make
-  /// (perhaps transitively) dead.  If any of those values are dead, this will
-  /// remove them as well.
-  virtual void replaceOp(Operation *op, ValueRange newValues,
-                         ValueRange valuesToRemoveIfDead);
-  void replaceOp(Operation *op, ValueRange newValues) {
-    replaceOp(op, newValues, llvm::None);
-  }
+  /// values.
+  virtual void replaceOp(Operation *op, ValueRange newValues);
 
   /// Replaces the result op with a new op that is created without verification.
   /// The result values of the two ops must be the same types.
   template <typename OpTy, typename... Args>
   void replaceOpWithNewOp(Operation *op, Args &&... args) {
     auto newOp = create<OpTy>(op->getLoc(), std::forward<Args>(args)...);
-    replaceOpWithResultsOfAnotherOp(op, newOp.getOperation(), {});
-  }
-
-  /// Replaces the result op with a new op that is created without verification.
-  /// The result values of the two ops must be the same types.  This allows
-  /// specifying a list of ops that may be removed if dead.
-  template <typename OpTy, typename... Args>
-  void replaceOpWithNewOp(ValueRange valuesToRemoveIfDead, Operation *op,
-                          Args &&... args) {
-    auto newOp = create<OpTy>(op->getLoc(), std::forward<Args>(args)...);
-    replaceOpWithResultsOfAnotherOp(op, newOp.getOperation(),
-                                    valuesToRemoveIfDead);
+    replaceOpWithResultsOfAnotherOp(op, newOp.getOperation());
   }
 
   /// This method erases an operation that is known to have no uses.
@@ -374,11 +356,7 @@ public:
   /// up modifying the pattern root in place, by changing its operands.  This is
   /// a minor efficiency win (it avoids creating a new operation and removing
   /// the old one) but also often allows simpler code in the client.
-  ///
-  /// The valuesToRemoveIfDead list is an optional list of values that the
-  /// rewriter should remove if they are dead at this point.
-  ///
-  void updatedRootInPlace(Operation *op, ValueRange valuesToRemoveIfDead = {});
+  void updatedRootInPlace(Operation *op);
 
 protected:
   explicit PatternRewriter(MLIRContext *ctx) : OpBuilder(ctx) {}
@@ -402,15 +380,9 @@ protected:
   virtual void notifyOperationRemoved(Operation *op) {}
 
 private:
-  /// This method checks if Values in 'valuesToRemoveIfDead' are dead and
-  /// removes their defining Operations. An Operation is removed only if all its
-  /// Value results are dead and has no side effect.
-  void removeOpsIfDeadResults(ArrayRef<Value *> valuesToRemoveIfDead);
-
-  /// op and newOp are known to have the same number of results, replace the
-  /// uses of op with uses of newOp
-  void replaceOpWithResultsOfAnotherOp(Operation *op, Operation *newOp,
-                                       ValueRange valuesToRemoveIfDead);
+  /// 'op' and 'newOp' are known to have the same number of results, replace the
+  /// uses of op with uses of newOp.
+  void replaceOpWithResultsOfAnotherOp(Operation *op, Operation *newOp);
 };
 
 //===----------------------------------------------------------------------===//

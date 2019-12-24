@@ -375,7 +375,7 @@ struct SimplifyAllocConst : public OpRewritePattern<AllocOp> {
     auto resultCast = rewriter.create<MemRefCastOp>(alloc.getLoc(), newAlloc,
                                                     alloc.getType());
 
-    rewriter.replaceOp(alloc, {resultCast}, droppedOperands);
+    rewriter.replaceOp(alloc, {resultCast});
     return matchSuccess();
   }
 };
@@ -2458,7 +2458,6 @@ struct ViewOpShapeFolder : public OpRewritePattern<ViewOp> {
       return matchFailure();
 
     SmallVector<ValuePtr, 4> newOperands;
-    SmallVector<ValuePtr, 4> droppedOperands;
 
     // Fold dynamic offset operand if it is produced by a constant.
     auto dynamicOffset = viewOp.getDynamicOffset();
@@ -2469,7 +2468,6 @@ struct ViewOpShapeFolder : public OpRewritePattern<ViewOp> {
       if (auto constantIndexOp = dyn_cast_or_null<ConstantIndexOp>(defOp)) {
         // Dynamic offset will be folded into the map.
         newOffset = constantIndexOp.getValue();
-        droppedOperands.push_back(dynamicOffset);
       } else {
         // Unable to fold dynamic offset. Add it to 'newOperands' list.
         newOperands.push_back(dynamicOffset);
@@ -2494,8 +2492,6 @@ struct ViewOpShapeFolder : public OpRewritePattern<ViewOp> {
       if (auto constantIndexOp = dyn_cast_or_null<ConstantIndexOp>(defOp)) {
         // Dynamic shape dimension will be folded.
         newShapeConstants.push_back(constantIndexOp.getValue());
-        // Record to check for zero uses later below.
-        droppedOperands.push_back(constantIndexOp);
       } else {
         // Dynamic shape dimension not folded; copy operand from old memref.
         newShapeConstants.push_back(dimSize);
@@ -2532,8 +2528,8 @@ struct ViewOpShapeFolder : public OpRewritePattern<ViewOp> {
     auto newViewOp = rewriter.create<ViewOp>(viewOp.getLoc(), newMemRefType,
                                              viewOp.getOperand(0), newOperands);
     // Insert a cast so we have the same type as the old memref type.
-    rewriter.replaceOpWithNewOp<MemRefCastOp>(droppedOperands, viewOp,
-                                              newViewOp, viewOp.getType());
+    rewriter.replaceOpWithNewOp<MemRefCastOp>(viewOp, newViewOp,
+                                              viewOp.getType());
     return matchSuccess();
   }
 };
@@ -2844,8 +2840,8 @@ public:
         subViewOp.getLoc(), subViewOp.source(), subViewOp.offsets(),
         ArrayRef<ValuePtr>(), subViewOp.strides(), newMemRefType);
     // Insert a memref_cast for compatibility of the uses of the op.
-    rewriter.replaceOpWithNewOp<MemRefCastOp>(
-        subViewOp.sizes(), subViewOp, newSubViewOp, subViewOp.getType());
+    rewriter.replaceOpWithNewOp<MemRefCastOp>(subViewOp, newSubViewOp,
+                                              subViewOp.getType());
     return matchSuccess();
   }
 };
@@ -2894,8 +2890,8 @@ public:
         subViewOp.getLoc(), subViewOp.source(), subViewOp.offsets(),
         subViewOp.sizes(), ArrayRef<ValuePtr>(), newMemRefType);
     // Insert a memref_cast for compatibility of the uses of the op.
-    rewriter.replaceOpWithNewOp<MemRefCastOp>(
-        subViewOp.strides(), subViewOp, newSubViewOp, subViewOp.getType());
+    rewriter.replaceOpWithNewOp<MemRefCastOp>(subViewOp, newSubViewOp,
+                                              subViewOp.getType());
     return matchSuccess();
   }
 };
@@ -2946,8 +2942,8 @@ public:
         subViewOp.getLoc(), subViewOp.source(), ArrayRef<ValuePtr>(),
         subViewOp.sizes(), subViewOp.strides(), newMemRefType);
     // Insert a memref_cast for compatibility of the uses of the op.
-    rewriter.replaceOpWithNewOp<MemRefCastOp>(
-        subViewOp.offsets(), subViewOp, newSubViewOp, subViewOp.getType());
+    rewriter.replaceOpWithNewOp<MemRefCastOp>(subViewOp, newSubViewOp,
+                                              subViewOp.getType());
     return matchSuccess();
   }
 };

@@ -1054,7 +1054,7 @@ struct AllocOpLowering : public LLVMLegalizationPattern<AllocOp> {
     // Iterate strides in reverse order, compute runningStride and strideValues.
     auto nStrides = strides.size();
     SmallVector<Value, 4> strideValues(nStrides, nullptr);
-    for (unsigned i = 0; i < strides.size(); ++i) {
+    for (unsigned i = 0; i < nStrides; ++i) {
       int64_t index = nStrides - 1 - i;
       if (strides[index] == MemRefType::getDynamicStrideOrOffset())
         // Identity layout map is enforced in the match function, so we compute:
